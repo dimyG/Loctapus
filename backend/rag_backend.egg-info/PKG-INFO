@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: rag-backend
+Version: 0.1.0
+Summary: RAG MVP backend (FastAPI + SQLAlchemy + pgvector)
+Requires-Python: >=3.14
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.30
+Requires-Dist: sqlalchemy>=2.0
+Requires-Dist: psycopg[binary]>=3.2
+Requires-Dist: alembic>=1.13
+Requires-Dist: pydantic-settings>=2.5
+Requires-Dist: PyJWT>=2.9
+Requires-Dist: pwdlib[argon2]>=0.2
+Requires-Dist: email-validator>=2.2
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
+Requires-Dist: httpx>=0.28; extra == "dev"
