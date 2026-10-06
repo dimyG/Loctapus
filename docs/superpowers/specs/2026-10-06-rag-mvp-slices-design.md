@@ -17,7 +17,7 @@ Decisions confirmed with the user:
 
 1. **Planning scope**: full-MVP roadmap (coarse) + detailed plan only for the first slice(s). Later slices get their own design/planning round when reached.
 2. **No provider API keys yet** (Unstructured, Voyage, Groq). The first end-to-end slice ships with stub providers behind the real provider interfaces so the whole pipeline runs offline. Stub providers are permanent, tested code — not throwaway.
-3. **Two repos from day one**: `D:\Projects\RAG` is the backend repo. The web UI becomes a separate repo when its slice arrives.
+3. **Monorepo**: backend and frontend live in this repo (`backend/` and `web/` top-level directories). They may be split into separate repos later — the clean top-level directory split keeps that extraction easy.
 4. **Decomposition approach**: vertical slices (per MD §32), with the identity/projects work split out of the first retrieval slice into its own slice.
 
 Guiding principles carried over from the MD (§29–30): replaceable providers behind explicit interfaces; free tiers first; monolith now with a clean internal `retrieval` module boundary; JWT auth; long-term user/workspace/team model with single-user flow; idempotent ingestion; transactional outbox; raw sources stored in S3/MinIO before parsing; structure-aware recursive chunking (replaceable); batched embeddings; RRF over lexical+vector; configurable rerank with `max_chunks_per_document`; `/retrieve` useful without `/answer`.
@@ -33,29 +33,35 @@ Guiding principles carried over from the MD (§29–30): replaceable providers b
 | **S4 — `/answer`** | LLM provider interface + Groq `openai/gpt-oss-20b`; grounded-context prompt; `/answer` calls retrieval internally | Question → answer grounded in cited chunks |
 | **S5 — Ingestion robustness** | Idempotency hardening (`source_item_id, content_hash`); Celery Beat sync polling per `sources.sync_interval`; stale document/chunk replacement; source delete; retries + `ingestion_runs` status surfacing | Re-upload of a changed file replaces old chunks only after new ones are indexed |
 | **S6 — Retrieval evaluation** | Labeling workflow over `query_logs`; Recall@K + MRR harness | Can score retrieval-config changes against a labeled set |
-| **S7 — Web UI** (separate repo) | Devias Kit / React / Redux / Next.js: landing, register/login, projects, upload + status, delete source, chat-style Q&A | Full MVP usable from a browser |
+| **S7 — Web UI** | Devias Kit / React / Redux / Next.js in `web/`: landing, register/login, projects, upload + status, delete source, chat-style Q&A | Full MVP usable from a browser |
 | **S8 — Website connector** (post-MVP) | sitemap discovery → HTTP fetch → HTML extraction → normalized document | Website source ingests via the same pipeline |
 
 One implementation plan will cover **S0+S1 together** (both are small). S2 onward each get their own design round.
 
-## 3. Backend layout (target)
+## 3. Repo layout (target)
+
+Monorepo: everything lives in `D:\Projects\RAG`. `web/` arrives at S7; keeping backend and frontend in clean top-level directories makes a future repo split a simple directory extraction.
 
 ```
 D:\Projects\RAG\
-  app/
-    core/         # settings, security/JWT, db session, logging
-    identity/     # users, workspaces, teams, auth endpoints + services
-    projects/     # projects CRUD
-    sources/      # (S2) sources, source_items, upload
-    ingestion/    # (S2) connectors, chunking, pipeline tasks
-    retrieval/    # (S2) query pipeline — clean module boundary, future service split
-    providers/    # parser / embedding / reranker / llm interfaces + impls, selected via settings
-    storage/      # (S2) S3/MinIO abstraction
-    workers/      # (S2) celery app, tasks, outbox dispatcher
-  alembic/
-  tests/
+  backend/
+    app/
+      core/         # settings, security/JWT, db session, logging
+      identity/     # users, workspaces, teams, auth endpoints + services
+      projects/     # projects CRUD
+      sources/      # (S2) sources, source_items, upload
+      ingestion/    # (S2) connectors, chunking, pipeline tasks
+      retrieval/    # (S2) query pipeline — clean module boundary, future service split
+      providers/    # parser / embedding / reranker / llm interfaces + impls, selected via settings
+      storage/      # (S2) S3/MinIO abstraction
+      workers/      # (S2) celery app, tasks, outbox dispatcher
+    alembic/
+    tests/
+    pyproject.toml
+  web/              # (S7) Next.js frontend
   deploy/docker-compose.yml
-  pyproject.toml
+  docs/
+  .venv/            # existing Python venv, stays at repo root
 ```
 
 Module rule: code after parsing works only on the normalized document model; provider-specific objects never cross the `providers/` boundary (MD §7, §30).
@@ -101,7 +107,7 @@ DELETE /projects/{id}  -> delete project (admin role required)
 - **Sync SQLAlchemy 2.0** (models shared between FastAPI and Celery without async-session duplication; FastAPI runs sync endpoints in its threadpool).
 - **Python 3.14** kept; downgrade to 3.12 only if a required wheel is actually missing.
 - Dependency set (S0+S1): fastapi, uvicorn, sqlalchemy 2.x, psycopg[binary] v3, alembic, pydantic-settings, PyJWT, pwdlib[argon2], pytest, httpx (TestClient). Celery (RabbitMQ broker, no Redis) and boto3 arrive in S2.
-- Dependency management: `pyproject.toml` + pip in the existing `.venv`.
+- Dependency management: `backend/pyproject.toml` + pip in the existing root `.venv`.
 
 ## 5. S2 preview (detail deferred to S2 planning)
 
