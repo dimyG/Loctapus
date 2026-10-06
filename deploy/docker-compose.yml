@@ -24,7 +24,9 @@ services:
       - "15672:15672"
 
   minio:
-    image: minio/minio
+    # minio/minio was removed from Docker Hub in 2025; elestio/minio packages
+    # the official MinIO server. Revisit when an official registry image returns.
+    image: elestio/minio:latest
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minio
