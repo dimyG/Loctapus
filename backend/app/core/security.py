@@ -28,4 +28,7 @@ def create_access_token(user_id: UUID, settings: Settings) -> str:
 
 def decode_access_token(token: str, settings: Settings) -> UUID:
     claims = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    return UUID(claims["sub"])
+    try:
+        return UUID(claims["sub"])
+    except (KeyError, ValueError) as exc:
+        raise jwt.InvalidTokenError("malformed token claims") from exc

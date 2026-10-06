@@ -36,3 +36,20 @@ def test_token_expiry_claim():
 def test_decode_rejects_garbage():
     with pytest.raises(jwt.InvalidTokenError):
         decode_access_token("not-a-token", _settings())
+
+
+def test_decode_rejects_well_signed_token_without_sub():
+    token = jwt.encode(
+        {"exp": datetime.now(timezone.utc) + timedelta(hours=1)},
+        "test-secret", algorithm="HS256")
+    with pytest.raises(jwt.InvalidTokenError):
+        decode_access_token(token, _settings())
+
+
+def test_decode_rejects_well_signed_token_with_bad_uuid_sub():
+    token = jwt.encode(
+        {"sub": "not-a-uuid",
+         "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
+        "test-secret", algorithm="HS256")
+    with pytest.raises(jwt.InvalidTokenError):
+        decode_access_token(token, _settings())

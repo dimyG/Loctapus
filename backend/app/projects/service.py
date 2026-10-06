@@ -38,6 +38,16 @@ def get_project_for_user(db: Session, user: User, project_id: UUID) -> Project |
     )
 
 
+def get_project_for_user_with_role(
+    db: Session, user: User, project_id: UUID, roles: tuple[str, ...]
+) -> Project | None:
+    return (
+        _visible_projects_query(db, user)
+        .filter(Project.id == project_id, ProjectTeamRole.role.in_(roles))
+        .one_or_none()
+    )
+
+
 def delete_project(db: Session, project: Project) -> None:
     db.query(ProjectTeamRole).filter(
         ProjectTeamRole.project_id == project.id
