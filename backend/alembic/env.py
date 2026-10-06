@@ -5,6 +5,8 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.core.models import Base
+from app.identity import models as identity_models  # noqa: F401
+from app.projects import models as projects_models  # noqa: F401
 
 config = context.config
 
