@@ -4,9 +4,11 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.security import create_access_token
+from app.identity.dependencies import get_current_user
+from app.identity.models import User
 from app.identity.schemas import LoginRequest, RegisterRequest
 from app.identity.service import (EmailAlreadyRegistered, authenticate_user,
-                                  register_user)
+                                  get_personal_context, register_user)
 
 router = APIRouter()
 
@@ -24,6 +26,20 @@ def register(
     return {
         "access_token": create_access_token(result.user.id, settings),
         "token_type": "bearer",
+    }
+
+
+@router.get("/users/me")
+def users_me(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    workspace, team = get_personal_context(db, user.id)
+    return {
+        "user_id": str(user.id),
+        "email": user.email,
+        "workspace_id": str(workspace.id),
+        "team_id": str(team.id),
     }
 
 
