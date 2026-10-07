@@ -74,31 +74,37 @@ Uses "workspace" naming from day one (MD §22 preference); preserves the long-te
 
 ```
 users                id (uuid pk), email (citext unique), password_hash, created_at
-workspaces           id (uuid pk), name, owner_user_id -> users, is_personal bool
-teams                id (uuid pk), workspace_id -> workspaces, name, is_personal bool
+workspaces           id (uuid pk), name, owner_user_id -> users
+teams                id (uuid pk), workspace_id -> workspaces, name
 team_memberships     id (uuid pk), team_id -> teams, user_id -> users, unique(team_id, user_id)
-projects             id (uuid pk), workspace_id -> workspaces, name, created_at
+projects             id (uuid pk), workspace_id -> workspaces, name, is_public bool, created_at
 project_team_roles   id (uuid pk), project_id -> projects, team_id -> teams,
                      role text check in (admin|editor|viewer), unique(project_id, team_id)
+revoked_tokens       jti (text pk), expires_at, revoked_at
 ```
 
-`project_team_roles` exists from the start but has zero UI: registration creates the user + personal workspace + personal team + membership in one transaction; project creation auto-grants the creator's personal team the `admin` role. All project access checks scope through the user's teams, so team management later is pure UI/logic — no schema change.
+`project_team_roles` exists from the start but has zero UI: registration creates the user + Default workspace + Default team + membership + a Default project in one transaction; project creation takes an explicit `team_id` (the caller must be a member of that team) and auto-grants that team the `admin` role. All project access checks scope through the user's teams, so team management later is pure UI/logic - no schema change. `projects.is_public` makes a project viewable (and queryable, once S2's `/retrieve` lands) by any authenticated user; only team `admin`s can edit or delete it.
 
 ### 4.2 Endpoints
 
 ```
-POST /auth/register    {email, password} -> creates user+workspace+team+membership; returns JWT
+POST /auth/register    {email, password} -> creates user+Default workspace+team+membership+Default project; returns JWT
 POST /auth/login       {email, password} -> returns JWT
-GET  /users/me         -> current user + personal workspace/team ids
-POST /projects         {name} -> project (auto-grant personal team admin)
-GET  /projects         -> projects visible to the user's teams
-GET  /projects/{id}    -> project detail (404 if not visible)
+POST /auth/logout      -> revokes the presented token (per-session); 204
+GET  /users/me         -> current user (id, email) only
+GET  /workspaces       -> workspaces the user's teams belong to
+GET  /workspaces/{id}/teams -> teams in a workspace the user belongs to
+POST /projects         {name, team_id} -> project (grants that team admin; 404 if not a member)
+GET  /projects         -> team-scoped projects visible to the user
+GET  /projects/public  -> all public projects (is_public=true)
+GET  /projects/{id}    -> project detail (404 if not team-visible and not public)
+PATCH /projects/{id}   -> update name and/or is_public (admin role required)
 DELETE /projects/{id}  -> delete project (admin role required)
 ```
 
 ### 4.3 Auth decisions
 
-- JWT access token only, 24h expiry; no refresh token for MVP.
+- JWT access token only, 24h expiry; no refresh token for MVP. Tokens carry a `jti` claim; `POST /auth/logout` records it in `revoked_tokens` for per-session revocation, checked centrally in `get_current_user`.
 - Argon2 password hashing.
 - Auth dependency: `get_current_user` (JWT) for S1; API-key auth joins it in S3 for `/retrieve` only.
 
