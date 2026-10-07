@@ -24,10 +24,10 @@ def register_user(db: Session, email: str, password: str) -> RegistrationResult:
     db.add(user)
     try:
         db.flush()
-        workspace = Workspace(name="Personal", owner_user_id=user.id, is_personal=True)
+        workspace = Workspace(name="Personal", owner_user_id=user.id)
         db.add(workspace)
         db.flush()
-        team = Team(workspace_id=workspace.id, name="Personal", is_personal=True)
+        team = Team(workspace_id=workspace.id, name="Personal")
         db.add(team)
         db.flush()
         db.add(TeamMembership(team_id=team.id, user_id=user.id))
@@ -48,12 +48,12 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
 def get_personal_context(db: Session, user_id: UUID) -> tuple[Workspace, Team]:
     workspace = (
         db.query(Workspace)
-        .filter(Workspace.owner_user_id == user_id, Workspace.is_personal.is_(True))
+        .filter(Workspace.owner_user_id == user_id)
         .one()
     )
     team = (
         db.query(Team)
-        .filter(Team.workspace_id == workspace.id, Team.is_personal.is_(True))
+        .filter(Team.workspace_id == workspace.id)
         .one()
     )
     return workspace, team

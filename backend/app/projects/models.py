@@ -2,8 +2,9 @@ import uuid
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import (CheckConstraint, ForeignKey, String, UniqueConstraint,
+                        false, func)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.models import Base
 
@@ -14,7 +15,11 @@ class Project(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id"))
     name: Mapped[str] = mapped_column(String)
+    is_public: Mapped[bool] = mapped_column(default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    workspace: Mapped["Workspace"] = relationship(back_populates="projects")
+    team_roles: Mapped[list["ProjectTeamRole"]] = relationship(back_populates="project")
 
 
 class ProjectTeamRole(Base):
@@ -28,3 +33,6 @@ class ProjectTeamRole(Base):
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"))
     team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"))
     role: Mapped[str] = mapped_column(String)
+
+    project: Mapped["Project"] = relationship(back_populates="team_roles")
+    team: Mapped["Team"] = relationship(back_populates="project_roles")
