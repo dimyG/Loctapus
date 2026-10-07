@@ -69,7 +69,8 @@ def test_public_project_visible_to_non_member(client):
     bob = _auth(client, "pb@example.com")
     pid = client.post("/projects", json={"name": "pub", "team_id": _default_team_id(client, alice)},
                       headers=alice).json()["id"]
-    client.patch(f"/projects/{pid}", json={"is_public": True}, headers=alice)
+    made_public = client.patch(f"/projects/{pid}", json={"is_public": True}, headers=alice)
+    assert made_public.status_code == 200 and made_public.json()["is_public"] is True
     assert client.get(f"/projects/{pid}", headers=bob).status_code == 200
     assert any(p["id"] == pid for p in client.get("/projects/public", headers=bob).json())
     assert [p["name"] for p in client.get("/projects", headers=bob).json()] == ["Default"]
@@ -80,9 +81,15 @@ def test_public_project_not_editable_by_non_member(client):
     bob = _auth(client, "qb@example.com")
     pid = client.post("/projects", json={"name": "pub2", "team_id": _default_team_id(client, alice)},
                       headers=alice).json()["id"]
-    client.patch(f"/projects/{pid}", json={"is_public": True}, headers=alice)
+    made_public = client.patch(f"/projects/{pid}", json={"is_public": True}, headers=alice)
+    assert made_public.status_code == 200 and made_public.json()["is_public"] is True
+    # Bob can VIEW the public project...
+    assert client.get(f"/projects/{pid}", headers=bob).status_code == 200
+    # ...but cannot edit or delete it.
     assert client.patch(f"/projects/{pid}", json={"name": "hax"}, headers=bob).status_code == 404
     assert client.delete(f"/projects/{pid}", headers=bob).status_code == 404
+    # And his edit attempt changed nothing.
+    assert client.get(f"/projects/{pid}", headers=bob).json()["name"] == "pub2"
 
 
 def test_patch_updates_name_and_visibility(client):
@@ -91,3 +98,21 @@ def test_patch_updates_name_and_visibility(client):
                       headers=h).json()["id"]
     r = client.patch(f"/projects/{pid}", json={"name": "new", "is_public": True}, headers=h)
     assert r.status_code == 200 and r.json()["name"] == "new" and r.json()["is_public"] is True
+
+
+def test_patch_rejects_non_admin_team_member(client, db_session):
+    import uuid
+
+    from app.projects.models import ProjectTeamRole
+
+    alice = _auth(client, "role-a@example.com")
+    viewer_headers = _auth(client, "role-v@example.com")
+    pid = client.post("/projects", json={"name": "roled", "team_id": _default_team_id(client, alice)},
+                      headers=alice).json()["id"]
+    # Give the viewer's own team a viewer (non-admin) role on the project.
+    viewer_team_id = _default_team_id(client, viewer_headers)
+    db_session.add(ProjectTeamRole(project_id=uuid.UUID(pid),
+                                   team_id=uuid.UUID(viewer_team_id), role="viewer"))
+    db_session.flush()
+    r = client.patch(f"/projects/{pid}", json={"name": "hax"}, headers=viewer_headers)
+    assert r.status_code == 404
