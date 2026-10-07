@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password, verify_password
 from app.identity.models import (RevokedToken, Team, TeamMembership, User,
                                  Workspace)
+from app.projects.models import Project
 
 
 class EmailAlreadyRegistered(Exception):
@@ -19,6 +20,7 @@ class RegistrationResult:
     user: User
     workspace: Workspace
     team: Team
+    project: Project
 
 
 def register_user(db: Session, email: str, password: str) -> RegistrationResult:
@@ -26,18 +28,27 @@ def register_user(db: Session, email: str, password: str) -> RegistrationResult:
     db.add(user)
     try:
         db.flush()
-        workspace = Workspace(name="Personal", owner_user_id=user.id)
+        workspace = Workspace(name="Default", owner_user_id=user.id)
         db.add(workspace)
         db.flush()
-        team = Team(workspace_id=workspace.id, name="Personal")
+        team = Team(workspace_id=workspace.id, name="Default")
         db.add(team)
         db.flush()
         db.add(TeamMembership(team_id=team.id, user_id=user.id))
+        db.flush()
+        # Deferred import avoids a module-load cycle: app.projects.service
+        # still imports get_personal_context from this module until Task 5.
+        from app.projects.service import create_project_for_team
+        project = create_project_for_team(db, team, "Default")
         db.commit()
     except IntegrityError:
         db.rollback()
         raise EmailAlreadyRegistered(email) from None
-    return RegistrationResult(user=user, workspace=workspace, team=team)
+    except Exception:
+        db.rollback()
+        raise
+    return RegistrationResult(user=user, workspace=workspace, team=team,
+                              project=project)
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:

@@ -13,7 +13,8 @@ def test_users_me_returns_ids(client):
     assert r.status_code == 200
     body = r.json()
     assert body["email"] == "me@example.com"
-    uuid.UUID(body["user_id"]); uuid.UUID(body["workspace_id"]); uuid.UUID(body["team_id"])
+    uuid.UUID(body["user_id"])
+    assert "workspace_id" not in body and "team_id" not in body
 
 
 def test_users_me_requires_auth(client):

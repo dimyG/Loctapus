@@ -18,7 +18,8 @@ def test_list_projects_scopes_to_user(db_session):
     bob = _user(db_session, "bob@example.com")
     project_service.create_project(db_session, alice, "alice-kb")
     project_service.create_project(db_session, bob, "bob-kb")
-    assert [p.name for p in project_service.list_projects(db_session, alice)] == ["alice-kb"]
+    assert sorted(p.name for p in project_service.list_projects(db_session, alice)) == [
+        "Default", "alice-kb"]
     assert project_service.get_project_for_user(
         db_session, alice,
         project_service.list_projects(db_session, bob)[0].id) is None
@@ -63,4 +64,4 @@ def test_duplicate_project_name_allowed(db_session):
     a = project_service.create_project(db_session, user, "same")
     b = project_service.create_project(db_session, user, "same")
     assert a.id != b.id
-    assert len(project_service.list_projects(db_session, user)) == 2
+    assert len(project_service.list_projects(db_session, user)) == 3

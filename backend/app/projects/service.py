@@ -2,17 +2,23 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.identity.models import TeamMembership, User
+from app.identity.models import Team, TeamMembership, User
 from app.identity.service import get_personal_context
 from app.projects.models import Project, ProjectTeamRole
 
 
-def create_project(db: Session, user: User, name: str) -> Project:
-    workspace, team = get_personal_context(db, user.id)
-    project = Project(workspace_id=workspace.id, name=name)
+def create_project_for_team(db: Session, team: Team, name: str) -> Project:
+    project = Project(workspace_id=team.workspace_id, name=name)
     db.add(project)
     db.flush()
     db.add(ProjectTeamRole(project_id=project.id, team_id=team.id, role="admin"))
+    db.flush()
+    return project
+
+
+def create_project(db: Session, user: User, name: str) -> Project:
+    _, team = get_personal_context(db, user.id)
+    project = create_project_for_team(db, team, name)
     db.commit()
     return project
 

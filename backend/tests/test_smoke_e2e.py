@@ -16,6 +16,7 @@ def test_register_login_project_lifecycle(client):
 
     pid = client.post("/projects", json={"name": "e2e-kb"}, headers=headers).json()["id"]
     assert client.get(f"/projects/{pid}", headers=headers).status_code == 200
-    assert len(client.get("/projects", headers=headers).json()) == 1
+    names = [p["name"] for p in client.get("/projects", headers=headers).json()]
+    assert sorted(names) == ["Default", "e2e-kb"]
     assert client.delete(f"/projects/{pid}", headers=headers).status_code == 204
-    assert client.get("/projects", headers=headers).json() == []
+    assert [p["name"] for p in client.get("/projects", headers=headers).json()] == ["Default"]

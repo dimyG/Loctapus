@@ -10,8 +10,7 @@ from app.identity.dependencies import get_current_user
 from app.identity.models import User
 from app.identity.schemas import LoginRequest, RegisterRequest
 from app.identity.service import (EmailAlreadyRegistered, authenticate_user,
-                                  get_personal_context, register_user,
-                                  revoke_token)
+                                  register_user, revoke_token)
 
 router = APIRouter()
 
@@ -35,14 +34,10 @@ def register(
 @router.get("/users/me")
 def users_me(
     user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    workspace, team = get_personal_context(db, user.id)
     return {
         "user_id": str(user.id),
         "email": user.email,
-        "workspace_id": str(workspace.id),
-        "team_id": str(team.id),
     }
 
 

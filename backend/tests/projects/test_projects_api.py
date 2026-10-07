@@ -12,7 +12,7 @@ def test_create_and_list_projects(client):
     assert body["name"] == "kb" and body["id"] and body["created_at"]
     listed = client.get("/projects", headers=headers)
     assert listed.status_code == 200
-    assert [p["name"] for p in listed.json()] == ["kb"]
+    assert sorted(p["name"] for p in listed.json()) == ["Default", "kb"]
 
 
 def test_get_other_users_project_is_404(client):
