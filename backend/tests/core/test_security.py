@@ -23,7 +23,15 @@ def test_hash_roundtrip():
 def test_token_roundtrip():
     uid = uuid.uuid4()
     token = create_access_token(uid, _settings())
-    assert decode_access_token(token, _settings()) == uid
+    claims = decode_access_token(token, _settings())
+    assert claims.user_id == uid and isinstance(claims.jti, str) and claims.jti
+
+
+def test_jti_unique_across_tokens():
+    uid = uuid.uuid4()
+    a = decode_access_token(create_access_token(uid, _settings()), _settings())
+    b = decode_access_token(create_access_token(uid, _settings()), _settings())
+    assert a.jti != b.jti
 
 
 def test_token_expiry_claim():

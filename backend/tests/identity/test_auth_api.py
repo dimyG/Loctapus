@@ -38,3 +38,23 @@ def test_second_user_registers_and_logs_in(client):
     r = client.post("/auth/register",
                     json={"email": "second@example.com", "password": "password123"})
     assert r.status_code == 201
+
+
+def test_logout_revokes_token(client):
+    r = client.post("/auth/register", json={"email": "lo@example.com", "password": "password123"})
+    token = r.json()["access_token"]
+    assert client.post("/auth/logout", headers={"Authorization": f"Bearer {token}"}).status_code == 204
+    after = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
+    assert after.status_code == 401
+
+
+def test_logout_leaves_other_sessions_valid(client):
+    body = {"email": "two@example.com", "password": "password123"}
+    t1 = client.post("/auth/register", json=body).json()["access_token"]
+    t2 = client.post("/auth/login", json=body).json()["access_token"]
+    assert client.post("/auth/logout", headers={"Authorization": f"Bearer {t1}"}).status_code == 204
+    assert client.get("/users/me", headers={"Authorization": f"Bearer {t2}"}).status_code == 200
+
+
+def test_logout_requires_auth(client):
+    assert client.post("/auth/logout").status_code in (401, 403)

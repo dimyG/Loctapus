@@ -1,11 +1,13 @@
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
-from app.identity.models import Team, TeamMembership, User, Workspace
+from app.identity.models import (RevokedToken, Team, TeamMembership, User,
+                                 Workspace)
 
 
 class EmailAlreadyRegistered(Exception):
@@ -57,3 +59,13 @@ def get_personal_context(db: Session, user_id: UUID) -> tuple[Workspace, Team]:
         .one()
     )
     return workspace, team
+
+
+def revoke_token(db: Session, jti: str, expires_at: datetime) -> None:
+    if not is_token_revoked(db, jti):
+        db.add(RevokedToken(jti=jti, expires_at=expires_at))
+        db.commit()
+
+
+def is_token_revoked(db: Session, jti: str) -> bool:
+    return db.query(RevokedToken).filter(RevokedToken.jti == jti).first() is not None
