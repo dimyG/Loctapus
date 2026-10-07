@@ -3,7 +3,6 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.identity.models import Team, TeamMembership, User
-from app.identity.service import get_personal_context
 from app.projects.models import Project, ProjectTeamRole
 
 
@@ -16,8 +15,19 @@ def create_project_for_team(db: Session, team: Team, name: str) -> Project:
     return project
 
 
-def create_project(db: Session, user: User, name: str) -> Project:
-    _, team = get_personal_context(db, user.id)
+def _get_team_for_member(db: Session, user: User, team_id: UUID) -> Team | None:
+    return (
+        db.query(Team)
+        .join(TeamMembership, TeamMembership.team_id == Team.id)
+        .filter(Team.id == team_id, TeamMembership.user_id == user.id)
+        .one_or_none()
+    )
+
+
+def create_project(db: Session, user: User, team_id: UUID, name: str) -> Project | None:
+    team = _get_team_for_member(db, user, team_id)
+    if team is None:
+        return None
     project = create_project_for_team(db, team, name)
     db.commit()
     return project

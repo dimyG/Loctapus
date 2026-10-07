@@ -21,7 +21,10 @@ def create(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return create_project(db, user, body.name)
+    project = create_project(db, user, body.team_id, body.name)
+    if project is None:
+        raise HTTPException(404, "team not found")
+    return project
 
 
 @router.get("/projects", response_model=list[ProjectOut])

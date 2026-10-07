@@ -3,21 +3,22 @@ from app.projects import service as project_service
 
 
 def _user(db, email):
-    return identity_service.register_user(db, email, "password123").user
+    result = identity_service.register_user(db, email, "password123")
+    return result.user, result.team.id
 
 
 def test_create_project_grants_personal_team_admin(db_session):
-    user = _user(db_session, "owner@example.com")
-    project = project_service.create_project(db_session, user, "kb1")
+    user, team_id = _user(db_session, "owner@example.com")
+    project = project_service.create_project(db_session, user, team_id, "kb1")
     fetched = project_service.get_project_for_user(db_session, user, project.id)
     assert fetched and fetched.name == "kb1"
 
 
 def test_list_projects_scopes_to_user(db_session):
-    alice = _user(db_session, "alice@example.com")
-    bob = _user(db_session, "bob@example.com")
-    project_service.create_project(db_session, alice, "alice-kb")
-    project_service.create_project(db_session, bob, "bob-kb")
+    alice, alice_team_id = _user(db_session, "alice@example.com")
+    bob, bob_team_id = _user(db_session, "bob@example.com")
+    project_service.create_project(db_session, alice, alice_team_id, "alice-kb")
+    project_service.create_project(db_session, bob, bob_team_id, "bob-kb")
     assert sorted(p.name for p in project_service.list_projects(db_session, alice)) == [
         "Default", "alice-kb"]
     assert project_service.get_project_for_user(
@@ -26,26 +27,22 @@ def test_list_projects_scopes_to_user(db_session):
 
 
 def test_delete_project_removes_visibility(db_session):
-    user = _user(db_session, "del@example.com")
-    project = project_service.create_project(db_session, user, "gone")
+    user, team_id = _user(db_session, "del@example.com")
+    project = project_service.create_project(db_session, user, team_id, "gone")
     project_service.delete_project(db_session, project)
     assert project_service.get_project_for_user(db_session, user, project.id) is None
 
 
 def test_get_project_for_user_with_role_requires_admin(db_session):
-    import uuid
+    from app.projects.models import ProjectTeamRole
 
-    from app.identity.models import Team, TeamMembership, Workspace
-    from app.projects.models import Project, ProjectTeamRole
+    owner, owner_team_id = _user(db_session, "owner2@example.com")
+    project = project_service.create_project(db_session, owner, owner_team_id, "shared")
 
-    owner = _user(db_session, "owner2@example.com")
-    project = project_service.create_project(db_session, owner, "shared")
-
-    # second user whose personal team gets only a viewer role on the project
-    viewer = _user(db_session, "viewer@example.com")
-    _, viewer_team = identity_service.get_personal_context(db_session, viewer.id)
+    # second user whose team gets only a viewer role on the project
+    viewer, viewer_team_id = _user(db_session, "viewer@example.com")
     db_session.add(
-        ProjectTeamRole(project_id=project.id, team_id=viewer_team.id, role="viewer")
+        ProjectTeamRole(project_id=project.id, team_id=viewer_team_id, role="viewer")
     )
     db_session.flush()
 
@@ -60,8 +57,8 @@ def test_get_project_for_user_with_role_requires_admin(db_session):
 
 
 def test_duplicate_project_name_allowed(db_session):
-    user = _user(db_session, "dupe@example.com")
-    a = project_service.create_project(db_session, user, "same")
-    b = project_service.create_project(db_session, user, "same")
+    user, team_id = _user(db_session, "dupe@example.com")
+    a = project_service.create_project(db_session, user, team_id, "same")
+    b = project_service.create_project(db_session, user, team_id, "same")
     assert a.id != b.id
     assert len(project_service.list_projects(db_session, user)) == 3
