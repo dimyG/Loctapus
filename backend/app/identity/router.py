@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -8,8 +10,10 @@ from app.core.db import get_db
 from app.core.security import create_access_token, decode_access_token
 from app.identity.dependencies import get_current_user
 from app.identity.models import User
-from app.identity.schemas import LoginRequest, RegisterRequest
+from app.identity.schemas import (LoginRequest, RegisterRequest, TeamOut,
+                                  WorkspaceOut)
 from app.identity.service import (EmailAlreadyRegistered, authenticate_user,
+                                  list_user_workspaces, list_workspace_teams,
                                   register_user, revoke_token)
 
 router = APIRouter()
@@ -39,6 +43,26 @@ def users_me(
         "user_id": str(user.id),
         "email": user.email,
     }
+
+
+@router.get("/workspaces", response_model=list[WorkspaceOut])
+def list_workspaces(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return list_user_workspaces(db, user)
+
+
+@router.get("/workspaces/{workspace_id}/teams", response_model=list[TeamOut])
+def list_workspace_teams_view(
+    workspace_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    teams = list_workspace_teams(db, user, workspace_id)
+    if teams is None:
+        raise HTTPException(404, "workspace not found")
+    return teams
 
 
 @router.post("/auth/login")

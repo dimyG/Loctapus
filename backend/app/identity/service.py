@@ -80,3 +80,24 @@ def revoke_token(db: Session, jti: str, expires_at: datetime) -> None:
 
 def is_token_revoked(db: Session, jti: str) -> bool:
     return db.query(RevokedToken).filter(RevokedToken.jti == jti).first() is not None
+
+
+def list_user_workspaces(db: Session, user: User) -> list[Workspace]:
+    return (
+        db.query(Workspace)
+        .join(Team, Team.workspace_id == Workspace.id)
+        .join(TeamMembership, TeamMembership.team_id == Team.id)
+        .filter(TeamMembership.user_id == user.id)
+        .distinct()
+        .all()
+    )
+
+
+def list_workspace_teams(db: Session, user: User, workspace_id: UUID) -> list[Team] | None:
+    teams = (
+        db.query(Team)
+        .join(TeamMembership, TeamMembership.team_id == Team.id)
+        .filter(Team.workspace_id == workspace_id, TeamMembership.user_id == user.id)
+        .all()
+    )
+    return teams or None
