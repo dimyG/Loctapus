@@ -62,3 +62,31 @@ def test_duplicate_project_name_allowed(db_session):
     b = project_service.create_project(db_session, user, team_id, "same")
     assert a.id != b.id
     assert len(project_service.list_projects(db_session, user)) == 3
+
+
+def test_get_project_visible_to_user_allows_public(db_session):
+    owner, owner_team_id = _user(db_session, "vis-owner@example.com")
+    stranger, _ = _user(db_session, "vis-stranger@example.com")
+    project = project_service.create_project(db_session, owner, owner_team_id, "vis")
+    assert project_service.get_project_visible_to_user(
+        db_session, stranger, project.id) is None
+    project.is_public = True
+    db_session.commit()
+    assert project_service.get_project_visible_to_user(
+        db_session, stranger, project.id) is not None
+
+
+def test_list_public_projects_only_returns_public(db_session):
+    owner, owner_team_id = _user(db_session, "lp-owner@example.com")
+    project_service.create_project(db_session, owner, owner_team_id, "lp-private")
+    public_p = project_service.create_project(db_session, owner, owner_team_id, "lp-public")
+    public_p.is_public = True
+    db_session.commit()
+    assert [x.id for x in project_service.list_public_projects(db_session)] == [public_p.id]
+
+
+def test_update_project_name_and_visibility(db_session):
+    owner, owner_team_id = _user(db_session, "up-owner@example.com")
+    p = project_service.create_project(db_session, owner, owner_team_id, "before")
+    updated = project_service.update_project(db_session, p, name="after", is_public=True)
+    assert updated.name == "after" and updated.is_public is True

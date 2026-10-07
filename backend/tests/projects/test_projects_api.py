@@ -62,3 +62,32 @@ def test_delete_project_flow_and_cross_user_404(client):
     assert client.delete(f"/projects/{pid}", headers=alice).status_code == 204
     assert client.get(f"/projects/{pid}", headers=alice).status_code == 404
     assert client.delete(f"/projects/{pid}", headers=alice).status_code == 404
+
+
+def test_public_project_visible_to_non_member(client):
+    alice = _auth(client, "pa@example.com")
+    bob = _auth(client, "pb@example.com")
+    pid = client.post("/projects", json={"name": "pub", "team_id": _default_team_id(client, alice)},
+                      headers=alice).json()["id"]
+    client.patch(f"/projects/{pid}", json={"is_public": True}, headers=alice)
+    assert client.get(f"/projects/{pid}", headers=bob).status_code == 200
+    assert any(p["id"] == pid for p in client.get("/projects/public", headers=bob).json())
+    assert [p["name"] for p in client.get("/projects", headers=bob).json()] == ["Default"]
+
+
+def test_public_project_not_editable_by_non_member(client):
+    alice = _auth(client, "qa@example.com")
+    bob = _auth(client, "qb@example.com")
+    pid = client.post("/projects", json={"name": "pub2", "team_id": _default_team_id(client, alice)},
+                      headers=alice).json()["id"]
+    client.patch(f"/projects/{pid}", json={"is_public": True}, headers=alice)
+    assert client.patch(f"/projects/{pid}", json={"name": "hax"}, headers=bob).status_code == 404
+    assert client.delete(f"/projects/{pid}", headers=bob).status_code == 404
+
+
+def test_patch_updates_name_and_visibility(client):
+    h = _auth(client, "pu@example.com")
+    pid = client.post("/projects", json={"name": "old", "team_id": _default_team_id(client, h)},
+                      headers=h).json()["id"]
+    r = client.patch(f"/projects/{pid}", json={"name": "new", "is_public": True}, headers=h)
+    assert r.status_code == 200 and r.json()["name"] == "new" and r.json()["is_public"] is True

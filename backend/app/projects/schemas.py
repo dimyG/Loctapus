@@ -9,7 +9,13 @@ class ProjectCreate(BaseModel):
     team_id: UUID
 
 
+class ProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    is_public: bool | None = None
+
+
 class ProjectOut(BaseModel):
     id: UUID
     name: str
+    is_public: bool
     created_at: datetime

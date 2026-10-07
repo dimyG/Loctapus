@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.identity.dependencies import get_current_user
 from app.identity.models import User
-from app.projects.schemas import ProjectCreate, ProjectOut
+from app.projects.schemas import ProjectCreate, ProjectOut, ProjectUpdate
 from app.projects.service import (create_project, delete_project,
-                                  get_project_for_user,
                                   get_project_for_user_with_role,
-                                  list_projects)
+                                  get_project_visible_to_user,
+                                  list_projects, list_public_projects,
+                                  update_project)
 
 router = APIRouter()
 
@@ -35,16 +36,37 @@ def list_all(
     return list_projects(db, user)
 
 
+@router.get("/projects/public", response_model=list[ProjectOut])
+def list_public(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return list_public_projects(db)
+
+
 @router.get("/projects/{project_id}", response_model=ProjectOut)
 def get_one(
     project_id: UUID,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    project = get_project_for_user(db, user, project_id)
+    project = get_project_visible_to_user(db, user, project_id)
     if project is None:
         raise HTTPException(404, "project not found")
     return project
+
+
+@router.patch("/projects/{project_id}", response_model=ProjectOut)
+def update(
+    project_id: UUID,
+    body: ProjectUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = get_project_for_user_with_role(db, user, project_id, roles=("admin",))
+    if project is None:
+        raise HTTPException(404, "project not found")
+    return update_project(db, project, name=body.name, is_public=body.is_public)
 
 
 @router.delete("/projects/{project_id}", status_code=204)
