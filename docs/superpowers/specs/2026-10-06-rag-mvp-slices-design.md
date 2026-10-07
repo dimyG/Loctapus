@@ -2,7 +2,7 @@
 
 Date: 2026-10-06
 Status: Approved design (pending user spec review)
-Source of truth for product/architecture intent: `rag_mvp_agent_project_context.md` (the "MD"). This document records the decomposition decisions made during brainstorming and the detailed design for the first implementation slices. Where the two disagree, this document wins for the topics it covers.
+Source of truth for product/architecture intent: `../../../initial_rag_mvp_agent_project_context.md` (the "MD"). This document records the decomposition decisions made during brainstorming and the detailed design for the first implementation slices. Where the two disagree, this document wins for the topics it covers.
 
 ## 1. Context and decisions from brainstorming
 

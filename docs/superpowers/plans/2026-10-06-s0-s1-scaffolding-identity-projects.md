@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.14, FastAPI, SQLAlchemy 2.0 (sync), psycopg[binary] v3, Alembic, pydantic-settings, PyJWT, pwdlib[argon2], pytest, httpx, Docker Compose (pgvector/pgvector:pg17, rabbitmq:3.13-management, minio/minio).
 
-**Spec:** `docs/superpowers/specs/2026-10-06-rag-mvp-slices-design.md` (and `rag_mvp_agent_project_context.md` for product intent). This plan implements spec §3 (repo layout), §4 (S1 design), and the S0 row of §2.
+**Spec:** `docs/superpowers/specs/2026-10-06-rag-mvp-slices-design.md` (and `../../../initial_rag_mvp_agent_project_context.md` for product intent). This plan implements spec §3 (repo layout), §4 (S1 design), and the S0 row of §2.
 
 ## Global Constraints
 
