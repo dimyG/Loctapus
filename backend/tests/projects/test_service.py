@@ -92,6 +92,34 @@ def test_duplicate_project_name_allowed(*, db_session: Session) -> None:
     assert len(project_service.list_projects(db=db_session, user=user)) == 3
 
 
+def test_visibility_deduplicates_projects_shared_with_multiple_teams(*, db_session: Session) -> None:
+    """Check that a project shared with two of the user's teams appears once."""
+
+    from app.identity.models import Team, TeamMembership
+    from app.projects.models import ProjectTeamRole
+
+    registered = identity_service.register_user(
+        db=db_session, email="dedup@example.com", password="password123"
+    )
+    owner = registered.user
+    project = project_service.create_project(
+        db=db_session, user=owner, team_id=registered.team.id, name="shared"
+    )
+    assert project is not None
+
+    # A second team in the same workspace that the same user joins with a viewer role on the project.
+    second_team = Team(workspace_id=registered.workspace.id, name="Second")
+    db_session.add(second_team)
+    db_session.flush()
+    db_session.add(TeamMembership(team_id=second_team.id, user_id=owner.id))
+    db_session.add(ProjectTeamRole(project_id=project.id, team_id=second_team.id, role="viewer"))
+    db_session.flush()
+
+    visible = project_service.list_projects(db=db_session, user=owner)
+    assert sorted(p.name for p in visible) == ["Default", "shared"]
+    assert project_service.get_project_for_user(db=db_session, user=owner, project_id=project.id) is not None
+
+
 def test_get_project_visible_to_user_allows_public(*, db_session: Session) -> None:
     """Check that making a project public exposes it to strangers."""
 
