@@ -49,8 +49,8 @@ def test_get_other_users_project_is_404(*, client: TestClient) -> None:
 def test_projects_require_auth(*, client: TestClient) -> None:
     """Check that the project endpoints reject unauthenticated requests."""
 
-    assert client.get("/projects").status_code in (401, 403)
-    assert client.post("/projects", json={"name": "x"}).status_code in (401, 403)
+    assert client.get("/projects").status_code == 401
+    assert client.post("/projects", json={"name": "x"}).status_code == 401
 
 
 def test_create_project_validates_name(*, client: TestClient) -> None:

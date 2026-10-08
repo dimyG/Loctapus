@@ -71,4 +71,4 @@ def test_logout_leaves_other_sessions_valid(*, client: TestClient) -> None:
 def test_logout_requires_auth(*, client: TestClient) -> None:
     """Check that logout rejects requests without a token."""
 
-    assert client.post("/auth/logout").status_code in (401, 403)
+    assert client.post("/auth/logout").status_code == 401

@@ -28,7 +28,9 @@ def test_users_me_returns_ids(*, client: TestClient) -> None:
 def test_users_me_requires_auth(*, client: TestClient) -> None:
     """Check that /users/me rejects requests without a token."""
 
-    assert client.get("/users/me").status_code in (401, 403)
+    r = client.get("/users/me")
+    assert r.status_code == 401
+    assert r.headers["WWW-Authenticate"] == "Bearer"
 
 
 def test_users_me_rejects_bad_token(*, client: TestClient) -> None:
@@ -37,6 +39,14 @@ def test_users_me_rejects_bad_token(*, client: TestClient) -> None:
     r = client.get("/users/me", headers={"Authorization": "Bearer garbage"})
     assert r.status_code == 401
     assert r.json() == {"detail": "invalid or expired token"}
+
+
+def test_users_me_rejects_non_bearer_scheme(*, client: TestClient) -> None:
+    """Check that /users/me rejects credentials that are not Bearer tokens."""
+
+    r = client.get("/users/me", headers={"Authorization": "Basic dXNlcjpwYXNz"})
+    assert r.status_code == 401
+    assert r.headers["WWW-Authenticate"] == "Bearer"
 
 
 def test_users_me_expired_token_401(*, client: TestClient) -> None:

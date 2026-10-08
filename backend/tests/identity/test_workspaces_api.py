@@ -32,4 +32,4 @@ def test_workspace_teams_unknown_workspace_404(*, client: TestClient) -> None:
 def test_workspaces_require_auth(*, client: TestClient) -> None:
     """Check that the workspace endpoints reject unauthenticated requests."""
 
-    assert client.get("/workspaces").status_code in (401, 403)
+    assert client.get("/workspaces").status_code == 401
