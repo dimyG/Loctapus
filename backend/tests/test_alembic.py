@@ -45,3 +45,22 @@ def test_single_head_revision() -> None:
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert len(script.get_heads()) == 1
+
+
+def test_foreign_key_columns_are_indexed(*, engine: Engine) -> None:
+    """Check that foreign key columns without a covering unique constraint are indexed."""
+
+    # Postgres does not index foreign keys automatically; the composite uniques cover
+    # team_memberships.team_id and project_team_roles.project_id as leading columns only.
+    expected = {
+        "workspaces": {"owner_user_id"},
+        "teams": {"workspace_id"},
+        "projects": {"workspace_id"},
+        "team_memberships": {"user_id"},
+        "project_team_roles": {"team_id"},
+    }
+    with engine.connect() as conn:
+        insp = inspect(conn)
+        for table, columns in expected.items():
+            indexed = {col for index in insp.get_indexes(table) for col in index["column_names"]}
+            assert columns <= indexed, f"{table}: {columns - indexed} not indexed"
