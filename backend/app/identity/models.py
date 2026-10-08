@@ -7,6 +7,10 @@ from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.models import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.projects.models import Project, ProjectTeamRole
 
 
 class User(Base):
@@ -60,6 +64,6 @@ class TeamMembership(Base):
 class RevokedToken(Base):
     __tablename__ = "revoked_tokens"
 
-    jti: Mapped[str] = mapped_column(String, primary_key=True)
+    jti: Mapped[str] = mapped_column(String, primary_key=True)  # jti (JWT ID)
     expires_at: Mapped[datetime]
     revoked_at: Mapped[datetime] = mapped_column(server_default=func.now())

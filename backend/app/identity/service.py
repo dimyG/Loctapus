@@ -6,8 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
-from app.identity.models import (RevokedToken, Team, TeamMembership, User,
-                                 Workspace)
+from app.identity.models import (RevokedToken, Team, TeamMembership, User, Workspace)
 from app.projects.models import Project
 from app.projects.service import create_project_for_team
 
