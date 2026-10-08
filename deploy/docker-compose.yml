@@ -24,8 +24,12 @@ services:
       - "15672:15672"
 
   minio:
-    # minio/minio was removed from Docker Hub in 2025; elestio/minio packages
-    # the official MinIO server. Revisit when an official registry image returns.
+    # minio/minio was removed from Docker Hub in 2025 and the MinIO community
+    # edition reached end-of-life in February 2026, so no official image will
+    # return; elestio/minio is a third-party repackaging kept for local
+    # development only.
+    # TODO: replace MinIO with a maintained S3-compatible server (SeaweedFS or
+    # Garage) before S2 storage work builds on it.
     image: elestio/minio:latest
     command: server /data --console-address ":9001"
     environment:
