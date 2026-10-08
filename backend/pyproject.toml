@@ -31,6 +31,12 @@ dev = [
 where = ["."]
 include = ["app*"]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    # A SQLAlchemy warning means misuse; the suite must stay warning-free.
+    "error::sqlalchemy.exc.SAWarning",
+]
+
 [tool.ruff]
 line-length = 110
 target-version = "py314"

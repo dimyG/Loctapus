@@ -76,7 +76,9 @@ def db_session(*, engine: Engine) -> Iterator[Session]:
 
     connection = engine.connect()
     transaction = connection.begin()
-    session = Session(bind=connection)
+    # The savepoint mode keeps service-level commit() inside the fixture's transaction:
+    # commit releases and recreates the savepoint, and teardown stays warning-free.
+    session = Session(bind=connection, join_transaction_mode="create_savepoint")
     yield session
     session.close()
     transaction.rollback()
