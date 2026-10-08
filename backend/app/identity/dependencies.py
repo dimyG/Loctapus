@@ -13,6 +13,7 @@ from app.identity.service import is_token_revoked
 
 
 def get_current_user(
+    *,
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -20,10 +21,10 @@ def get_current_user(
     """Return the user named by the bearer token, raising 401 when it is invalid or revoked."""
 
     try:
-        claims = decode_access_token(credentials.credentials, settings)
+        claims = decode_access_token(token=credentials.credentials, settings=settings)
     except jwt.InvalidTokenError:
         raise HTTPException(401, "invalid or expired token") from None
-    if is_token_revoked(db, claims.jti):
+    if is_token_revoked(db=db, jti=claims.jti):
         raise HTTPException(401, "invalid or expired token")
     user = db.get(User, claims.user_id)
     if user is None:

@@ -12,13 +12,13 @@ from app.core.config import Settings
 _password_hash = PasswordHash.recommended()
 
 
-def hash_password(password: str) -> str:
+def hash_password(*, password: str) -> str:
     """Hash ``password`` with the recommended password hashing algorithm."""
 
     return _password_hash.hash(password)
 
 
-def verify_password(password: str, password_hash: str) -> bool:
+def verify_password(*, password: str, password_hash: str) -> bool:
     """Check ``password`` against ``password_hash``."""
 
     return _password_hash.verify(password, password_hash)
@@ -33,7 +33,7 @@ class TokenClaims:
     exp: datetime
 
 
-def create_access_token(user_id: UUID, settings: Settings) -> str:
+def create_access_token(*, user_id: UUID, settings: Settings) -> str:
     """Return a signed access token for ``user_id`` that expires after the configured TTL."""
 
     claims = {
@@ -44,7 +44,7 @@ def create_access_token(user_id: UUID, settings: Settings) -> str:
     return jwt.encode(claims, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str, settings: Settings) -> TokenClaims:
+def decode_access_token(*, token: str, settings: Settings) -> TokenClaims:
     """Verify ``token`` and return its claims, raising ``jwt.InvalidTokenError`` when invalid."""
 
     claims = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])

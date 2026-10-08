@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 
 
-def test_identity_tables_exist(engine: Engine) -> None:
+def test_identity_tables_exist(*, engine: Engine) -> None:
     """Check that migrations created every expected table."""
 
     with engine.connect() as conn:
@@ -25,7 +25,7 @@ def test_identity_tables_exist(engine: Engine) -> None:
     } <= names
 
 
-def test_citext_email_case_insensitive(engine: Engine, db_session: Session) -> None:
+def test_citext_email_case_insensitive(*, engine: Engine, db_session: Session) -> None:
     """Check that the migrated email column matches case-insensitively."""
 
     from app.identity.models import User
@@ -36,7 +36,7 @@ def test_citext_email_case_insensitive(engine: Engine, db_session: Session) -> N
     assert found.email == "Case@Example.com"
 
 
-def test_migration_is_head(settings: Settings) -> None:
+def test_migration_is_head(*, settings: Settings) -> None:
     """Check that alembic reports 0002 as head."""
 
     out = subprocess.run(

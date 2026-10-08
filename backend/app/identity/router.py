@@ -27,6 +27,7 @@ router = APIRouter()
 
 @router.post("/auth/register", status_code=201)
 def register(
+    *,
     body: RegisterRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -34,17 +35,18 @@ def register(
     """Register an account with a default workspace, team, and project, and return a bearer token."""
 
     try:
-        result = register_user(db, body.email, body.password)
+        result = register_user(db=db, email=body.email, password=body.password)
     except EmailAlreadyRegisteredError:
         raise HTTPException(409, "email already registered") from None
     return {
-        "access_token": create_access_token(result.user.id, settings),
+        "access_token": create_access_token(user_id=result.user.id, settings=settings),
         "token_type": "bearer",
     }
 
 
 @router.get("/users/me")
 def users_me(
+    *,
     user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     """Return the id and email of the authenticated user."""
@@ -57,23 +59,25 @@ def users_me(
 
 @router.get("/workspaces", response_model=list[WorkspaceOut])
 def list_workspaces(
+    *,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[Workspace]:
     """List workspaces reachable through the user's team memberships."""
 
-    return list_user_workspaces(db, user)
+    return list_user_workspaces(db=db, user=user)
 
 
 @router.get("/workspaces/{workspace_id}/teams", response_model=list[TeamOut])
 def list_workspace_teams_view(
+    *,
     workspace_id: UUID,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[Team]:
     """List the user's teams inside ``workspace_id``, raising 404 when the user has none there."""
 
-    teams = list_workspace_teams(db, user, workspace_id)
+    teams = list_workspace_teams(db=db, user=user, workspace_id=workspace_id)
     if teams is None:
         raise HTTPException(404, "workspace not found")
     return teams
@@ -81,23 +85,25 @@ def list_workspace_teams_view(
 
 @router.post("/auth/login")
 def login(
+    *,
     body: LoginRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
     """Verify credentials and return a bearer token, raising 401 when they do not match."""
 
-    user = authenticate_user(db, body.email, body.password)
+    user = authenticate_user(db=db, email=body.email, password=body.password)
     if user is None:
         raise HTTPException(401, "invalid credentials")
     return {
-        "access_token": create_access_token(user.id, settings),
+        "access_token": create_access_token(user_id=user.id, settings=settings),
         "token_type": "bearer",
     }
 
 
 @router.post("/auth/logout", status_code=204)
 def logout(
+    *,
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -105,8 +111,8 @@ def logout(
     """Revoke the presented bearer token, raising 401 when it is invalid or expired."""
 
     try:
-        claims = decode_access_token(credentials.credentials, settings)
+        claims = decode_access_token(token=credentials.credentials, settings=settings)
     except jwt.InvalidTokenError:
         raise HTTPException(401, "invalid or expired token") from None
-    revoke_token(db, claims.jti, claims.exp)
+    revoke_token(db=db, jti=claims.jti, expires_at=claims.exp)
     return Response(status_code=204)

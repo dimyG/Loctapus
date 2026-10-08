@@ -15,7 +15,7 @@ def _python_files(*directories: str) -> list[Path]:
     return sorted(path for directory in directories for path in (BACKEND_DIR / directory).rglob("*.py"))
 
 
-def _docstring_statement(node: _DocstringOwner) -> ast.Expr | None:
+def _docstring_statement(*, node: _DocstringOwner) -> ast.Expr | None:
     """Return the docstring statement when ``node`` opens with a string literal."""
 
     if not node.body:
@@ -41,7 +41,7 @@ def test_docstrings_are_followed_by_a_blank_line() -> None:
         for node in ast.walk(tree):
             if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            stmt = _docstring_statement(node)
+            stmt = _docstring_statement(node=node)
             # A docstring that is the whole body has nothing following it.
             if stmt is None or len(node.body) < 2:
                 continue
@@ -67,6 +67,6 @@ def test_private_functions_and_methods_have_docstrings() -> None:
             is_dunder = node.name.startswith("__") and node.name.endswith("__")
             if not node.name.startswith("_") or is_dunder:
                 continue
-            if _docstring_statement(node) is None:
+            if _docstring_statement(node=node) is None:
                 offenders.append(f"{path.relative_to(BACKEND_DIR)}:{node.lineno}: {node.name}")
     assert not offenders, "private functions and methods need a docstring:\n" + "\n".join(offenders)

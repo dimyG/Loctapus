@@ -39,7 +39,7 @@ def engine() -> Iterator[Engine]:
     admin_url = url.rsplit("/", 1)[0] + "/postgres"
     db_name = url.rsplit("/", 1)[1]
 
-    admin = make_engine(admin_url).execution_options(isolation_level="AUTOCOMMIT")
+    admin = make_engine(database_url=admin_url).execution_options(isolation_level="AUTOCOMMIT")
     with admin.connect() as conn:
         exists = conn.execute(
             text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": db_name}
@@ -48,7 +48,7 @@ def engine() -> Iterator[Engine]:
             conn.execute(text(f'CREATE DATABASE "{db_name}"'))
     admin.dispose()
 
-    test_engine = make_engine(url)
+    test_engine = make_engine(database_url=url)
 
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.set_main_option("sqlalchemy.url", url)
@@ -71,7 +71,7 @@ def engine() -> Iterator[Engine]:
 
 
 @pytest.fixture
-def db_session(engine: Engine) -> Iterator[Session]:
+def db_session(*, engine: Engine) -> Iterator[Session]:
     """Return a session bound to a transaction that is rolled back after the test."""
 
     connection = engine.connect()
@@ -84,7 +84,7 @@ def db_session(engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(db_session: Session) -> Iterator[TestClient]:
+def client(*, db_session: Session) -> Iterator[TestClient]:
     """Return a TestClient whose database dependency serves the rollback-managed session."""
 
     def override_get_db() -> Iterator[Session]:

@@ -27,10 +27,10 @@ class RegistrationResult:
     project: Project
 
 
-def register_user(db: Session, email: str, password: str) -> RegistrationResult:
+def register_user(*, db: Session, email: str, password: str) -> RegistrationResult:
     """Create a user with a default workspace, team, membership, and project in one transaction."""
 
-    user = User(email=email, password_hash=hash_password(password))
+    user = User(email=email, password_hash=hash_password(password=password))
     db.add(user)
     try:
         db.flush()
@@ -42,7 +42,7 @@ def register_user(db: Session, email: str, password: str) -> RegistrationResult:
         db.flush()
         db.add(TeamMembership(team_id=team.id, user_id=user.id))
         db.flush()
-        project = create_project_for_team(db, team, "Default")
+        project = create_project_for_team(db=db, team=team, name="Default")
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -53,30 +53,30 @@ def register_user(db: Session, email: str, password: str) -> RegistrationResult:
     return RegistrationResult(user=user, workspace=workspace, team=team, project=project)
 
 
-def authenticate_user(db: Session, email: str, password: str) -> User | None:
+def authenticate_user(*, db: Session, email: str, password: str) -> User | None:
     """Return the user when the password matches, otherwise None."""
 
     user = db.query(User).filter(User.email == email).one_or_none()
-    if user is None or not verify_password(password, user.password_hash):
+    if user is None or not verify_password(password=password, password_hash=user.password_hash):
         return None
     return user
 
 
-def revoke_token(db: Session, jti: str, expires_at: datetime) -> None:
+def revoke_token(*, db: Session, jti: str, expires_at: datetime) -> None:
     """Record a token as revoked; repeated calls with the same jti are a no-op."""
 
-    if not is_token_revoked(db, jti):
+    if not is_token_revoked(db=db, jti=jti):
         db.add(RevokedToken(jti=jti, expires_at=expires_at))
         db.commit()
 
 
-def is_token_revoked(db: Session, jti: str) -> bool:
+def is_token_revoked(*, db: Session, jti: str) -> bool:
     """Check whether ``jti`` has been revoked."""
 
     return db.query(RevokedToken).filter(RevokedToken.jti == jti).first() is not None
 
 
-def list_user_workspaces(db: Session, user: User) -> list[Workspace]:
+def list_user_workspaces(*, db: Session, user: User) -> list[Workspace]:
     """List workspaces reachable through the user's team memberships."""
 
     return (
@@ -89,7 +89,7 @@ def list_user_workspaces(db: Session, user: User) -> list[Workspace]:
     )
 
 
-def list_workspace_teams(db: Session, user: User, workspace_id: UUID) -> list[Team] | None:
+def list_workspace_teams(*, db: Session, user: User, workspace_id: UUID) -> list[Team] | None:
     """List the user's teams in a workspace, or None when the user has no team there."""
 
     teams = (

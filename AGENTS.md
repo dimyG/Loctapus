@@ -7,6 +7,7 @@
 - Private functions and methods (leading underscore) have docstrings too; ruff only checks public definitions, so this is enforced by `tests/test_style.py`.
 - Every docstring is followed by a blank line before the next statement, enforced by `tests/test_style.py`.
 - If function arguments do not fit on one line, split them onto separate lines, one per line, enforced by `ruff format`.
+- All parameters of our functions are keyword-only (`def f(*, a, b)`), so every call passes arguments by name. Enforced by ruff `PLR0917` with `max-positional-args = 0`; mypy also rejects positional calls at compile time, and Python at runtime. Third-party calls are outside the rule.
 - Do not silence type errors with `# type: ignore` unless necessary.
 - Prefer precise return types and parameter annotations.
 

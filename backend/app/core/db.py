@@ -9,13 +9,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import get_settings
 
 
-def make_engine(database_url: str) -> Engine:
+def make_engine(*, database_url: str) -> Engine:
     """Create a SQLAlchemy engine bound to ``database_url``."""
 
     return create_engine(database_url)
 
 
-SessionLocal = sessionmaker(bind=make_engine(get_settings().database_url))
+SessionLocal = sessionmaker(bind=make_engine(database_url=get_settings().database_url))
 
 
 def get_db() -> Iterator[Session]:

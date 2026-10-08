@@ -3,7 +3,7 @@
 from fastapi.testclient import TestClient
 
 
-def test_register_login_project_lifecycle(client: TestClient) -> None:
+def test_register_login_project_lifecycle(*, client: TestClient) -> None:
     """Drive register, login, project create, fetch, and delete through the API."""
 
     token = client.post(

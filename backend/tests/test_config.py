@@ -14,7 +14,7 @@ def test_settings_defaults() -> None:
     assert s.jwt_access_token_ttl_hours == 24
 
 
-def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_env_override(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Check that RAG_-prefixed variables override the defaults."""
 
     monkeypatch.setenv("RAG_DATABASE_URL", "postgresql+psycopg://u:p@h:1/db")
