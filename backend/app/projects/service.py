@@ -24,7 +24,7 @@ def _get_team_for_member(*, db: Session, user: User, team_id: UUID) -> Team | No
 
     return (
         db.query(Team)
-        .join(TeamMembership, TeamMembership.team_id == Team.id)
+        .join(Team.memberships)
         .filter(Team.id == team_id, TeamMembership.user_id == user.id)
         .one_or_none()
     )
@@ -46,8 +46,9 @@ def _visible_projects_query(*, db: Session, user: User) -> Query[Project]:
 
     return (
         db.query(Project)
-        .join(ProjectTeamRole, ProjectTeamRole.project_id == Project.id)
-        .join(TeamMembership, TeamMembership.team_id == ProjectTeamRole.team_id)
+        .join(Project.team_roles)
+        .join(ProjectTeamRole.team)
+        .join(Team.memberships)
         .filter(TeamMembership.user_id == user.id)
     )
 
