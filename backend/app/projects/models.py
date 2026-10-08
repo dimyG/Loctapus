@@ -5,7 +5,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint, false, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    false,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.models import Base
@@ -23,7 +31,7 @@ class Project(Base):
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id"))
     name: Mapped[str] = mapped_column(String)
     is_public: Mapped[bool] = mapped_column(default=False, server_default=false())
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     workspace: Mapped[Workspace] = relationship(back_populates="projects")
     team_roles: Mapped[list[ProjectTeamRole]] = relationship(back_populates="project")

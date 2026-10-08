@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,7 +23,7 @@ class User(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(CITEXT, unique=True)
     password_hash: Mapped[str] = mapped_column(String)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owned_workspaces: Mapped[list[Workspace]] = relationship(back_populates="owner")
     memberships: Mapped[list[TeamMembership]] = relationship(back_populates="user")
@@ -78,5 +78,5 @@ class RevokedToken(Base):
 
     # Jti is the JWT ID claim, the handle used to revoke tokens before their natural expiry.
     jti: Mapped[str] = mapped_column(String, primary_key=True)
-    expires_at: Mapped[datetime]
-    revoked_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

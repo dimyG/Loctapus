@@ -75,6 +75,24 @@ def test_revoked_token_roundtrip(*, db_session: Session) -> None:
     assert db_session.query(RevokedToken).filter_by(jti="abc123").one().jti == "abc123"
 
 
+def test_timestamps_roundtrip_timezone_aware(*, db_session: Session) -> None:
+    """Check that server and client timestamps come back with timezone info."""
+
+    from app.identity.models import RevokedToken
+
+    db_session.add(User(email="tz@example.com", password_hash="x"))
+    db_session.flush()
+    user = db_session.query(User).filter_by(email="tz@example.com").one()
+    assert user.created_at is not None
+    assert user.created_at.tzinfo is not None
+
+    db_session.add(RevokedToken(jti="tz", expires_at=datetime.now(UTC)))
+    db_session.expire_all()
+    token = db_session.query(RevokedToken).filter_by(jti="tz").one()
+    assert token.expires_at.tzinfo is not None
+    assert token.revoked_at.tzinfo is not None
+
+
 def test_relationships_traverse(*, db_session: Session) -> None:
     """Check that every declared relationship traverses both ways."""
 
