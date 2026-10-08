@@ -110,4 +110,5 @@ def downgrade() -> None:
     op.drop_table("projects")
     op.drop_table("workspaces")
     op.drop_table("users")
+    op.execute("DROP EXTENSION IF EXISTS citext")
     # ### end Alembic commands ###

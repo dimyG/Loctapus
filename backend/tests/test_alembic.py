@@ -1,14 +1,19 @@
 """Tests that migrations build the schema the models expect."""
 
+import os
 from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from alembic import command
+from app.core.db import make_engine
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
 
 
 def test_identity_tables_exist(*, engine: Engine) -> None:
@@ -64,3 +69,50 @@ def test_foreign_key_columns_are_indexed(*, engine: Engine) -> None:
         for table, columns in expected.items():
             indexed = {col for index in insp.get_indexes(table) for col in index["column_names"]}
             assert columns <= indexed, f"{table}: {columns - indexed} not indexed"
+
+
+def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
+    """Check that downgrading to base drops every table and the citext extension."""
+
+    url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
+    admin_url = url.rsplit("/", 1)[0] + "/postgres"
+    db_name = "rag_test_downgrade"
+    scratch_url = f"{url.rsplit('/', 1)[0]}/{db_name}"
+
+    admin = make_engine(database_url=admin_url).execution_options(isolation_level="AUTOCOMMIT")
+    scratch = make_engine(database_url=scratch_url)
+    try:
+        # Drop a leftover database first so reruns after a failed run stay self-healing.
+        _terminate_and_drop(admin=admin, db_name=db_name)
+        with admin.connect() as conn:
+            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+
+        config = Config(str(BACKEND_DIR / "alembic.ini"))
+        config.set_main_option("sqlalchemy.url", scratch_url)
+        config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+        command.upgrade(config, "head")
+        command.downgrade(config, "base")
+
+        with scratch.connect() as conn:
+            # Alembic keeps its own (empty) version table after a downgrade to base.
+            assert set(inspect(conn).get_table_names()) <= {"alembic_version"}
+            extensions = conn.execute(text("SELECT extname FROM pg_extension")).scalars().all()
+            assert "citext" not in extensions
+    finally:
+        scratch.dispose()
+        _terminate_and_drop(admin=admin, db_name=db_name)
+        admin.dispose()
+
+
+def _terminate_and_drop(*, admin: Engine, db_name: str) -> None:
+    """Kill open connections to ``db_name`` and drop the database."""
+
+    with admin.connect() as conn:
+        conn.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = :name AND pid <> pg_backend_pid()"
+            ),
+            {"name": db_name},
+        )
+        conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
