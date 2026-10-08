@@ -1,5 +1,8 @@
+"""ORM models for users, workspaces, teams, and token revocation."""
+
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, String, UniqueConstraint, func
@@ -7,13 +10,14 @@ from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.models import Base
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.projects.models import Project, ProjectTeamRole
 
 
 class User(Base):
+    """A registered account with email credentials."""
+
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -21,35 +25,41 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
-    owned_workspaces: Mapped[list["Workspace"]] = relationship(back_populates="owner")
-    memberships: Mapped[list["TeamMembership"]] = relationship(back_populates="user")
+    owned_workspaces: Mapped[list[Workspace]] = relationship(back_populates="owner")
+    memberships: Mapped[list[TeamMembership]] = relationship(back_populates="user")
 
 
 class Workspace(Base):
+    """A tenant that groups teams and projects, owned by a user."""
+
     __tablename__ = "workspaces"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String)
     owner_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
 
-    owner: Mapped["User"] = relationship(back_populates="owned_workspaces")
-    teams: Mapped[list["Team"]] = relationship(back_populates="workspace")
-    projects: Mapped[list["Project"]] = relationship(back_populates="workspace")
+    owner: Mapped[User] = relationship(back_populates="owned_workspaces")
+    teams: Mapped[list[Team]] = relationship(back_populates="workspace")
+    projects: Mapped[list[Project]] = relationship(back_populates="workspace")
 
 
 class Team(Base):
+    """A group of users inside a workspace, granted project roles as a unit."""
+
     __tablename__ = "teams"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id"))
     name: Mapped[str] = mapped_column(String)
 
-    workspace: Mapped["Workspace"] = relationship(back_populates="teams")
-    memberships: Mapped[list["TeamMembership"]] = relationship(back_populates="team")
-    project_roles: Mapped[list["ProjectTeamRole"]] = relationship(back_populates="team")
+    workspace: Mapped[Workspace] = relationship(back_populates="teams")
+    memberships: Mapped[list[TeamMembership]] = relationship(back_populates="team")
+    project_roles: Mapped[list[ProjectTeamRole]] = relationship(back_populates="team")
 
 
 class TeamMembership(Base):
+    """Membership of one user in one team."""
+
     __tablename__ = "team_memberships"
     __table_args__ = (UniqueConstraint("team_id", "user_id"),)
 
@@ -57,13 +67,16 @@ class TeamMembership(Base):
     team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"))
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
 
-    team: Mapped["Team"] = relationship(back_populates="memberships")
-    user: Mapped["User"] = relationship(back_populates="memberships")
+    team: Mapped[Team] = relationship(back_populates="memberships")
+    user: Mapped[User] = relationship(back_populates="memberships")
 
 
 class RevokedToken(Base):
+    """A revoked JWT ID, kept until the token would have expired anyway."""
+
     __tablename__ = "revoked_tokens"
 
-    jti: Mapped[str] = mapped_column(String, primary_key=True)  # jti (JWT ID)
+    # Jti is the JWT ID claim, the handle used to revoke tokens before their natural expiry.
+    jti: Mapped[str] = mapped_column(String, primary_key=True)
     expires_at: Mapped[datetime]
     revoked_at: Mapped[datetime] = mapped_column(server_default=func.now())

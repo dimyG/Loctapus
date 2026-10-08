@@ -1,16 +1,21 @@
+"""Shared fixtures that provision an isolated, migration-built test database."""
+
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from alembic import command
 from app.core.config import Settings
 from app.core.db import get_db, make_engine
 from app.main import app
+from tests.helpers import SettingsForTests
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
@@ -18,15 +23,18 @@ DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
 
 @pytest.fixture
 def settings() -> Settings:
-    return Settings(
-        _env_file=None,
+    """Return settings pointing at the disposable test database."""
+
+    return SettingsForTests(
         database_url=os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL),
         jwt_secret="test-secret",
     )
 
 
 @pytest.fixture(scope="session")
-def engine():
+def engine() -> Iterator[Engine]:
+    """Create the test database through migrations, and drop it after the session."""
+
     url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
     admin_url = url.rsplit("/", 1)[0] + "/postgres"
     db_name = url.rsplit("/", 1)[1]
@@ -63,7 +71,9 @@ def engine():
 
 
 @pytest.fixture
-def db_session(engine):
+def db_session(engine: Engine) -> Iterator[Session]:
+    """Return a session bound to a transaction that is rolled back after the test."""
+
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
@@ -74,8 +84,12 @@ def db_session(engine):
 
 
 @pytest.fixture
-def client(db_session):
-    def override_get_db():
+def client(db_session: Session) -> Iterator[TestClient]:
+    """Return a TestClient whose database dependency serves the rollback-managed session."""
+
+    def override_get_db() -> Iterator[Session]:
+        """Serve the shared transaction-managed session instead of a fresh one."""
+
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db

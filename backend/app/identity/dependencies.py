@@ -1,3 +1,5 @@
+"""FastAPI dependencies that authenticate the current request."""
+
 import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -15,6 +17,8 @@ def get_current_user(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> User:
+    """Return the user named by the bearer token, raising 401 when it is invalid or revoked."""
+
     try:
         claims = decode_access_token(credentials.credentials, settings)
     except jwt.InvalidTokenError:

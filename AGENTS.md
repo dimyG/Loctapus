@@ -1,0 +1,37 @@
+# Coding rules
+
+## Python
+
+- Line length is 110, enforced by ruff (`backend/pyproject.toml`).
+- Every module, class, and function has a docstring, enforced by ruff pydocstyle rules (alembic scripts are exempt).
+- Private functions and methods (leading underscore) have docstrings too; ruff only checks public definitions, so this is enforced by `tests/test_style.py`.
+- Every docstring is followed by a blank line before the next statement, enforced by `tests/test_style.py`.
+- If function arguments do not fit on one line, split them onto separate lines, one per line, enforced by `ruff format`.
+- Do not silence type errors with `# type: ignore` unless necessary.
+- Prefer precise return types and parameter annotations.
+
+## Comments
+
+- Comments start with a capital letter and end with a dot.
+- Do not write comments that merely restate the code.
+- Comments should explain why, constraints, invariants, or non-obvious behavior.
+- Avoid comments describing implementation details that are obvious from names.
+- Keep docstrings focused on public API behavior. Docstrings are for users, comments for developers.
+
+## FastAPI Structure
+
+- Routers handle HTTP concerns only.
+- Business logic belongs in `service.py`.
+- SQLAlchemy models belong in `models.py`.
+- Pydantic request/response models belong in `schemas.py`.
+- Database access should not leak into unrelated layers.
+
+## Verification
+
+Before finishing a Python change, run:
+
+    ruff check .
+    mypy app tests
+    pytest
+
+A task is not complete while any of these fail because of the change.

@@ -1,4 +1,11 @@
-def test_register_login_project_lifecycle(client):
+"""End-to-end smoke test for the full happy path."""
+
+from fastapi.testclient import TestClient
+
+
+def test_register_login_project_lifecycle(client: TestClient) -> None:
+    """Drive register, login, project create, fetch, and delete through the API."""
+
     token = client.post(
         "/auth/register",
         json={"email": "e2e@example.com", "password": "password123"},
@@ -17,8 +24,7 @@ def test_register_login_project_lifecycle(client):
     me = client.get("/users/me", headers=headers).json()
     assert me["email"] == "e2e@example.com"
 
-    pid = client.post("/projects", json={"name": "e2e-kb", "team_id": team_id},
-                      headers=headers).json()["id"]
+    pid = client.post("/projects", json={"name": "e2e-kb", "team_id": team_id}, headers=headers).json()["id"]
     assert client.get(f"/projects/{pid}", headers=headers).status_code == 200
     names = [p["name"] for p in client.get("/projects", headers=headers).json()]
     assert sorted(names) == ["Default", "e2e-kb"]
