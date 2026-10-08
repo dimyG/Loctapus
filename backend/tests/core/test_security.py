@@ -57,6 +57,18 @@ def test_token_expiry_claim() -> None:
     assert timedelta(hours=23) < exp - datetime.now(UTC) <= timedelta(hours=24)
 
 
+def test_decode_rejects_expired_token_for_expiry_specifically() -> None:
+    """Check that an expired token fails specifically as ExpiredSignatureError."""
+
+    expired = jwt.encode(
+        {"sub": str(uuid.uuid4()), "jti": "expired", "exp": datetime.now(UTC) - timedelta(hours=1)},
+        "test-secret",
+        algorithm="HS256",
+    )
+    with pytest.raises(jwt.ExpiredSignatureError):
+        decode_access_token(token=expired, settings=_settings())
+
+
 def test_decode_rejects_garbage() -> None:
     """Check that undecodable input raises InvalidTokenError."""
 

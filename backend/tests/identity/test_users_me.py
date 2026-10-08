@@ -5,8 +5,6 @@ from datetime import UTC
 
 from fastapi.testclient import TestClient
 
-from app.core.config import Settings
-
 
 def _register(*, client: TestClient, email: str = "me@example.com") -> str:
     """Register an account and return its access token."""
@@ -41,18 +39,24 @@ def test_users_me_rejects_bad_token(*, client: TestClient) -> None:
     assert r.json() == {"detail": "invalid or expired token"}
 
 
-def test_users_me_expired_token_401(*, client: TestClient, settings: Settings) -> None:
-    """Check that /users/me rejects an expired token."""
+def test_users_me_expired_token_401(*, client: TestClient) -> None:
+    """Check that /users/me rejects an otherwise-valid token once it expires."""
 
     from datetime import datetime, timedelta
 
     import jwt as pyjwt
 
-    token = pyjwt.encode(
-        {"sub": str(uuid.uuid4()), "exp": datetime.now(UTC) - timedelta(hours=1)},
-        settings.jwt_secret,
-        algorithm=settings.jwt_algorithm,
-    )
-    r = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
+    from app.core.config import get_settings
+
+    # The TestClient app verifies with the process settings, so resign with those.
+    app_settings = get_settings()
+    token = _register(client=client, email="expired@example.com")
+    # Control: the fresh token itself is accepted, so the rejection below can only be the expiry.
+    assert client.get("/users/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+    claims = pyjwt.decode(token, app_settings.jwt_secret, algorithms=[app_settings.jwt_algorithm])
+    claims["exp"] = datetime.now(UTC) - timedelta(hours=1)
+    expired = pyjwt.encode(claims, app_settings.jwt_secret, algorithm=app_settings.jwt_algorithm)
+    r = client.get("/users/me", headers={"Authorization": f"Bearer {expired}"})
     assert r.status_code == 401
     assert r.json() == {"detail": "invalid or expired token"}
