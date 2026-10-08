@@ -34,7 +34,7 @@ def test_create_and_list_projects(*, client: TestClient) -> None:
     assert sorted(p["name"] for p in listed.json()) == ["Default", "kb"]
 
 
-def test_get_other_users_project_is_404(*, client: TestClient) -> None:
+def test_get_project_not_shared_with_user_is_404(*, client: TestClient) -> None:
     """Check that a stranger cannot fetch a private project."""
 
     alice = _auth(client=client, email="a2@example.com")
@@ -62,7 +62,7 @@ def test_create_project_validates_name(*, client: TestClient) -> None:
     assert r.status_code == 422
 
 
-def test_create_project_rejects_foreign_team(*, client: TestClient) -> None:
+def test_create_project_requires_team_membership(*, client: TestClient) -> None:
     """Check that creating on a stranger's team answers 404."""
 
     alice = _auth(client=client, email="fa@example.com")
