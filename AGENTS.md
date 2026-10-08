@@ -27,6 +27,12 @@
 - Pydantic request/response models belong in `schemas.py`.
 - Database access should not leak into unrelated layers.
 
+## Git workflow
+
+- Work is committed directly on master (project owner's direction); the review gate is a fresh-context review at end of run.
+- One concern per commit: never bundle docs, config, or other unrelated files into a fix commit.
+- When a review flags untracked files, give each its own dedicated commit (for example `docs(plan): ...`) instead of attaching it to a fix.
+
 ## Verification
 
 Before finishing a Python change, run:
