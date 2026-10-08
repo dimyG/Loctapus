@@ -1,12 +1,14 @@
 """Tests that migrations build the schema the models expect."""
 
-import subprocess
+from pathlib import Path
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings
+BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 def test_identity_tables_exist(*, engine: Engine) -> None:
@@ -36,15 +38,10 @@ def test_citext_email_case_insensitive(*, engine: Engine, db_session: Session) -
     assert found.email == "Case@Example.com"
 
 
-def test_migration_is_head(*, settings: Settings) -> None:
-    """Check that alembic reports 0002 as head."""
+def test_single_head_revision() -> None:
+    """Check that the migration graph has exactly one head revision."""
 
-    out = subprocess.run(
-        ["..\\.venv\\Scripts\\alembic.exe", "-c", "alembic.ini", "heads"],
-        capture_output=True,
-        text=True,
-        cwd=".",
-    )
-    assert out.returncode == 0
-    assert out.stdout is not None
-    assert "0002" in out.stdout and "(head)" in out.stdout
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    script = ScriptDirectory.from_config(config)
+    assert len(script.get_heads()) == 1
