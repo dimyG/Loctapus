@@ -1,7 +1,9 @@
 """Tests for the project service layer."""
 
+from typing import Any
 from uuid import UUID
 
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from app.identity import service as identity_service
@@ -118,6 +120,38 @@ def test_visibility_deduplicates_projects_shared_with_multiple_teams(*, db_sessi
     visible = project_service.list_projects(db=db_session, user=owner)
     assert sorted(p.name for p in visible) == ["Default", "shared"]
     assert project_service.get_project_for_user(db=db_session, user=owner, project_id=project.id) is not None
+
+
+def test_list_projects_fetches_each_project_once(*, db_session: Session) -> None:
+    """Check that list_projects issues a DISTINCT select, not one row per sharing team."""
+
+    bind = db_session.bind
+    assert bind is not None
+    statements: list[str] = []
+
+    # SQLAlchemy calls before_cursor_execute with fixed positional arguments.
+    def _capture(  # noqa: PLR0917
+        conn: Any,
+        cursor: Any,
+        statement: str,
+        parameters: Any,
+        context: Any,
+        executemany: bool,
+    ) -> None:
+        """Record every statement the session executes."""
+
+        statements.append(statement)
+
+    user, _team_id = _user(db=db_session, email="distinct@example.com")
+    event.listen(bind, "before_cursor_execute", _capture)
+    try:
+        project_service.list_projects(db=db_session, user=user)
+    finally:
+        event.remove(bind, "before_cursor_execute", _capture)
+
+    project_selects = [s for s in statements if "FROM projects" in s]
+    assert project_selects, "expected a projects select to run"
+    assert any("SELECT DISTINCT" in s.upper() for s in project_selects)
 
 
 def test_get_project_visible_to_user_allows_public(*, db_session: Session) -> None:

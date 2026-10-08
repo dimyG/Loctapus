@@ -44,12 +44,14 @@ def create_project(*, db: Session, user: User, team_id: UUID, name: str) -> Proj
 def _visible_projects_query(*, db: Session, user: User) -> Query[Project]:
     """Return the base query for every project shared with one of the user's teams."""
 
+    # Distinct keeps a project shared with several of the user's teams to one fetched row.
     return (
         db.query(Project)
         .join(Project.team_roles)
         .join(ProjectTeamRole.team)
         .join(Team.memberships)
         .filter(TeamMembership.user_id == user.id)
+        .distinct()
     )
 
 
