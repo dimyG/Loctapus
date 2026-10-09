@@ -40,6 +40,7 @@
 Before finishing a Python change, run:
 
     ruff check .
+    ruff format --check .
     mypy app tests
     pytest
 

@@ -23,6 +23,3 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
   SQL suppresses violations of every unique constraint on `revoked_tokens` while the
   comment names only the jti primary key; pass `index_elements=[RevokedToken.jti]`
   (from commit `c9942f7`).
-- Consider adding `ruff format --check` to the house verification list in `AGENTS.md`;
-  `app/projects/router.py` and `tests/projects/test_service.py` already diverge
-  (pre-existing from commit `ad83874`, before this branch).
