@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.identity import service
@@ -42,6 +43,22 @@ def test_register_duplicate_email_raises(*, db_session: Session) -> None:
     service.register_user(db=db_session, email="dup@example.com", password="password123")
     with pytest.raises(service.EmailAlreadyRegisteredError):
         service.register_user(db=db_session, email="DUP@example.com", password="password123")
+
+
+def test_register_provisioning_failure_not_email_conflict(
+    *, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Check that a constraint failure while provisioning surfaces as itself, not a 409."""
+
+    def boom(*args: object, **kwargs: object) -> None:
+        """Fail provisioning to exercise the propagation path."""
+
+        raise IntegrityError("insert into workspaces", {}, Exception("check violation"))
+
+    monkeypatch.setattr(service, "create_project_for_team", boom)
+    with pytest.raises(IntegrityError):
+        service.register_user(db=db_session, email="prov@example.com", password="password123")
+    assert db_session.query(User).filter_by(email="prov@example.com").one_or_none() is None
 
 
 def test_authenticate_user(*, db_session: Session) -> None:

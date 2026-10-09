@@ -33,8 +33,14 @@ def register_user(*, db: Session, email: str, password: str) -> RegistrationResu
 
     user = User(email=email, password_hash=hash_password(password=password))
     db.add(user)
+    # Only the user insert can hit the email unique constraint, so only its flush maps to a
+    # duplicate email; provisioning failures must surface as themselves.
     try:
         db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise EmailAlreadyRegisteredError(email) from None
+    try:
         workspace = Workspace(name="Default", owner_user_id=user.id)
         db.add(workspace)
         db.flush()
@@ -45,9 +51,6 @@ def register_user(*, db: Session, email: str, password: str) -> RegistrationResu
         db.flush()
         project = create_project_for_team(db=db, team=team, name="Default")
         db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise EmailAlreadyRegisteredError(email) from None
     except Exception:
         db.rollback()
         raise
