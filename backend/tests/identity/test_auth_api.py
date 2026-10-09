@@ -72,3 +72,11 @@ def test_logout_requires_auth(*, client: TestClient) -> None:
     """Check that logout rejects requests without a token."""
 
     assert client.post("/auth/logout").status_code == 401
+
+
+def test_logout_rejects_garbage_token(*, client: TestClient) -> None:
+    """Check that logout answers 401 for a malformed bearer token."""
+
+    r = client.post("/auth/logout", headers={"Authorization": "Bearer garbage"})
+    assert r.status_code == 401
+    assert r.json() == {"detail": "invalid or expired token"}

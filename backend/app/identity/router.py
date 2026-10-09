@@ -2,15 +2,13 @@
 
 from uuid import UUID
 
-import jwt
 from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
-from app.core.security import create_access_token, decode_access_token
-from app.identity.dependencies import get_current_user
+from app.core.security import TokenClaims, create_access_token
+from app.identity.dependencies import get_current_user, get_token_claims
 from app.identity.models import Team, User, Workspace
 from app.identity.schemas import LoginRequest, RegisterRequest, TeamOut, WorkspaceOut
 from app.identity.service import (
@@ -104,15 +102,10 @@ def login(
 @router.post("/auth/logout", status_code=204)
 def logout(
     *,
-    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+    claims: TokenClaims = Depends(get_token_claims),
     db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
 ) -> Response:
     """Revoke the presented bearer token, raising 401 when it is invalid or expired."""
 
-    try:
-        claims = decode_access_token(token=credentials.credentials, settings=settings)
-    except jwt.InvalidTokenError:
-        raise HTTPException(401, "invalid or expired token") from None
     revoke_token(db=db, jti=claims.jti, expires_at=claims.exp)
     return Response(status_code=204)
