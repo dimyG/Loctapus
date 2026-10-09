@@ -3,7 +3,7 @@
 Date: 2026-10-06
 Updated: 2026-10-09
 Status: Approved design. S0+S1 are implemented on `master`. Roadmap re-cut on 2026-10-09: the web UI is pulled forward to S2 and, from S2 on, every slice pairs its backend work with the matching frontend part (decision 5 below).
-Source of truth for product/architecture intent: `../../../initial_rag_mvp_agent_project_context.md` (the "MD"). This document records the decomposition decisions made during brainstorming and the detailed design for the first implementation slices. Where the two disagree, this document wins for the topics it covers.
+Source of truth for product/architecture intent: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD"). This document records the decomposition decisions made during brainstorming and the detailed design for the first implementation slices. Where the two disagree, this document wins for the topics it covers.
 
 ## 1. Context and decisions from brainstorming
 
