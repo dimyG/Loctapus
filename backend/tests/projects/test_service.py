@@ -107,9 +107,7 @@ def test_effective_role_is_strongest_across_teams(*, db_session: Session) -> Non
     db_session.flush()
 
     assert (
-        project_service.get_effective_role_on_project(
-            db=db_session, user=owner, project_id=project.id
-        )
+        project_service.get_effective_role_on_project(db=db_session, user=owner, project_id=project.id)
         == "admin"
     )
     # The strongest role subsumes weaker ones, so the admin passes a viewer-level check.
@@ -132,14 +130,10 @@ def test_effective_role_is_none_without_access(*, db_session: Session) -> None:
 
     owner, owner_team_id = _user(db=db_session, email="er-owner@example.com")
     stranger, _stranger_team_id = _user(db=db_session, email="er-stranger@example.com")
-    project = project_service.create_project(
-        db=db_session, user=owner, team_id=owner_team_id, name="er"
-    )
+    project = project_service.create_project(db=db_session, user=owner, team_id=owner_team_id, name="er")
     assert project is not None
     assert (
-        project_service.get_effective_role_on_project(
-            db=db_session, user=stranger, project_id=project.id
-        )
+        project_service.get_effective_role_on_project(db=db_session, user=stranger, project_id=project.id)
         is None
     )
 
