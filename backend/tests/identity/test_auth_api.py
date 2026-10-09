@@ -68,6 +68,17 @@ def test_logout_leaves_other_sessions_valid(*, client: TestClient) -> None:
     assert client.get("/users/me", headers={"Authorization": f"Bearer {t2}"}).status_code == 200
 
 
+def test_revoked_token_rejected_on_projects(*, client: TestClient) -> None:
+    """Check that a revoked token is rejected on protected endpoints beyond /users/me."""
+
+    token = client.post(
+        "/auth/register", json={"email": "rev2@example.com", "password": "password123"}
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    assert client.post("/auth/logout", headers=headers).status_code == 204
+    assert client.get("/projects", headers=headers).status_code == 401
+
+
 def test_logout_requires_auth(*, client: TestClient) -> None:
     """Check that logout rejects requests without a token."""
 
