@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -63,11 +64,12 @@ def authenticate_user(*, db: Session, email: str, password: str) -> User | None:
 
 
 def revoke_token(*, db: Session, jti: str, expires_at: datetime) -> None:
-    """Record a token as revoked; repeated calls with the same jti are a no-op."""
+    """Record a token as revoked; repeated or concurrent calls with the same jti are a no-op."""
 
-    if not is_token_revoked(db=db, jti=jti):
-        db.add(RevokedToken(jti=jti, expires_at=expires_at))
-        db.commit()
+    # The conflict target is the jti primary key, so a concurrent duplicate insert is a no-op.
+    statement = insert(RevokedToken).values(jti=jti, expires_at=expires_at).on_conflict_do_nothing()
+    db.execute(statement)
+    db.commit()
 
 
 def is_token_revoked(*, db: Session, jti: str) -> bool:

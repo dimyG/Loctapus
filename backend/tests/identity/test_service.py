@@ -1,10 +1,12 @@
 """Tests for the identity service layer."""
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy.orm import Session
 
 from app.identity import service
-from app.identity.models import User
+from app.identity.models import RevokedToken, User
 
 
 def test_register_creates_default_graph(*, db_session: Session) -> None:
@@ -49,3 +51,23 @@ def test_authenticate_user(*, db_session: Session) -> None:
     assert service.authenticate_user(db=db_session, email="auth@example.com", password="password123")
     assert service.authenticate_user(db=db_session, email="auth@example.com", password="wrong") is None
     assert service.authenticate_user(db=db_session, email="ghost@example.com", password="password123") is None
+
+
+def test_revoke_token_tolerates_concurrent_duplicate(
+    *, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Check that a second, concurrent revoke of the same jti cannot raise IntegrityError."""
+
+    expires_at = datetime.now(UTC)
+    service.revoke_token(db=db_session, jti="race-jti", expires_at=expires_at)
+
+    # Simulate the losing interleaving of two concurrent logouts: both pre-checks miss
+    # the row, so both inserts run. With check-then-insert the second one raises.
+    def blind(*, db: Session, jti: str) -> bool:
+        """Report every token as unrevoked, as a concurrent pre-check would."""
+
+        return False
+
+    monkeypatch.setattr(service, "is_token_revoked", blind)
+    service.revoke_token(db=db_session, jti="race-jti", expires_at=expires_at)
+    assert db_session.get(RevokedToken, "race-jti") is not None
