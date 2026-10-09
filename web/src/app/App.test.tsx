@@ -1,10 +1,38 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { saveToken } from "../lib/tokenStorage";
 import App from "./App";
 
-describe("App shell", () => {
-  it("renders the app shell with the RAG wordmark", () => {
-    render(<App />);
-    expect(screen.getByRole("heading", { name: "RAG" })).toBeInTheDocument();
+function renderApp(route: string) {
+  window.history.pushState({}, "", route);
+  render(<App />);
+}
+
+describe("App", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.pushState({}, "", "/");
+  });
+
+  it("renders the landing on the public route for a token holder", async () => {
+    saveToken("t-boot");
+    renderApp("/");
+    expect(
+      await screen.findByRole("heading", { name: /searchable by meaning/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the guarded projects page for an authenticated visitor", async () => {
+    saveToken("t-boot");
+    renderApp("/projects");
+    // The page is a scaffold until Task 9 replaces its content.
+    expect(await screen.findByText("Projects")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/projects");
+  });
+
+  it("redirects unauthenticated visitors from /projects to /login", async () => {
+    renderApp("/projects");
+    expect(await screen.findByText("Sign in")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/login");
   });
 });

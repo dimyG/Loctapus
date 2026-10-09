@@ -169,4 +169,20 @@ const authSlice = createSlice({
 
 export const { tokenReceived } = authSlice.actions;
 
+// Selectors take a structural slice key so they work against any state shape
+// that contains auth (the full RootState, or a test-local store).
+type WithAuth = { auth: AuthState };
+
+/** The whole auth slice. */
+export const selectAuth = (state: WithAuth): AuthState => state.auth;
+
+/** The session lifecycle: idle, booting (token present, user pending), busy. */
+export const selectAuthStatus = (state: WithAuth): AuthStatus => state.auth.status;
+
+/** The hydrated session user, or null when signed out / still booting. */
+export const selectUser = (state: WithAuth): AuthUser | null => state.auth.user;
+
+/** The session token from the store (never read localStorage directly). */
+export const selectToken = (state: WithAuth): string | null => state.auth.token;
+
 export default authSlice.reducer;
