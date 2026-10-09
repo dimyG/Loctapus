@@ -29,7 +29,7 @@ services:
     # return; elestio/minio is a third-party repackaging kept for local
     # development only, pinned to the digest of its only published tag.
     # TODO: replace MinIO with a maintained S3-compatible server (SeaweedFS or
-    # Garage) before S2 storage work builds on it.
+    # Garage) before S3 (ingestion) storage work builds on it.
     image: elestio/minio@sha256:25348a257f1ece1b192f25f6cd9854618fa86422ac87b494b5d4e629c556d4bd
     command: server /data --console-address ":9001"
     environment:
