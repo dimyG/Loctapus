@@ -115,7 +115,7 @@ A page component never constructs a URL, parses a response body, or reads localS
 ### 6.2 Bootstrap, login, register, logout
 
 - **Bootstrap**: on app mount with a stored token, `bootstrapAuth` dispatches `GET /users/me` with that token. 200 -> hydrated user, routes render. 401 -> clear token, land on `/login`. The stored token is validated, never trusted.
-- **Login / register**: thunks store the returned token and hydrate the user (register returns a token directly, so no second call is needed), then redirect to `/projects`. Failure paths: 401 -> "Invalid email or password"; 409 -> "That email is already registered" + sign-in link; network failure -> generic retryable banner.
+- **Login / register**: thunks store the token returned by `POST /auth/login` / `POST /auth/register`, then hydrate the user via `GET /users/me` (auth responses carry no user id; register needs no login call), then redirect to `/projects`. Failure paths: 401 -> "Invalid email or password"; 409 -> "That email is already registered" + sign-in link; network failure -> generic retryable banner.
 - **Logout**: `POST /auth/logout` (revokes the jti server-side), then clear token + user, reset the RTK Query cache (`api.util.resetApiState()`), redirect to `/`. If the revocation call fails, the local session is still cleared - revocation is best-effort since the token expires in 24h anyway.
 - **Routing**: `RequireAuth` guard reads token + user; unauthenticated hits to `/projects` redirect to `/login`. Unprotected: `/`, `/login`, `/register`. Unknown paths fall back to `/`. A `booting` status renders a full-page splash instead of redirect-flashing.
 
