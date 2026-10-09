@@ -29,9 +29,11 @@
 
 ## Git workflow
 
-- Work is committed directly on master (project owner's direction); the review gate is a fresh-context review at end of run.
-- One concern per commit: never bundle docs, config, or other unrelated files into a fix commit.
-- When a review flags untracked files, give each its own dedicated commit (for example `docs(plan): ...`) instead of attaching it to a fix.
+- All tasks should be done in a worktree so that parallel tasks can be worked on without interference.
+- All tasks should undergo a fresh-context review at the end except if they have been completed through the superpowers skillset which already has a review built in.
+- Any backlog items remaining after the completion of a task, should be added to `docs/superpowers/backlog.md` with a timestamped header, and a link to the relevant commit(s).
+- One concern per commit.
+- When a review flags untracked files, give each its own dedicated commit instead of attaching it to a fix.
 
 ## Verification
 
