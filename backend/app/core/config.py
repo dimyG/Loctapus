@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_ttl_hours: int = 24
     environment: Literal["dev", "production"] = "dev"
+    cors_origins: list[str] = ["http://localhost:5173"]
 
     @model_validator(mode="after")
     def _reject_default_secret_in_production(self) -> Self:

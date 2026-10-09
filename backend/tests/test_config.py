@@ -40,3 +40,16 @@ def test_production_accepts_explicit_jwt_secret() -> None:
 
     s = SettingsForTests(environment="production", jwt_secret="a-real-production-secret")
     assert s.environment == "production"
+
+
+def test_cors_origins_default() -> None:
+    """CORS defaults to the Vite dev origin."""
+
+    assert SettingsForTests().cors_origins == ["http://localhost:5173"]
+
+
+def test_cors_origins_env_json(*, monkeypatch: pytest.MonkeyPatch) -> None:
+    """RAG_CORS_ORIGINS parses as a JSON list of origins."""
+
+    monkeypatch.setenv("RAG_CORS_ORIGINS", '["https://app.example.com"]')
+    assert SettingsForTests().cors_origins == ["https://app.example.com"]
