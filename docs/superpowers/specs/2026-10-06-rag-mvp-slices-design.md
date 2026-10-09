@@ -20,7 +20,7 @@ Decisions confirmed with the user:
 2. **No provider API keys yet** (Unstructured, Voyage, Groq). The first end-to-end slice ships with stub providers behind the real provider interfaces so the whole pipeline runs offline. Stub providers are permanent, tested code — not throwaway.
 3. **Monorepo**: backend and frontend live in this repo (`backend/` and `web/` top-level directories). They may be split into separate repos later — the clean top-level directory split keeps that extraction easy.
 4. **Decomposition approach**: vertical slices (per MD §32), with the identity/projects work split out of the first retrieval slice into its own slice.
-5. **Web UI pulled forward; every slice pairs backend + frontend** (confirmed 2026-10-09): S0+S1 are implemented, so the next slice stands up the web UI instead of ingestion. The former standalone web-UI slice (old S7) is dissolved: its features are merged into the slices that build the backend they display. S2 wires `web/` (Devias Kit / React / Redux / Next.js, per MD §24) to the existing identity/projects API - register/login/logout and projects list + create, nothing more. From S2 on, each slice ships its backend work together with its matching frontend part, so every slice is testable end-to-end from the browser.
+5. **Web UI pulled forward; every slice pairs backend + frontend** (confirmed 2026-10-09): S0+S1 are implemented, so the next slice stands up the web UI instead of ingestion. The former standalone web-UI slice (old S7) is dissolved: its features are merged into the slices that build the backend they display. S2 wires `web/` (Devias Kit / React / Redux on Vite - a pure client-side SPA; MD §24's Next.js was superseded on 2026-10-09) to the existing identity/projects API - register/login/logout and projects list + create, nothing more. From S2 on, each slice ships its backend work together with its matching frontend part, so every slice is testable end-to-end from the browser.
 
 Guiding principles carried over from the MD (§29–30): replaceable providers behind explicit interfaces; free tiers first; monolith now with a clean internal `retrieval` module boundary; JWT auth; long-term user/workspace/team model with single-user flow; idempotent ingestion; transactional outbox; raw sources stored in S3/MinIO before parsing; structure-aware recursive chunking (replaceable); batched embeddings; RRF over lexical+vector; configurable rerank with `max_chunks_per_document`; `/retrieve` useful without `/answer`.
 
@@ -30,7 +30,7 @@ Guiding principles carried over from the MD (§29–30): replaceable providers b
 |---|---|---|
 | **S0 - Scaffolding** ✅ done | git init; backend layout; pyproject + deps; settings/config; docker-compose (Postgres+pgvector, RabbitMQ, MinIO); Alembic; `/health`; pytest harness | `docker compose up` → API healthy, tests run |
 | **S1 - Identity & projects** ✅ done | users/workspaces/teams tables (long-term model, single-user flow); JWT register/login; projects CRUD | Register → login → create/list/delete projects via API, all tested |
-| **S2 - Web UI foundations** | Devias Kit / React / Redux / Next.js in `web/`: landing; register/login/logout; projects list + create (team picked from the user's workspaces/teams), wired to the existing S1 API | Register → login → logout → list/create projects from a browser, all tested |
+| **S2 - Web UI foundations** | Devias Kit / React / Redux on Vite (SPA) in `web/`: landing; register/login/logout; projects list + create (team picked from the user's workspaces/teams), wired to the existing S1 API | Register → login → logout → list/create projects from a browser, all tested |
 | **S3 - Ingestion → retrieval (stub providers) + upload & query UI** | PDF/DOCX upload → MinIO; Celery ingestion (stub parser → normalize → chunk); chunks + outbox event in one transaction; outbox dispatcher → `embed` queue → stub embeddings; HNSW + GIN indexes; `POST /projects/{id}/retrieve` (vector + FTS + RRF, no rerank); basic `query_logs`; frontend: project page, upload PDF/DOCX, processing status, ask → ranked grounded chunks | Upload a real PDF from the browser, get ranked grounded chunks back - fully offline |
 | **S4 - Real providers + rerank + API keys + keys/query UI** | Unstructured hosted parser; Voyage `voyage-4-lite` embeddings (dimension config + migration); Voyage `rerank-3-lite` + local diversity filter (`max_chunks_per_document`); project-scoped API keys authorizing `/retrieve`; frontend: project API-key management; rerank + `max_chunks_per_document` controls in the query UI | Same flow works with real keys; `rerank=true/false` both work from the UI |
 | **S5 - `/answer` + chat UI** | LLM provider interface + Groq `openai/gpt-oss-20b`; grounded-context prompt; `/answer` calls retrieval internally; frontend: answer in a simple AI-chat style with cited chunks | Question → answer grounded in cited chunks, from the browser |
@@ -60,7 +60,7 @@ D:\Projects\RAG\
     alembic/
     tests/
     pyproject.toml
-  web/              # (S2) Next.js frontend
+  web/              # (S2) React + Vite SPA frontend
   deploy/docker-compose.yml
   docs/
   .venv/            # existing Python venv, stays at repo root
@@ -121,7 +121,7 @@ DELETE /projects/{id}  -> delete project (admin role required)
 
 ### S2 - Web UI foundations
 
-Devias Kit / React / Redux / Next.js app in `web/` (per MD §24), wired to the existing S1 endpoints: landing; register/login/logout; projects list + create (team picked from the user's workspaces/teams). Detailed design (app structure, auth-state handling, frontend test approach) happens at the S2 design round.
+Devias Kit / React / Redux SPA on Vite in `web/` (MD §24's Next.js superseded on 2026-10-09; no SSR and no Node server - FastAPI stays the sole server, serving the JSON API), wired to the existing S1 endpoints: landing; register/login/logout; projects list + create (team picked from the user's workspaces/teams). Detailed design (app structure, auth-state handling, CORS with the FastAPI backend, frontend test approach) happens at the S2 design round.
 
 ### S3 - Ingestion → retrieval (stub providers)
 
@@ -151,4 +151,4 @@ Devias Kit / React / Redux / Next.js app in `web/` (per MD §24), wired to the e
 
 ## 7. Next step
 
-S0+S1 are complete on `master`. Next: brainstorming/design round + implementation plan for **S2 - Web UI foundations** (Next.js app in `web/` wired to the existing identity/projects API), then execution via subagent-driven development with TDD. Each later slice follows the same pattern, with backend + matching frontend designed and tested together.
+S0+S1 are complete on `master`. Next: brainstorming/design round + implementation plan for **S2 - Web UI foundations** (React + Vite SPA in `web/` wired to the existing identity/projects API), then execution via subagent-driven development with TDD. Each later slice follows the same pattern, with backend + matching frontend designed and tested together.
