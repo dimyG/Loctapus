@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router";
 import { initialRootState } from "../../app/store";
 import { loadToken, saveToken } from "../../lib/tokenStorage";
@@ -61,11 +61,14 @@ describe("UserMenu", () => {
     const user = userEvent.setup();
     await openMenu(user);
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
+    // The landing renders immediately; the async thunk clears the session.
     expect(
       await screen.findByRole("heading", { name: /searchable by meaning/i }),
     ).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(loadToken()).toBeNull();
+    });
     expect(logoutCalls).toHaveLength(1);
-    expect(loadToken()).toBeNull();
   });
 
   it("still signs out when the revocation call fails", async () => {
@@ -79,6 +82,8 @@ describe("UserMenu", () => {
     expect(
       await screen.findByRole("heading", { name: /searchable by meaning/i }),
     ).toBeInTheDocument();
-    expect(loadToken()).toBeNull();
+    await vi.waitFor(() => {
+      expect(loadToken()).toBeNull();
+    });
   });
 });
