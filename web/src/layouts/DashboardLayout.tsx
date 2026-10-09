@@ -1,4 +1,5 @@
 import AppBar from "@mui/material/AppBar";
+import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
 import Link from "@mui/material/Link";
 import Toolbar from "@mui/material/Toolbar";
@@ -22,6 +23,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           >
             <Typography variant="h6">RAG</Typography>
           </Link>
+          <Box sx={{ flexGrow: 1 }} />
           <UserMenu />
         </Toolbar>
       </AppBar>

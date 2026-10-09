@@ -35,6 +35,10 @@ test.describe("route enforcement", () => {
     await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page).toHaveURL("http://localhost:5173/");
 
+    // After sign-out the protected route redirects to login (spec 8.2).
+    await page.goto("/projects");
+    await expect(page).toHaveURL(/\/login$/);
+
     // Log back in with the same credentials; the projects table renders.
     await page.goto("/login");
     await page.getByLabel(/Email/).fill(email);

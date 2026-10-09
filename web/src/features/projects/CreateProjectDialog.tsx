@@ -23,7 +23,7 @@ export default function CreateProjectDialog({
   open: boolean;
   onClose: () => void;
 }) {
-  const { data: workspaces } = useGetWorkspacesQuery();
+  const { data: workspaces, error: workspacesError } = useGetWorkspacesQuery();
   // Explicit picks override the derived defaults (first option once loaded).
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(undefined);
   const effectiveWorkspaceId = selectedWorkspaceId ?? workspaces?.[0]?.id;
@@ -37,6 +37,10 @@ export default function CreateProjectDialog({
   const [pending, setPending] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
 
+  // Query errors outrank submit errors: without workspaces or teams there is
+  // nothing the user can fix by resubmitting (spec 4.5 failure mode 5).
+  const queryError = workspacesError ?? teamsError;
+
   function handleWorkspaceChange(id: string) {
     setSelectedWorkspaceId(id);
     setTeamOverride(undefined);
@@ -44,6 +48,10 @@ export default function CreateProjectDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (name.trim() === "") {
+      setDialogError("Give the project a name.");
+      return;
+    }
     if (effectiveTeamId === undefined) {
       setDialogError("Pick a team for the project.");
       return;
@@ -66,9 +74,9 @@ export default function CreateProjectDialog({
       <form onSubmit={handleSubmit} noValidate>
         <DialogContent>
           <Stack spacing={2}>
-            {teamsError !== undefined ? (
+            {queryError !== undefined ? (
               <Alert role="alert" severity="error">
-                {getErrorMessage(teamsError)}
+                {getErrorMessage(queryError)}
               </Alert>
             ) : (
               dialogError !== null && (

@@ -71,6 +71,47 @@ describe("auth session", () => {
     expect(state.api.queries).toEqual({});
   });
 
+  it("logout clears the local session before the revocation completes", async () => {
+    let resolveRequest: (() => void) | undefined;
+    server.use(
+      http.post("*/auth/logout", async () => {
+        await new Promise<void>((resolve) => {
+          resolveRequest = resolve;
+        });
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    saveToken("t-login");
+    const testStore = makeStore({
+      ...initialRootState(),
+      ...authenticated,
+      api: { ...initialRootState().api, queries: { seeded: undefined as never } },
+    });
+    const action = testStore.dispatch(logoutUser());
+    // The session must already be gone while the revocation hangs.
+    expect(loadToken()).toBeNull();
+    const state = testStore.getState();
+    expect(state.auth.token).toBeNull();
+    expect(state.auth.user).toBeNull();
+    expect(state.api.queries).toEqual({});
+    await vi.waitFor(() => {
+      expect(resolveRequest).toBeDefined();
+    });
+    resolveRequest?.();
+    await action;
+  });
+
+  it("keeps the stored token when bootstrap fails for a non-401 reason", async () => {
+    server.use(http.get("*/users/me", () => HttpResponse.error()));
+    saveToken("t-keep");
+    const testStore = makeStore();
+    await expect(testStore.dispatch(bootstrapAuth()).unwrap()).rejects.toBeDefined();
+    const state = testStore.getState();
+    expect(state.auth.token).toBe("t-keep");
+    expect(loadToken()).toBe("t-keep");
+    expect(state.auth.status).toBe("idle");
+  });
+
   it("bootstrap with no stored token fulfills null", async () => {
     const testStore = makeStore();
     const result = await testStore.dispatch(bootstrapAuth()).unwrap();

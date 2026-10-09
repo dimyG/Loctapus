@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialRootState } from "../../app/store";
@@ -69,10 +70,20 @@ describe("ProjectsPage", () => {
     expect(await screen.findByText("No projects yet")).toBeInTheDocument();
   });
 
-  it("shows a retryable snackbar when the API is unreachable", async () => {
-    server.use(http.get("*/projects", () => HttpResponse.error()));
+  it("shows a retryable error card when the API is unreachable", async () => {
+    let failing = true;
+    server.use(
+      http.get("*/projects", () =>
+        failing ? HttpResponse.error() : HttpResponse.json(projectRows),
+      ),
+    );
     renderProjects();
     expect(await screen.findByText("Could not load projects.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    const retry = screen.getByRole("button", { name: "Try again" });
+    expect(retry).toBeInTheDocument();
+    failing = false;
+    await userEvent.setup().click(retry);
+    expect(await screen.findByText("Research notes")).toBeInTheDocument();
+    expect(screen.queryByText("Could not load projects.")).not.toBeInTheDocument();
   });
 });

@@ -41,6 +41,10 @@ export default function LoginPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (email === "" || password === "") {
+      setError("All fields are required.");
+      return;
+    }
     setPending(true);
     setError(null);
     try {

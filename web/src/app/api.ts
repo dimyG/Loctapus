@@ -1,6 +1,12 @@
 import type { ThunkDispatch, UnknownAction } from "@reduxjs/toolkit";
-import type { BaseQueryApi } from "@reduxjs/toolkit/query";
+import type {
+  BaseQueryApi,
+  BaseQueryFn,
+  FetchBaseQueryError,
+  FetchArgs,
+} from "@reduxjs/toolkit/query";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { sessionExpired } from "../features/auth/sessionActions";
 
 /** Where the FastAPI backend lives; E2E points it at the port-8001 instance. */
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -54,10 +60,31 @@ export function getErrorMessage(error: unknown): string {
   return GENERIC_COPY;
 }
 
+/**
+ * Wraps the raw base query so a 401 on a request that carried a session token
+ * clears the session (expired or revoked mid-use): the guard then sends the
+ * visitor to login instead of leaving them with forever-failing pages.
+ */
+const baseQueryWithSessionExpiry: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args, api, extraOptions) => {
+  const result = await baseQuery(args, api, extraOptions);
+  if (
+    "error" in result &&
+    (result.error as { status?: number | string }).status === 401 &&
+    (api.getState() as WithAuthSlice).auth?.token != null
+  ) {
+    api.dispatch(sessionExpired());
+  }
+  return result;
+};
+
 /** The one RTK Query instance every feature api extends. */
 export const api = createApi({
   reducerPath: "api",
-  baseQuery,
+  baseQuery: baseQueryWithSessionExpiry,
   tagTypes: ["Project", "Workspace", "Team"],
   endpoints: () => ({}),
 });

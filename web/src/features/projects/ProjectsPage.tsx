@@ -20,9 +20,10 @@ import { useGetProjectsQuery } from "./projectsApi";
 export default function ProjectsPage() {
   const { data: projects, isLoading, error, refetch } = useGetProjectsQuery();
   // The snackbar stays hidden once dismissed for the current error object;
-  // a fresh failure (or a retry) shows it again.
+  // a fresh failure (or a retry) shows it again. It only covers the
+  // stale-data case: with nothing cached, the retryable card renders instead.
   const [dismissedError, setDismissedError] = useState<unknown>(null);
-  const showError = error !== undefined && error !== dismissedError;
+  const showError = error !== undefined && error !== dismissedError && (projects?.length ?? 0) > 0;
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
@@ -53,6 +54,15 @@ export default function ProjectsPage() {
             ))}
           </TableBody>
         </Table>
+      ) : error !== undefined && projects === undefined ? (
+        // Nothing cached and the fetch failed: a retryable card, never a
+        // dead end (the snackbar below would auto-hide behind this case).
+        <Stack spacing={2} sx={{ py: 8, alignItems: "center" }}>
+          <Typography color="text.secondary">Could not load projects.</Typography>
+          <Button variant="outlined" onClick={() => refetch()}>
+            Try again
+          </Button>
+        </Stack>
       ) : projects !== undefined && projects.length === 0 ? (
         <EmptyProjects onCreate={() => setDialogOpen(true)} />
       ) : (

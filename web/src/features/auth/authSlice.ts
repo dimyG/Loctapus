@@ -4,6 +4,7 @@ import { createAsyncThunk, createSlice, isAnyOf } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import { api, baseQuery, thunkBaseQueryApi } from "../../app/api";
 import { clearToken, loadToken, saveToken } from "../../lib/tokenStorage";
+import { sessionCleared, sessionExpired } from "./sessionActions";
 
 /** Rejections carry the base query error shape so pages can map them to copy. */
 type RejectsApiError = { rejectValue: FetchBaseQueryError };
@@ -54,9 +55,11 @@ export const bootstrapAuth = createAsyncThunk<AuthUser | null, void, RejectsApiE
     try {
       return await fetchCurrentUser(context);
     } catch (error) {
-      // A stored token that no longer authenticates is indistinguishable from
-      // no session: drop it and let the guard send the visitor to /login.
-      clearToken();
+      // Only a 401 proves the stored token bad; a network or server error
+      // keeps it so a transient failure does not sign the user out (spec 6.2).
+      if ((error as { status?: number | string }).status === 401) {
+        clearToken();
+      }
       return context.rejectWithValue(error as FetchBaseQueryError);
     }
   },
@@ -114,19 +117,30 @@ export const registerUser = createAsyncThunk<AuthUser, Credentials, RejectsApiEr
 
 /** Revokes the token server-side (best-effort) and clears the local session. */
 export const logoutUser = createAsyncThunk<void, void>("auth/logout", async (_arg, context) => {
-  // Revocation is best-effort (spec 6.2): the token expires server-side
-  // within 24h anyway, so a failed POST must not block the local sign-out.
+  // The local session drops first, synchronously: revocation is best-effort
+  // (spec 6.2) and must never block on the network.
+  const token = (context.getState() as WithAuth).auth?.token;
+  clearToken();
+  context.dispatch(sessionCleared());
+  context.dispatch(api.util.resetApiState());
+  if (token == null) {
+    return;
+  }
   try {
     await baseQuery(
-      { url: "/auth/logout", method: "POST" },
+      {
+        url: "/auth/logout",
+        method: "POST",
+        // The header is explicit: the store token is already cleared, so
+        // prepareHeaders cannot supply it.
+        headers: { authorization: `Bearer ${token}` },
+      },
       thunkBaseQueryApi(context.dispatch, context.getState),
       {},
     );
   } catch {
-    // Ignored on purpose: the local session is cleared below regardless.
+    // Ignored on purpose: the token expires server-side within 24h anyway.
   }
-  clearToken();
-  context.dispatch(api.util.resetApiState());
 });
 
 const authSlice = createSlice({
@@ -140,9 +154,30 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(sessionCleared, (state) => {
+        state.token = null;
+        state.user = null;
+        // Status stays as-is ("busy" from the pending action): the guard then
+        // shows the splash rather than bouncing to /login while the
+        // sign-out navigation lands.
+      })
+      .addCase(sessionExpired, (state) => {
+        state.token = null;
+        state.user = null;
+        state.status = "idle";
+      })
       .addCase(bootstrapAuth.fulfilled, (state, action) => {
         state.user = action.payload;
         state.status = "idle";
+      })
+      .addCase(bootstrapAuth.rejected, (state, action) => {
+        state.status = "idle";
+        // A 401 proves the token bad; anything else keeps it for the next
+        // attempt (the guard still renders the app; pages retry).
+        if ((action.payload as { status?: number | string } | undefined)?.status === 401) {
+          state.token = null;
+          state.user = null;
+        }
       })
       .addMatcher(isAnyOf(loginUser.pending, registerUser.pending, logoutUser.pending), (state) => {
         state.status = "busy";
@@ -151,14 +186,11 @@ const authSlice = createSlice({
         state.user = action.payload;
         state.status = "idle";
       })
-      .addMatcher(
-        isAnyOf(loginUser.rejected, registerUser.rejected, bootstrapAuth.rejected),
-        (state) => {
-          state.token = null;
-          state.user = null;
-          state.status = "idle";
-        },
-      )
+      .addMatcher(isAnyOf(loginUser.rejected, registerUser.rejected), (state) => {
+        state.token = null;
+        state.user = null;
+        state.status = "idle";
+      })
       .addMatcher(isAnyOf(logoutUser.fulfilled, logoutUser.rejected), (state) => {
         state.token = null;
         state.user = null;

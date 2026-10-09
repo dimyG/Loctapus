@@ -4,6 +4,7 @@ import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router";
 import { initialRootState } from "../../app/store";
+import RequireAuth from "../../app/RequireAuth";
 import { loadToken, saveToken } from "../../lib/tokenStorage";
 import { renderWithProviders } from "../../test/test-utils";
 import { server } from "../../test/server";
@@ -20,15 +21,23 @@ const authed = () => ({
   },
 });
 
+// The menu renders BEHIND the guard, the way the app mounts it: sign-out must
+// land on the public landing, never on the guard's login bounce.
 function renderMenu() {
   return renderWithProviders(
-    <>
-      <UserMenu />
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-      </Routes>
-    </>,
-    { route: "/", preloadedState: authed() },
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<div>login-page</div>} />
+      <Route
+        path="/projects"
+        element={
+          <RequireAuth>
+            <UserMenu />
+          </RequireAuth>
+        }
+      />
+    </Routes>,
+    { route: "/projects", preloadedState: authed() },
   );
 }
 
@@ -65,6 +74,8 @@ describe("UserMenu", () => {
     expect(
       await screen.findByRole("heading", { name: /searchable by meaning/i }),
     ).toBeInTheDocument();
+    // And the guard never bounced the sign-out to the login page.
+    expect(screen.queryByText("login-page")).not.toBeInTheDocument();
     await vi.waitFor(() => {
       expect(loadToken()).toBeNull();
     });

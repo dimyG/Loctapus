@@ -80,6 +80,18 @@ describe("RegisterPage", () => {
     expect(requests).toHaveLength(0);
   });
 
+  it("shows a length hint when the password is under 8 characters", async () => {
+    const requests = trackRegistrations();
+    renderRegister();
+    const user = userEvent.setup();
+    await fillForm(user, { password: "short", confirm: "short" });
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Password must be at least 8 characters.",
+    );
+    expect(requests).toHaveLength(0);
+  });
+
   it("stores the token and lands on /projects on success", async () => {
     renderRegister();
     const user = userEvent.setup();

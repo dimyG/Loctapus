@@ -46,11 +46,15 @@ test.describe("journey", () => {
 
     const oldToken = await page.evaluate(() => localStorage.getItem("rag.accessToken"));
 
-    // Sign out from the account menu; the landing page is public.
+    // Sign out from the account menu; the landing page is public. The logout
+    // POST runs after the local session drops, so wait for it explicitly
+    // before asserting the token was revoked server-side.
+    const logoutResponse = page.waitForResponse((r) => r.url().includes("/auth/logout"));
     await page.getByRole("button", { name: /account menu/i }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page).toHaveURL("http://localhost:5173/");
     await expect(page.getByRole("heading", { name: /searchable by meaning/i })).toBeVisible();
+    await logoutResponse;
 
     // The old token was revoked server-side: replaying it must 401.
     const response = await request.get("http://localhost:8001/projects", {

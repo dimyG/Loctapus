@@ -150,6 +150,26 @@ describe("CreateProjectDialog", () => {
     expect(alert).not.toHaveTextContent("field required");
   });
 
+  it("asks for a name when it is blank and does not post", async () => {
+    const posts: unknown[] = [];
+    server.use(
+      http.post("*/projects", ({ request }) => {
+        posts.push(request);
+        return HttpResponse.json(
+          { id: "p-new", name: "New", is_public: false, created_at: "2026-10-09T12:00:00Z" },
+          { status: 201 },
+        );
+      }),
+    );
+    renderDialog();
+    const user = userEvent.setup();
+    await waitForPreselection();
+    await user.type(screen.getByLabelText(/Name/), "   ");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Give the project a name.");
+    expect(posts).toHaveLength(0);
+  });
+
   it("cancel closes without posting", async () => {
     const posts: unknown[] = [];
     server.use(
@@ -181,5 +201,17 @@ describe("CreateProjectDialog", () => {
     expect(alert).toHaveTextContent("Workspace not found");
     // The team select stays disabled: there is nothing valid to pick.
     expect(screen.getByLabelText(/Team/)).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("shows an inline error when the workspaces fetch fails", async () => {
+    server.use(
+      http.get("*/workspaces", () =>
+        HttpResponse.json({ detail: "Workspaces unavailable" }, { status: 500 }),
+      ),
+    );
+    renderDialog();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Workspaces unavailable");
+    expect(screen.getByLabelText(/Workspace/)).toHaveAttribute("aria-disabled", "true");
   });
 });

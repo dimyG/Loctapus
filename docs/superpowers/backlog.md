@@ -21,9 +21,9 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 - Review how to store dates: aware in utc, or as timestamps in msec
 - S2's three-width visual check ran as an automated audit (no horizontal overflow at
   390/768/1280, body-text contrast at or above 4.5, no text under 14px) plus saved
-  screenshots at `web/../.superpowers/sdd/2026-10-09-s2-web-ui-foundations/visual/`
-  (agent worktree, git-ignored) - a human eyeball pass of those screenshots is still
-  pending; note any polish here (from the S2 branch, 2026-10-09).
+  screenshots in the S2 worktree (`.superpowers/sdd/2026-10-09-s2-web-ui-foundations/visual/`,
+  git-ignored) - a human eyeball pass of those pages is still pending; note any
+  polish here. (S2 e2e slice, commit `14b3f6d`.)
 
 
 ## 2026-10-09 - deferred minors in `fix-deferred-minors-2`, kept open by its final review

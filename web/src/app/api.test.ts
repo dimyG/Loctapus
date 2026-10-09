@@ -1,4 +1,8 @@
+import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
+import { projectsApi } from "../features/projects/projectsApi";
+import { server } from "../test/server";
+import { initialRootState, makeStore } from "./store";
 import { getErrorMessage } from "./api";
 
 describe("getErrorMessage", () => {
@@ -24,5 +28,26 @@ describe("getErrorMessage", () => {
 
   it("falls back to a generic message for unknown shapes", () => {
     expect(getErrorMessage("nope")).toBe("Something went wrong. Please try again.");
+  });
+});
+
+describe("session expiry", () => {
+  it("clears the session when an authenticated request comes back 401", async () => {
+    server.use(
+      http.get("*/projects", () =>
+        HttpResponse.json({ detail: "invalid or expired token" }, { status: 401 }),
+      ),
+    );
+    const testStore = makeStore({
+      ...initialRootState(),
+      auth: { token: "t-gone", user: { id: "u-1", email: "user@example.test" }, status: "idle" },
+    });
+    const action = testStore.dispatch(projectsApi.endpoints.getProjects.initiate());
+    await action.then(
+      () => undefined,
+      () => undefined,
+    );
+    expect(testStore.getState().auth.token).toBeNull();
+    expect(testStore.getState().auth.user).toBeNull();
   });
 });

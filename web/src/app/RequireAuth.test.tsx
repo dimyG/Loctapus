@@ -45,4 +45,16 @@ describe("RequireAuth", () => {
     expect(screen.getByText("Preparing your workspace")).toBeInTheDocument();
     expect(screen.queryByText("projects-page")).not.toBeInTheDocument();
   });
+
+  it("renders the splash while an auth transition is in flight", () => {
+    // Sign-out clears the session synchronously while the guard is mounted;
+    // busy must render the splash so the sign-out navigation lands on "/",
+    // never on the guard's /login bounce.
+    renderGuarded({
+      ...initialRootState(),
+      auth: { token: "t-1", user: null, status: "busy" },
+    });
+    expect(screen.getByText("Preparing your workspace")).toBeInTheDocument();
+    expect(screen.queryByText("projects-page")).not.toBeInTheDocument();
+  });
 });

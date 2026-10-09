@@ -36,6 +36,20 @@ describe("LoginPage", () => {
     window.localStorage.clear();
   });
 
+  it("shows a required-fields message and does not post when empty", async () => {
+    const posts: unknown[] = [];
+    server.use(
+      http.post("*/auth/login", ({ request }) => {
+        posts.push(request);
+        return HttpResponse.json({ access_token: "t-login", token_type: "bearer" });
+      }),
+    );
+    renderLogin();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("All fields are required.");
+    expect(posts).toHaveLength(0);
+  });
+
   it("renders labeled email and password fields with a sign-in button", () => {
     renderLogin();
     expect(screen.getByLabelText(/Email/)).toBeInTheDocument();

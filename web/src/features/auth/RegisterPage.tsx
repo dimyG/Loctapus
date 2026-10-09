@@ -50,6 +50,13 @@ export default function RegisterPage() {
       setShowSignIn(false);
       return;
     }
+    // The API enforces 8 characters too (422); catching it here keeps the
+    // hint visible instead of the generic validation copy.
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      setShowSignIn(false);
+      return;
+    }
     if (password !== confirm) {
       setError(MISMATCH_COPY);
       setShowSignIn(false);
