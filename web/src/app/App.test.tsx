@@ -32,7 +32,8 @@ describe("App", () => {
 
   it("redirects unauthenticated visitors from /projects to /login", async () => {
     renderApp("/projects");
-    expect(await screen.findByText("Sign in")).toBeInTheDocument();
+    // The login form's email field only renders after the redirect completes.
+    expect(await screen.findByLabelText(/Email/)).toBeInTheDocument();
     expect(window.location.pathname).toBe("/login");
   });
 });
