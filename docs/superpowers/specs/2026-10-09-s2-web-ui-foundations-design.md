@@ -1,7 +1,7 @@
 # S2 - Web UI Foundations - Design
 
 Date: 2026-10-09
-Status: Design approved in conversation on 2026-10-09; pending user review of this file.
+Status: Implemented on master (S2).
 Source of truth: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD") and `2026-10-06-rag-mvp-slices-design.md` (the "slices spec"). Where those disagree with this document on S2 topics, this document wins; where this document is silent, they govern.
 
 ## 1. Context
