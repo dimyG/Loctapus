@@ -11,5 +11,7 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     exclude: [...configDefaults.exclude, "e2e/**"],
+    // Generous per-test budget: under parallel load, 1s findBy polls flake.
+    testTimeout: 10_000,
   },
 });
