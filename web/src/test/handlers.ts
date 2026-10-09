@@ -15,6 +15,13 @@ export const handlers = [
   http.post("*/auth/logout", () => new HttpResponse(null, { status: 204 })),
   http.get("*/users/me", () => HttpResponse.json({ user_id: "u-1", email: "user@example.test" })),
   http.get("*/projects", () => HttpResponse.json([])),
+  http.post("*/projects", async ({ request }) => {
+    const body = (await request.json()) as { name: string; team_id: string };
+    return HttpResponse.json(
+      { id: "p-new", name: body.name, is_public: false, created_at: "2026-10-09T12:00:00Z" },
+      { status: 201 },
+    );
+  }),
   http.get("*/workspaces", () => HttpResponse.json([{ id: "w-1", name: "Default" }])),
   http.get("*/workspaces/w-1/teams", () =>
     HttpResponse.json([{ id: "t-1", name: "Default", workspace_id: "w-1" }]),

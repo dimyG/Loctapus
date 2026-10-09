@@ -14,7 +14,11 @@ export const projectsApi = api.injectEndpoints({
       query: () => "/projects",
       providesTags: ["Project"],
     }),
+    createProject: build.mutation<Project, { name: string; team_id: string }>({
+      query: (body) => ({ url: "/projects", method: "POST", body }),
+      invalidatesTags: ["Project"],
+    }),
   }),
 });
 
-export const { useGetProjectsQuery } = projectsApi;
+export const { useCreateProjectMutation, useGetProjectsQuery } = projectsApi;

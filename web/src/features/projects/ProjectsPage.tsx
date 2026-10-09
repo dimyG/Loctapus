@@ -12,6 +12,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import DashboardLayout from "../../layouts/DashboardLayout";
+import CreateProjectDialog from "./CreateProjectDialog";
 import EmptyProjects from "./EmptyProjects";
 import { useGetProjectsQuery } from "./projectsApi";
 
@@ -22,6 +23,7 @@ export default function ProjectsPage() {
   // a fresh failure (or a retry) shows it again.
   const [dismissedError, setDismissedError] = useState<unknown>(null);
   const showError = error !== undefined && error !== dismissedError;
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
     <DashboardLayout>
@@ -33,7 +35,9 @@ export default function ProjectsPage() {
         <Typography component="h1" variant="h4" sx={{ fontWeight: 600 }}>
           Projects
         </Typography>
-        <Button variant="contained">Create project</Button>
+        <Button variant="contained" onClick={() => setDialogOpen(true)}>
+          Create project
+        </Button>
       </Stack>
       {isLoading ? (
         <Table>
@@ -50,7 +54,7 @@ export default function ProjectsPage() {
           </TableBody>
         </Table>
       ) : projects !== undefined && projects.length === 0 ? (
-        <EmptyProjects />
+        <EmptyProjects onCreate={() => setDialogOpen(true)} />
       ) : (
         <Box sx={{ overflowX: "auto" }}>
           <Table>
@@ -97,6 +101,7 @@ export default function ProjectsPage() {
           </Button>
         }
       />
+      {dialogOpen && <CreateProjectDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />}
     </DashboardLayout>
   );
 }
