@@ -15,3 +15,14 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
   2026, so no official registry image will return. Also tracked as a TODO comment in
   `deploy/docker-compose.yml`.
 - Review how to store dates: aware in utc, or as timestamps in msec
+
+
+## 2026-10-09 - deferred minors in `fix-deferred-minors-2`, kept open by its final review
+
+- `revoke_token` calls `on_conflict_do_nothing()` without a conflict target, so the
+  SQL suppresses violations of every unique constraint on `revoked_tokens` while the
+  comment names only the jti primary key; pass `index_elements=[RevokedToken.jti]`
+  (from commit `c9942f7`).
+- Consider adding `ruff format --check` to the house verification list in `AGENTS.md`;
+  `app/projects/router.py` and `tests/projects/test_service.py` already diverge
+  (pre-existing from commit `ad83874`, before this branch).
