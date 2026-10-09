@@ -1,6 +1,7 @@
 """Tests that migrations build the schema the models expect."""
 
 import os
+import uuid
 from pathlib import Path
 
 from alembic.config import Config
@@ -98,6 +99,66 @@ def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
             assert set(inspect(conn).get_table_names()) <= {"alembic_version"}
             extensions = conn.execute(text("SELECT extname FROM pg_extension")).scalars().all()
             assert "citext" not in extensions
+    finally:
+        scratch.dispose()
+        _terminate_and_drop(admin=admin, db_name=db_name)
+        admin.dispose()
+
+
+def test_0002_downgrade_backfills_is_personal(*, engine: Engine) -> None:
+    """Check that the 0002 downgrade restores pre-0002 personal flags on existing rows."""
+
+    url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
+    admin_url = url.rsplit("/", 1)[0] + "/postgres"
+    db_name = "rag_test_0002_backfill"
+    scratch_url = f"{url.rsplit('/', 1)[0]}/{db_name}"
+
+    admin = make_engine(database_url=admin_url).execution_options(isolation_level="AUTOCOMMIT")
+    scratch = make_engine(database_url=scratch_url)
+    try:
+        # Drop a leftover database first so reruns after a failed run stay self-healing.
+        _terminate_and_drop(admin=admin, db_name=db_name)
+        with admin.connect() as conn:
+            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+
+        config = Config(str(BACKEND_DIR / "alembic.ini"))
+        config.set_main_option("sqlalchemy.url", scratch_url)
+        config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+        command.upgrade(config, "head")
+
+        # Two owner-shaped rows: the "Personal" pair stands for a workspace registered
+        # before 0002 (pre-0002 code renamed nothing), the "Default" pair for one after.
+        w1, w2 = uuid.uuid4(), uuid.uuid4()
+        t1, t2 = uuid.uuid4(), uuid.uuid4()
+        user_rows = [(uuid.uuid4(), "d1@example.com"), (uuid.uuid4(), "d2@example.com")]
+        with scratch.connect() as conn:
+            conn.execute(
+                text("INSERT INTO users (id, email, password_hash) VALUES (:id, :email, 'h')"),
+                [{"id": uid, "email": email} for uid, email in user_rows],
+            )
+            conn.execute(
+                text("INSERT INTO workspaces (id, name, owner_user_id) VALUES (:id, :name, :owner)"),
+                [
+                    {"id": w1, "name": "Default", "owner": user_rows[0][0]},
+                    {"id": w2, "name": "Personal", "owner": user_rows[1][0]},
+                ],
+            )
+            conn.execute(
+                text("INSERT INTO teams (id, workspace_id, name) VALUES (:id, :ws, :name)"),
+                [
+                    {"id": t1, "ws": w1, "name": "Default"},
+                    {"id": t2, "ws": w2, "name": "Personal"},
+                ],
+            )
+            conn.commit()
+        command.downgrade(config, "0001")
+        with scratch.connect() as conn:
+            ws_rows = conn.execute(text("SELECT name, is_personal FROM workspaces")).all()
+            team_rows = conn.execute(text("SELECT name, is_personal FROM teams")).all()
+        ws_flags: dict[str, bool] = {str(row[0]): bool(row[1]) for row in ws_rows}
+        team_flags: dict[str, bool] = {str(row[0]): bool(row[1]) for row in team_rows}
+        assert ws_flags == {"Default": True, "Personal": True}
+        assert team_flags == {"Default": True, "Personal": True}
     finally:
         scratch.dispose()
         _terminate_and_drop(admin=admin, db_name=db_name)

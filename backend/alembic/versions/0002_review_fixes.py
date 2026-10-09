@@ -36,5 +36,9 @@ def downgrade() -> None:
     op.add_column(
         "workspaces", sa.Column("is_personal", sa.Boolean(), nullable=False, server_default=sa.false())
     )
+    # Registration is the only creation path in 0002+ code, so every row is the owner's
+    # registration-bootstrapped workspace/team, which pre-0002 code selected on.
+    op.execute("UPDATE teams SET is_personal = TRUE")
+    op.execute("UPDATE workspaces SET is_personal = TRUE")
     op.drop_column("projects", "is_public")
     op.drop_table("revoked_tokens")
