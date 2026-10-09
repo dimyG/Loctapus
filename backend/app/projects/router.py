@@ -85,7 +85,9 @@ def update(
 ) -> Project:
     """Update a project the user's team admins, raising 404 when the role is missing."""
 
-    project = get_project_for_user_with_role(db=db, user=user, project_id=project_id, roles=("admin",))
+    project = get_project_for_user_with_role(
+        db=db, user=user, project_id=project_id, minimum_role="admin"
+    )
     if project is None:
         raise HTTPException(404, "project not found")
     return update_project(db=db, project=project, name=body.name, is_public=body.is_public)
@@ -100,7 +102,9 @@ def delete(
 ) -> None:
     """Delete a project the user's team admins, raising 404 when the role is missing."""
 
-    project = get_project_for_user_with_role(db=db, user=user, project_id=project_id, roles=("admin",))
+    project = get_project_for_user_with_role(
+        db=db, user=user, project_id=project_id, minimum_role="admin"
+    )
     if project is None:
         raise HTTPException(404, "project not found")
     delete_project(db=db, project=project)

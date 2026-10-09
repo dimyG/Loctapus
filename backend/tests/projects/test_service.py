@@ -74,13 +74,74 @@ def test_get_project_for_user_with_role_requires_admin(*, db_session: Session) -
     db_session.flush()
 
     admin_view = project_service.get_project_for_user_with_role(
-        db=db_session, user=owner, project_id=project.id, roles=("admin",)
+        db=db_session, user=owner, project_id=project.id, minimum_role="admin"
     )
     viewer_view = project_service.get_project_for_user_with_role(
-        db=db_session, user=viewer, project_id=project.id, roles=("admin",)
+        db=db_session, user=viewer, project_id=project.id, minimum_role="admin"
     )
     assert admin_view is not None
     assert viewer_view is None
+
+
+def test_effective_role_is_strongest_across_teams(*, db_session: Session) -> None:
+    """Check that the effective role is the strongest among the user's teams' roles."""
+
+    from app.identity.models import Team, TeamMembership
+    from app.projects.models import ProjectTeamRole
+
+    registered = identity_service.register_user(
+        db=db_session, email="strongest@example.com", password="password123"
+    )
+    owner = registered.user
+    project = project_service.create_project(
+        db=db_session, user=owner, team_id=registered.team.id, name="strong"
+    )
+    assert project is not None
+
+    # A second team of the same user holds only a viewer role on the project.
+    second_team = Team(workspace_id=registered.workspace.id, name="Second")
+    db_session.add(second_team)
+    db_session.flush()
+    db_session.add(TeamMembership(team_id=second_team.id, user_id=owner.id))
+    db_session.add(ProjectTeamRole(project_id=project.id, team_id=second_team.id, role="viewer"))
+    db_session.flush()
+
+    assert (
+        project_service.get_effective_role_on_project(
+            db=db_session, user=owner, project_id=project.id
+        )
+        == "admin"
+    )
+    # The strongest role subsumes weaker ones, so the admin passes a viewer-level check.
+    assert (
+        project_service.get_project_for_user_with_role(
+            db=db_session, user=owner, project_id=project.id, minimum_role="viewer"
+        )
+        is not None
+    )
+    assert (
+        project_service.get_project_for_user_with_role(
+            db=db_session, user=owner, project_id=project.id, minimum_role="admin"
+        )
+        is not None
+    )
+
+
+def test_effective_role_is_none_without_access(*, db_session: Session) -> None:
+    """Check that the effective role is None when no team of the user holds one."""
+
+    owner, owner_team_id = _user(db=db_session, email="er-owner@example.com")
+    stranger, _stranger_team_id = _user(db=db_session, email="er-stranger@example.com")
+    project = project_service.create_project(
+        db=db_session, user=owner, team_id=owner_team_id, name="er"
+    )
+    assert project is not None
+    assert (
+        project_service.get_effective_role_on_project(
+            db=db_session, user=stranger, project_id=project.id
+        )
+        is None
+    )
 
 
 def test_duplicate_project_name_allowed(*, db_session: Session) -> None:

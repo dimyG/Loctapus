@@ -7,6 +7,10 @@ from sqlalchemy.orm import Query, Session
 from app.identity.models import Team, TeamMembership, User
 from app.projects.models import Project, ProjectTeamRole
 
+# Weakest to strongest; a role grants every permission of the roles below it.
+# Keep in sync with the role check constraint in app.projects.models.
+ROLE_PRECEDENCE: tuple[str, ...] = ("viewer", "editor", "admin")
+
 
 def create_project_for_team(*, db: Session, team: Team, name: str) -> Project:
     """Add a project with an admin role for ``team``, without committing."""
@@ -99,20 +103,41 @@ def update_project(
     return project
 
 
+def _role_at_least(*, role: str, minimum: str) -> bool:
+    """Whether ``role`` grants at least the permissions of ``minimum``."""
+
+    return ROLE_PRECEDENCE.index(role) >= ROLE_PRECEDENCE.index(minimum)
+
+
+def get_effective_role_on_project(*, db: Session, user: User, project_id: UUID) -> str | None:
+    """Return the user's strongest role on the project, or None when no team of theirs holds one."""
+
+    roles = (
+        _visible_projects_query(db=db, user=user)
+        .filter(Project.id == project_id)
+        .with_entities(ProjectTeamRole.role)
+        .all()
+    )
+    strongest: str | None = None
+    for row in roles:
+        if strongest is None or _role_at_least(role=row.role, minimum=strongest):
+            strongest = row.role
+    return strongest
+
+
 def get_project_for_user_with_role(
     *,
     db: Session,
     user: User,
     project_id: UUID,
-    roles: tuple[str, ...],
+    minimum_role: str,
 ) -> Project | None:
-    """Return the project when one of the user's teams holds one of ``roles`` on it."""
+    """Return the project when the user's strongest role on it is at least ``minimum_role``."""
 
-    return (
-        _visible_projects_query(db=db, user=user)
-        .filter(Project.id == project_id, ProjectTeamRole.role.in_(roles))
-        .one_or_none()
-    )
+    effective = get_effective_role_on_project(db=db, user=user, project_id=project_id)
+    if effective is None or not _role_at_least(role=effective, minimum=minimum_role):
+        return None
+    return get_project_for_user(db=db, user=user, project_id=project_id)
 
 
 def delete_project(*, db: Session, project: Project) -> None:
