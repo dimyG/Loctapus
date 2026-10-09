@@ -8,6 +8,10 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 
 ## Todo later
 
+- Frontend JWT lives in localStorage (chosen at the S2 design round, 2026-10-09): a script
+  injected via XSS can read it. S2 renders no user-supplied HTML so the surface is our own
+  code. Possible later upgrade to httpOnly cookies (needs Set-Cookie + CSRF handling in the
+  S1 API) is contained to `web/src/lib/tokenStorage.ts` plus the base API client.
 - Background job (probably a Celery beat task) that clears expired JWTs from the
   revoked-token table.
 - Replace MinIO with a maintained S3-compatible server (SeaweedFS or Garage) before S3
