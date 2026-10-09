@@ -136,6 +136,20 @@ def test_patch_updates_name_and_visibility(*, client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["name"] == "new" and r.json()["is_public"] is True
 
 
+def test_patch_rejects_explicit_nulls(*, client: TestClient) -> None:
+    """Check that an explicit null in a patch body is rejected instead of ignored."""
+
+    h = _auth(client=client, email="null@example.com")
+    pid = client.post(
+        "/projects",
+        json={"name": "nulled", "team_id": _default_team_id(client=client, headers=h)},
+        headers=h,
+    ).json()["id"]
+    assert client.patch(f"/projects/{pid}", json={"name": None}, headers=h).status_code == 422
+    assert client.patch(f"/projects/{pid}", json={"is_public": None}, headers=h).status_code == 422
+    assert client.get(f"/projects/{pid}", headers=h).json()["name"] == "nulled"
+
+
 def test_patch_rejects_non_admin_team_member(*, client: TestClient, db_session: Session) -> None:
     """Check that a viewer-role team member cannot patch."""
 
