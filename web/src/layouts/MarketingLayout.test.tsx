@@ -10,7 +10,7 @@ describe("MarketingLayout", () => {
         <div>marketing-content</div>
       </MarketingLayout>,
     );
-    expect(screen.getByText("RAG")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "RAG" })).toHaveAttribute("href", "/");
     expect(screen.getByText("marketing-content")).toBeInTheDocument();
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");

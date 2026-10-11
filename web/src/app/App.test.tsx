@@ -28,6 +28,11 @@ describe("App", () => {
     expect(window.location.pathname).toBe("/projects");
   });
 
+  it("renders the about page for public visitors", async () => {
+    renderApp("/about");
+    expect(await screen.findByRole("heading", { name: "About RAG" })).toBeInTheDocument();
+  });
+
   it("keeps a visitor whose stored token was rejected on the landing", async () => {
     saveToken("t-stale");
     server.use(http.get("*/users/me", () => HttpResponse.json({}, { status: 401 })));
