@@ -1,23 +1,23 @@
+import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
-import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
+import SiteFooter from "./SiteFooter";
 
-/** Public-facing frame: wordmark header, content slot, and a subtle footer. */
+/** Public-facing frame: wordmark header and content above the shared site footer. */
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <Container maxWidth="md" sx={{ py: 4, minHeight: "100dvh" }}>
-      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          RAG
-        </Typography>
-      </Stack>
-      {children}
-      <Divider sx={{ my: 5 }} />
-      <Typography variant="body2" color="text.secondary">
-        RAG - document intelligence for small teams.
-      </Typography>
-    </Container>
+    <Box sx={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
+      <Container maxWidth="md" sx={{ py: 4, flexGrow: 1 }}>
+        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            RAG
+          </Typography>
+        </Stack>
+        {children}
+      </Container>
+      <SiteFooter maxWidth="md" />
+    </Box>
   );
 }

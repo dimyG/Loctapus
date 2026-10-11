@@ -13,4 +13,14 @@ describe("AuthLayout", () => {
     expect(screen.getByRole("link", { name: "RAG" })).toHaveAttribute("href", "/");
     expect(screen.getByText("auth-content")).toBeInTheDocument();
   });
+
+  it("renders the site footer", () => {
+    renderWithProviders(
+      <AuthLayout>
+        <div>auth-content</div>
+      </AuthLayout>,
+    );
+    expect(screen.getByRole("contentinfo")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
+  });
 });
