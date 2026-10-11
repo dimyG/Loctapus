@@ -19,7 +19,12 @@ describe("App", () => {
   it("redirects a token holder from / to the projects page", async () => {
     saveToken("t-boot");
     renderApp("/");
-    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    // The longest wait in the suite: bootstrap fetch, hydration, redirect,
+    // and the guarded render all land inside one findBy. The default 1s
+    // budget flakes when parallel files saturate the worker, so allow 5s.
+    expect(
+      await screen.findByRole("heading", { name: "Projects" }, { timeout: 5000 }),
+    ).toBeInTheDocument();
     expect(window.location.pathname).toBe("/projects");
   });
 
