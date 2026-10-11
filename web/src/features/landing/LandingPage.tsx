@@ -3,7 +3,7 @@ import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { Navigate } from "react-router";
+import { Link as RouterLink, Navigate } from "react-router";
 import { useAppSelector } from "../../app/hooks";
 import { selectUser } from "../auth/authSlice";
 import MarketingLayout from "../../layouts/MarketingLayout";
@@ -52,10 +52,10 @@ export default function LandingPage() {
           language.
         </Typography>
         <Stack direction="row" spacing={2} sx={{ justifyContent: "center" }}>
-          <Button variant="contained" component="a" href="/register">
+          <Button variant="contained" component={RouterLink} to="/register">
             Get started
           </Button>
-          <Button variant="outlined" component="a" href="/login">
+          <Button variant="outlined" component={RouterLink} to="/login">
             Sign in
           </Button>
         </Stack>
