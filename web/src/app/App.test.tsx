@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
 import { saveToken } from "../lib/tokenStorage";
+import { server } from "../test/server";
 import App from "./App";
 
 function renderApp(route: string) {
@@ -14,12 +16,23 @@ describe("App", () => {
     window.history.pushState({}, "", "/");
   });
 
-  it("renders the landing on the public route for a token holder", async () => {
+  it("redirects a token holder from / to the projects page", async () => {
     saveToken("t-boot");
     renderApp("/");
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/projects");
+  });
+
+  it("keeps a visitor whose stored token was rejected on the landing", async () => {
+    saveToken("t-stale");
+    server.use(http.get("*/users/me", () => HttpResponse.json({}, { status: 401 })));
+    renderApp("/");
+    // The redirect waits for the hydrated user, so a stale token never
+    // bounces a public visitor into the guarded login flow.
     expect(
       await screen.findByRole("heading", { name: /searchable by meaning/i }),
     ).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/");
   });
 
   it("renders the guarded projects page for an authenticated visitor", async () => {

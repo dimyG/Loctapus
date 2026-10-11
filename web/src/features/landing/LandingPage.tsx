@@ -3,6 +3,9 @@ import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { Navigate } from "react-router";
+import { useAppSelector } from "../../app/hooks";
+import { selectUser } from "../auth/authSlice";
 import MarketingLayout from "../../layouts/MarketingLayout";
 
 const steps = [
@@ -20,8 +23,16 @@ const steps = [
   },
 ];
 
-/** The public landing page: hero, calls to action, and a how-it-works strip. */
+/** The public landing page; signed-in visitors are redirected to their projects. */
 export default function LandingPage() {
+  // The hydrated user, not the stored token, drives the redirect: a visitor
+  // whose token has gone stale must stay on the public landing instead of
+  // being bounced to /login by the guarded route.
+  const user = useAppSelector(selectUser);
+  if (user !== null) {
+    return <Navigate to="/projects" replace />;
+  }
+
   return (
     <MarketingLayout>
       <Stack sx={{ textAlign: "center", py: { xs: 6, md: 10 } }} spacing={3}>

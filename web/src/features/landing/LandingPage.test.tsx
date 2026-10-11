@@ -1,20 +1,50 @@
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { screen } from "@testing-library/react";
+import { Route, Routes } from "react-router";
+import { beforeEach, describe, expect, it } from "vitest";
+import { initialRootState } from "../../app/store";
+import { renderWithProviders } from "../../test/test-utils";
+import ProjectsPage from "../projects/ProjectsPage";
 import LandingPage from "./LandingPage";
 
+/** Renders the landing page at "/" behind the routes it redirects within. */
+function renderLanding(preloadedState = initialRootState()) {
+  return renderWithProviders(
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/projects" element={<ProjectsPage />} />
+    </Routes>,
+    { route: "/", preloadedState },
+  );
+}
+
 describe("LandingPage", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it("renders the hero copy and both CTAs with correct hrefs", () => {
-    render(<LandingPage />, { wrapper: MemoryRouter });
+    renderLanding();
     expect(screen.getByRole("heading", { name: /searchable by meaning/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/register");
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
   });
 
   it("renders the three how-it-works steps", () => {
-    render(<LandingPage />, { wrapper: MemoryRouter });
+    renderLanding();
     for (const step of ["Create a project", "Upload documents", "Ask questions"]) {
       expect(screen.getByText(step)).toBeVisible();
     }
+  });
+
+  it("redirects authenticated visitors to the projects page", () => {
+    renderLanding({
+      ...initialRootState(),
+      auth: {
+        token: "t-1",
+        user: { id: "u-1", email: "user@example.test" },
+        status: "idle",
+      },
+    });
+    expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
   });
 });
