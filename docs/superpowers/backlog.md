@@ -8,6 +8,15 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 
 ## Todo later
 
+- 2026-10-12 - vitest suite under extreme parallel load (S2 footer/about work, commits up to
+  `1f3c76d`): running three full `npm run test` suites concurrently on this machine starves
+  jsdom workers; userEvent typing tests (RegisterPage "does not post on mismatch", LoginPage
+  401 copy) time out at the 10s budget. Reproducible at commit `be6ebcd` too, so pre-existing,
+  and never seen on single runs. The root-redirect test additionally starved React transitions
+  until it got a real 5s wait budget (`fd71039`); a 4-arg `findByRole` call had silently dropped
+  the timeout option. Candidate fix: vitest `pool: "vmThreads"` per its environment hint.
+- The 2026-10-09 pending human visual pass should now also cover the shared site footer on all
+  layouts and the /about page (commits `4d6b83f`, `af03aa2`, `52d3b58`).
 - Frontend JWT lives in localStorage (chosen at the S2 design round, 2026-10-09): a script
   injected via XSS can read it. S2 renders no user-supplied HTML so the surface is our own
   code. Possible later upgrade to httpOnly cookies (needs Set-Cookie + CSRF handling in the
