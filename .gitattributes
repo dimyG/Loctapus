@@ -1,0 +1,4 @@
+# Normalize all text files to LF on checkout: the web toolchain (prettier)
+# enforces LF, and git's Windows autocrlf would otherwise hand out CRLF
+# working copies that fail format:check with identical committed content.
+* text=auto eol=lf
