@@ -1,7 +1,8 @@
 # S3 - Upload & Ingestion (stub providers) + Upload UI - Design
 
 Date: 2026-10-12
-Status: Approved design; ready for the implementation plan.
+Status: Approved design; ready for the implementation plan (two review rounds applied,
+both 2026-10-12; the second round's changes say so where they amend first-round text).
 Source of truth: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD") and
 `2026-10-06-rag-mvp-slices-design.md` (the "slices spec"). Where those disagree with this
 document on S3 topics, this document wins; where this document is silent, they govern.
@@ -24,7 +25,7 @@ RabbitMQ 3.13 (compose) is already provisioned by S0. MinIO is replaced by Garag
 slice: the MinIO community edition reached end-of-life in February 2026 (backlog item,
 resolved here).
 
-## 2. Decisions (2026-10-12 design round, amended by the 2026-10-12 spec review)
+## 2. Decisions (2026-10-12 design round, amended by the 2026-10-12 spec review rounds)
 
 1. **Garage replaces MinIO now.** Chosen from the backlog's candidates (Garage vs
    SeaweedFS) for a single-container footprint, minimal config, and active maintenance.
@@ -37,14 +38,23 @@ resolved here).
    not spell out (section 5.2): the dispatcher marks `published_at` only after a broker
    publisher confirm, and the worker acks late (`task_acks_late`) - so a crash between
    commit and confirmed publish re-publishes (at-least-once), and a crash mid-task
-   re-delivers.
-3. **The outbox dispatcher is a standalone polling process** (review amendment; the
+   re-delivers. Second round, stated honestly: late acks only rescue `embed`, whose
+   in-place vector updates absorb re-delivery (section 5.4); a re-delivered *ingestion*
+   message is dropped by its claim guard and the run stays non-terminal - the accepted
+   stuck-run cost (section 10). The ingestion leg is at-least-once into the claim guard,
+   not into execution.
+3. **The S3 outbox dispatcher is a standalone polling process** (review amendment; the
    design round had Celery Beat, whose CLI refuses `-B` outright on Windows: "-B option
    does not work on Windows"): a plain `while True: dispatch_batch(); sleep` loop over
-   unpublished rows every `outbox_poll_interval_seconds` (default 1s, section 5.2). No
-   Beat anywhere - a clock-driven dispatch task buys nothing over a sleep loop, drags
-   in a per-environment schedule file, and would pile up tick messages whenever the
-   worker is down. S7's sync polling extends the same loop.
+   unpublished rows every `outbox_poll_interval_seconds` (default 1s, section 5.2). For
+   S3 that is the whole scheduling story - a clock-driven dispatch task buys nothing
+   over a sleep loop, drags in a per-environment schedule file, and would pile up tick
+   messages whenever the worker is down. **S7's sync scheduler is deliberately not
+   decided here** (second round): the slices spec's S7 row still says "Celery Beat sync
+   polling", and S7's own design round picks between the two real options - extending
+   this same dispatcher loop, or running `celery beat` as its own process (only the
+   *embedded* `-B` form is refused on Windows; a standalone beat process runs fine).
+   S3 must not preclude either.
 4. **The stub embedding is a deterministic hash-bag**: lowercase word split, each token
    sha256-hashed into one of `STUB_EMBEDDING_DIM` buckets with a sign bit, L2-normalized.
    Same text always yields the same vector - idempotent re-runs and reproducible tests -
@@ -73,12 +83,17 @@ resolved here).
    `created_at` (`func.now()`, set by the inserting transaction - one row per
    transaction, so no ties) orders "latest run" for the derived source status
    (decision 12).
-9. **Startup dimension guard (worker)**: the worker compares `STUB_EMBEDDING_DIM`
-   against the actual `chunks.embedding` catalog type at boot and refuses to start on
-   mismatch with an actionable message (section 4.3). S3 wires it into the worker only:
-   the TestClient cannot reach an API-startup check without an injectable engine (the
-   module-level `SessionLocal` points at the dev database), so the API-side check lands
-   in S4 with the retrieval path that actually needs it.
+9. **Startup dimension guard (worker)**: at boot the worker compares the *selected
+   provider's* `dimension` attribute - the stub's `STUB_EMBEDDING_DIM`; giving
+   `EmbeddingProvider` a `dimension` keeps the guard correct in S5 when Voyage replaces
+   the stub - against the actual `chunks.embedding` catalog type, and refuses to start
+   on mismatch with an actionable message (section 4.3). The `worker_init` handler
+   raises `SystemExit`, not a plain `Exception`: Celery's signal dispatch catches
+   `Exception` and logs it, which would leave the worker running (section 4.3). S3
+   wires it into the worker only: the TestClient cannot reach an API-startup check
+   without an injectable engine (the module-level `SessionLocal` points at the dev
+   database), so the API-side check lands in S4 with the retrieval path that actually
+   needs it.
 10. **The re-embedding follow-up is recorded in the backlog** (2026-10-12): swapping the
     embedding model or dimension invalidates stored vectors; re-embedding runs from
     persisted `chunks.text` (no re-parse), clearing embeddings and re-enqueueing one
@@ -98,8 +113,11 @@ resolved here).
     defines multi-item aggregation in one query instead of reinventing a stored rollup.
 13. **Event payloads carry the ids consumers act on** (review amendment):
     `source_item_ingestion_requested` payloads carry `source_item_id` +
-    `ingestion_run_id`, `document_ready_for_embedding` payloads carry `document_id` +
-    `ingestion_run_id`, and every run transition is `UPDATE ... WHERE id = :run_id AND
+    `ingestion_run_id` + `raw_object_key` + `content_hash` (second round: the last two
+    pin each run to the file *version* it was created for - an S7 re-upload rewrites
+    the item's latest key, and an older queued run must fetch its own bytes, never the
+    newer ones); `document_ready_for_embedding` payloads carry `document_id` +
+    `ingestion_run_id`; and every run transition is `UPDATE ... WHERE id = :run_id AND
     status = :expected`. Claims stay per-run when S7 adds per-attempt runs, and
     re-delivery of a finished run is a no-op instead of re-claiming a queued sibling.
 14. **One broker vhost per environment** (review amendment): dev (`/`), pytest
@@ -107,7 +125,19 @@ resolved here).
     `broker_url`, created by the same bootstraps that build each database. Without
     them a running dev worker consumes the e2e run's ingestion messages and skips them
     against the dev database, hanging the journey - the databases already have this
-    isolation; the design round forgot to give the broker the same.
+    isolation; the design round forgot to give the broker the same. Second round adds
+    the two missing plumbing details. Creation: through the management HTTP API compose
+    already exposes on 15672 - `PUT /api/vhosts/{name}` then
+    `PUT /api/permissions/{name}/guest` with `{"configure": ".*", "write": ".*",
+    "read": ".*"}` (a newly created vhost grants no permissions by default, and
+    `guest` needs them to connect); both calls are idempotent and repeat-safe.
+    Reaching the code: the vhost only isolates if the app under test is built from the
+    same per-environment URL, so `make_celery_app(*, broker_url)` (section 3.4) is the
+    broker twin of `make_engine`, the dispatcher takes its app as a keyword-only
+    argument, and the pytest fixtures read `RAG_TEST_BROKER_URL` (default
+    `amqp://guest:guest@localhost:5672/rag_test`) beside `RAG_TEST_DATABASE_URL` -
+    the module-level default app points at the dev vhost exactly as `SessionLocal`
+    points at the dev database.
 
 ## 3. Dependencies and infrastructure
 
@@ -115,30 +145,46 @@ resolved here).
 
 | Package | Use |
 |---|---|
-| `celery>=5.5` | worker + dispatcher (RabbitMQ broker; kombu/amqp ship with it) |
+| `celery>=5.6` | worker + dispatcher (RabbitMQ broker; kombu/amqp ship with it). 5.6, not 5.5: Python 3.14 support landed there (5.5 stops at 3.13) |
 | `boto3` | Garage/S3 client (path-style addressing) |
+| `pgvector` | SQLAlchemy `Vector` type for `chunks.embedding` in the model and the migration |
+| `python-multipart` | multipart parsing for the upload route - FastAPI refuses to serve a route declared with `UploadFile` without it |
 | `pypdf` | stub PDF parser |
 | `python-docx` | stub DOCX parser |
 
 No Celery result backend: task outcomes live in Postgres (`ingestion_runs`); Celery moves
-messages only.
+messages only. Second round: `mypy app tests` (strict) also needs stubs for the untyped
+third parties - `celery-types` and `boto3-stubs[s3]` join the dev extras (or a narrowly
+scoped mypy override per package, whichever the implementation finds smaller).
 
 ### 3.2 Compose: Garage replaces MinIO (`deploy/docker-compose.yml`)
 
 - Service `garage`: `dxflrs/garage` (version pinned at implementation), config mounted
   from `deploy/garage.toml` (replication_factor 1, S3 API on `0.0.0.0:3900` with
   `s3_region = "garage"`, admin API on 3903), named volumes for meta and data. Ports
-  3900 + 3903.
+  3900 + 3903. Second round, checked against the v2.3.0 source: the command must be
+  the absolute `/garage server --single-node --default-bucket` - the image is
+  `FROM scratch` with no `PATH` and the binary lives at `/garage` (the docs' bare
+  `garage server ...` would not resolve).
 - The `minio` service, its `miniodata` volume, and the EOL TODO comment are removed.
   `docker compose up` now yields db + RabbitMQ + Garage.
 - **No bootstrap script** (review amendment): Garage v2.3.0+ self-provisions. The
-  service command is `garage server --single-node --default-bucket`, and compose passes
+  service command is `/garage server --single-node --default-bucket`, and compose passes
   fixed dev credentials through `GARAGE_DEFAULT_ACCESS_KEY` / `GARAGE_DEFAULT_SECRET_KEY`
   / `GARAGE_DEFAULT_BUCKET=rag-dev` - the same fixed-credentials-in-compose pattern the
   `db` service already uses for `rag`/`rag`. The settings defaults mirror the compose
   values (section 3.3), so dev, pytest, and e2e need no `.env` writing step at all.
   Pytest and e2e share the single Garage and its `rag-dev` bucket with dev: object keys
   carry UUIDs and content hashes, so environments cannot collide.
+- Garage's startup order and failure modes (second round, from the v2.3.0 source):
+  `garage server` finishes the single-node layout and the default key/bucket *before*
+  the S3 listener starts, so no client ever sees a half-provisioned Garage; restarts
+  with an existing layout and an unchanged secret are safe. But a `GARAGE_DEFAULT_*`
+  key that already exists with a *different* secret makes startup fail - so changing
+  `GARAGE_DEFAULT_SECRET_KEY` after first start bricks the service until the metadata
+  volume is wiped; the README runbook says so (section 9). The compose values must
+  satisfy Garage's import validation: key id >= 8 chars of `[A-Za-z0-9._-]` (the planned
+  `rag-dev-key` qualifies), secret >= 16 printable-ASCII chars.
 - `garage.toml`'s `s3_region` must equal the `s3_region` setting default: Garage rejects
   S3 calls signed for any other region with `AuthorizationHeaderMalformed`.
 
@@ -175,14 +221,18 @@ backend/app/
   workers/      celery_app.py, tasks.py, dispatcher.py         # app, thin tasks, poll loop
 ```
 
-Queue names `ingestion` / `embed` are constants in `app/workers/celery_app.py`; event
-types, their payloads, and the event -> (task, queue) routing map live in
-`app/outbox/events.py`, so the dispatcher routes from one table instead of scattered
-if/else. Celery tasks are thin wrappers over `app/ingestion/service.py` functions
-(keyword-only session arguments), so pipeline logic tests without Celery. Workers get
-sessions through a `session_scope` context manager in `app/core/db.py` (request-scoped
-`get_db` does not apply outside HTTP). `alembic/env.py` imports the new model modules
-for autogenerate.
+Queue names `ingestion` / `embed`, event types, their payloads, and the event ->
+(task, queue) routing map all live in `app/outbox/events.py` (second round: queue names
+moved over from `app/workers/celery_app.py`, so the API process - which only writes
+events - never imports Celery at all; the workers import the names from there). The
+Celery app is constructed through `make_celery_app(*, broker_url)` in
+`app/workers/celery_app.py` - the broker twin of `make_engine` - and the dispatcher
+takes its app as a keyword-only argument, so tests point both at the `rag_test` vhost
+instead of the module-level dev default (decision 14). Celery tasks are thin wrappers
+over `app/ingestion/service.py` functions (keyword-only session arguments), so
+pipeline logic tests without Celery. Workers get sessions through a `session_scope`
+context manager in `app/core/db.py` (request-scoped `get_db` does not apply outside
+HTTP). `alembic/env.py` imports the new model modules for autogenerate.
 
 ### 3.5 Runbook (dev + e2e)
 
@@ -210,16 +260,20 @@ source_items     id, source_id -> sources ON DELETE CASCADE, external_id (the up
                  size_bytes, content_hash (sha256 of the raw bytes), raw_object_key,
                  created_at
 documents        id, source_item_id -> source_items ON DELETE CASCADE, content_hash
-                 (sha256 of the canonical normalized JSON), raw_object_key (copied from
-                 the item; MD section 27), normalized_content JSONB (the full normalized
+                 (sha256 of the canonical normalized JSON - title + elements + metadata only,
+                 never ids or timestamps: those inside the hashed JSON make every hash
+                 unique and the `unique(source_item_id, content_hash)` duplicate guard dead),
+                 raw_object_key (copied from the item; MD section 27), normalized_content
+                 JSONB (the full normalized
                  document: title, elements, metadata), created_at,
                  unique(source_item_id, content_hash)
 chunks           id, project_id -> projects ON DELETE CASCADE (intentional
                  denormalization for the retrieval hot path - rationale comment in the
                  model, MD section 27), document_id -> documents ON DELETE CASCADE,
                  position, text, heading_path JSONB (string array), chunk_type (check
-                 'text'), chunk_metadata JSONB (named `chunk_metadata` because
-                 `metadata` is reserved on SQLAlchemy declarative models), content_hash
+                 'text'), chunk_metadata JSONB - only the Python *attribute* is renamed
+                 (`metadata` is reserved on SQLAlchemy declarative models); the column keeps
+                 the MD's `metadata` name, which S4's SQL will query - content_hash
                  (sha256 of text), embedding vector(384) NULL until embedded,
                  search_vector tsvector GENERATED ALWAYS AS (to_tsvector('english',
                  text)) STORED, unique(document_id, position)
@@ -247,11 +301,19 @@ outbox_events    id, event_type, aggregate_type, aggregate_id (uuid), payload JS
 - Hashes: raw-bytes sha256 -> `source_items.content_hash` (the version fingerprint);
   canonical normalized JSON (sorted keys) sha256 -> `documents.content_hash`; chunk-text
   sha256 -> `chunks.content_hash`. `external_id` stays content-independent (decision 11).
+  Second round, the scope of the document hash (the 4.1 block says it too): title +
+  elements + metadata only - never ids or timestamps, which would make every hash unique
+  and the `unique(source_item_id, content_hash)` duplicate guard dead on arrival.
 - Every FK cascades, so project deletion stays a plain `DELETE`: projects -> sources ->
   source_items -> {documents -> chunks, ingestion_runs}; `chunks.project_id` cascades
   along the denormalized path; `ingestion_runs.document_id` is SET NULL so run history
   survives document replacement (S7). Raw Garage objects under the deleted project's
-  key prefix stay behind - harmless, no delete path in S3.
+  key prefix stay behind - harmless, no delete path in S3. Second round: any ORM
+  relationship grown across these tables (e.g. a `Project.sources` convenience mapping)
+  declares `passive_deletes=True` mirroring its `ondelete` rule, so deleting a project
+  issues one `DELETE` and lets the database cascade - instead of SQLAlchemy loading the
+  children to null or delete them client-side, which wastes the round trips and would
+  fight the SET NULL on `ingestion_runs.document_id`.
 - Chunks are FTS-searchable the moment they commit, before embeddings and `ready` land;
   activation semantics (only the replacement document visible to retrieval) are S7
   scope.
@@ -262,6 +324,9 @@ outbox_events    id, event_type, aggregate_type, aggregate_id (uuid), payload JS
 `ingestion_runs.status` - the only stored status; the sources list derives (decision 12).
 Every transition is `UPDATE ... WHERE id = :run_id AND status = :expected`; zero rows
 updated means a duplicate or stale delivery -> ack, no-op (decision 13).
+Second round, `expected` is concrete: the status the writing task last set -
+`fetching` or `processing` for an ingestion failure, `indexing` for an embed failure -
+so a stale delivery can never clobber a newer state.
 
 | Status | Set by |
 |---|---|
@@ -285,17 +350,28 @@ updated means a duplicate or stale delivery -> ack, no-op (decision 13).
   formula lives in one place and every write path gets it for free; on this Postgres
   17, `ALTER COLUMN ... SET EXPRESSION` lets S4 reweight it in one migration that
   recomputes every row.
-- FK indexes on every new foreign key (`sources.project_id`, `source_items.source_id`,
-  `documents.source_item_id`, `chunks.document_id`, `chunks.project_id`,
-  `ingestion_runs.source_item_id`, `ingestion_runs.document_id`): migration 0004 made
-  indexed FKs house style, Postgres still does not create them, and retrieval filters
-  on `chunks.project_id`. `test_foreign_key_columns_are_indexed` grows the same columns.
+- FK indexes where no composite unique already covers the leading column (second round,
+  trimming the blanket list): `sources.project_id`, `chunks.project_id` (what retrieval
+  filters on), `ingestion_runs.document_id` (the SET NULL target), plus
+  `ingestion_runs (source_item_id, created_at)` - one composite serving both the item FK
+  and the latest-run lookup (decision 12). Skipped as redundant: `source_items.source_id`,
+  `documents.source_item_id`, and `chunks.document_id` lead their composite unique
+  constraints (a leading column is served by the constraint's index, migration 0004's
+  house reading), and an index on `chunks.document_id` would tax every chunk insert.
+  `test_foreign_key_columns_are_indexed` grows the same columns - after fixing its own
+  pre-existing hole (second round, section 8): it must compare each index's *leading*
+  column only, because today it collects every column of every index, unique-constraint
+  indexes included, so dropping `ix_project_team_roles_team_id` would still pass.
 - **Startup guard (worker only in S3, decision 9)**: compare the column's catalog type
-  (`format_type` over `pg_attribute`, parse the dimension) with `STUB_EMBEDDING_DIM`
-  and fail fast, e.g. "chunks.embedding is vector(384) but the stub provider emits 512;
-  changing the dimension requires an Alembic migration". This prevents a cryptic
-  psycopg insert failure deep in the embed path after chunks are already committed.
-  Unit-tested directly against matching and mismatching catalog fixtures.
+  (`format_type` over `pg_attribute`, parse the dimension) with the selected provider's
+  `dimension` (the stub's `STUB_EMBEDDING_DIM`; decision 9) and fail fast, e.g.
+  "chunks.embedding is vector(384) but the selected provider emits 512; changing the
+  dimension requires an Alembic migration". This prevents a cryptic psycopg insert
+  failure deep in the embed path after chunks are already committed. The check runs in
+  a `worker_init` signal handler that raises `SystemExit` - not a plain `Exception`,
+  which Celery's signal dispatch catches, logs, and swallows, leaving the worker booted
+  (second round). Unit tests cover the comparison against matching and mismatching
+  catalog fixtures *and* the handler's refusal to boot.
 
 ## 5. Ingestion pipeline
 
@@ -312,31 +388,53 @@ updated means a duplicate or stale delivery -> ack, no-op (decision 13).
 3. sha256 the bytes; build the key
    `raw/{project_id}/{source_item_id}/{content_hash}/{filename}` (decision #7). House
    UUIDs are client-generated, so the key is buildable before any row exists.
-4. End the request's read transaction (the auth dependency opened one; rolling back a
-   read-only transaction), then PUT the object to Garage - raw persisted before
-   parsing, and no DB transaction is open across the storage call (MD section 30).
+4. Copy the ids the rest of the flow still needs (project id, user) into locals, then
+   end the request's read transaction (the auth dependency opened one) with `commit()` -
+   not `rollback()` (second round) - and PUT the object to Garage: raw persisted before
+   parsing, and no DB transaction open across the storage call (MD section 30). Why
+   `commit()` and pre-copied locals: the test harness wraps each test in a savepoint, so
+   `rollback()` unwinds to it and silently discards uncommitted setup rows the test added
+   (a granted role, a seeded user) - a mid-test upload then 404s on its next request; and
+   after a rollback, touching any loaded instance (even reading `project.id`) implicitly
+   opens a *new* transaction, which then stays open across the Garage PUT. An API test
+   pins this down (section 8): the storage client is patched to capture the session's
+   transaction state during the PUT, and it must read "no transaction open".
    Storage failure -> 503 with a retryable message, no rows written; an object
    orphaned by a failed later commit is harmless (no delete path in S3).
 5. One transaction: `sources` (type `upload`) + `source_items` (identity + file
    metadata + `raw_object_key`, decision 11) + `ingestion_runs` (`queued`) +
    `outbox_events` row `source_item_ingestion_requested` (aggregate source_item;
-   payload `{"source_item_id": ..., "ingestion_run_id": ...}`, decision 13) -> commit
+   payload `{"source_item_id": ..., "ingestion_run_id": ..., "raw_object_key": ...,
+   "content_hash": ...}` - decision 13, second round: the run consumes its own file
+   version, immune to an S7 re-upload rewriting the item's latest) -> commit
    -> 201 `SourceOut`.
 
 ### 5.2 Outbox dispatcher (standalone process, `app/workers/dispatcher.py`)
 
 - A plain loop, no Celery Beat (decision 3): every `outbox_poll_interval_seconds`, one
   batch - select unpublished rows (`outbox_batch_size`, ordered `created_at`, `FOR
-  UPDATE SKIP LOCKED`), publish each via `celery_app.send_task` to the queue routed
-  from `event_type` through the `app/outbox/events.py` map, set `published_at` on
-  success; on failure `attempts += 1` + record `last_error`, retried next tick.
+  UPDATE SKIP LOCKED`), publish each via the injected app's `send_task` (decision 14)
+  to the queue routed from `event_type` through the `app/outbox/events.py` map, set
+  `published_at` on success; on failure `attempts += 1` + record `last_error`, retried
+  next tick.
+- Second round, transaction shape: one *short* transaction per batch - select, publish,
+  mark, commit - and nothing held while sleeping; a dispatcher idling inside a
+  transaction would block the e2e suite's `TRUNCATE` between tests and sit on locks
+  between ticks. A broker connection error ends the batch there (rows not yet published
+  keep their `attempts`/`last_error` bump for the next tick) rather than retrying
+  publishes in place under row locks.
 - Publishing happens under the row locks on purpose: that is what makes "mark
   published" crash-safe, and SKIP LOCKED lets overlapping dispatcher runs cooperate.
 - Durable queues, persistent messages, broker publisher confirms, and worker
-  `task_acks_late` (decision 2): `published_at` is set only after the broker
-  acknowledges, so a crash between publish and mark re-publishes (duplicate) and never
-  loses; a crash mid-task re-delivers, and consumers are idempotent (claim guards,
-  decision 13).
+  `task_acks_late` (decision 2). Publisher confirms made concrete (second round): the
+  app's broker connection sets `broker_transport_options={'confirm_publish': True}`
+  (kombu's pyamqp transport), so `send_task` blocks until the broker's `basic.ack`, and
+  "set `published_at` only after the broker acknowledges" is a real wait - without
+  confirms, a broker-side rejection (e.g. an oversized message) closes the channel
+  asynchronously and the publish is lost with no visible error. So a crash between
+  publish and mark re-publishes (duplicate) and never loses; a crash mid-task
+  re-delivers, and consumers are idempotent (claim guards, decision 13; the embed leg
+  absorbs re-delivery, the ingestion leg drops it - decision 2).
 - Duplicate publishes are expected (crash between publish and mark, MD section 18).
   Poison events retry indefinitely in S3; backoff/caps are S7 robustness scope.
 - Routing (the one map, `app/outbox/events.py`): `source_item_ingestion_requested` ->
@@ -349,7 +447,10 @@ updated means a duplicate or stale delivery -> ack, no-op (decision 13).
   per-attempt runs cannot claim each other. Zero rows updated -> duplicate delivery or
   stale message -> ack, no-op. Missing subject rows -> ack, skip (absorbs stale queue
   messages, e.g. after e2e DB truncation).
-- fetching: pull raw bytes from Garage through the storage module.
+- fetching: pull raw bytes from Garage through the storage module, by the
+  `raw_object_key`/`content_hash` carried in the event payload (decision 13) - never by
+  rebuilding the key from item columns, which an S7 re-upload could have rewritten
+  since the run was queued.
 - processing: parser provider -> `NormalizedDocument` (title from filename; elements
   `{type, level?, text}`); document `content_hash` from the canonical JSON. A document
   with zero extractable elements (e.g. a scanned PDF) raises a parse error -> run
@@ -361,10 +462,12 @@ updated means a duplicate or stale delivery -> ack, no-op (decision 13).
   calls - the embed task keeps the same rule: `embed_documents` runs outside any
   transaction and the vector UPDATEs commit per batch (section 5.4).
 - Any failure -> run `failed` with the error text; the sources list derives it
-  (decision 12). A document-insert conflict on `unique(source_item_id, content_hash)` -
-  re-ingesting an identical version - marks the run `failed` with a clear message; the
-  claim guard should keep it unreachable in S3, the constraint is the database-level
-  backstop for S7's idempotency hardening.
+  (decision 12). A document-insert conflict on `unique(source_item_id, content_hash)`
+  cannot happen in S3 - one item per upload, one run per item, and the claim guard drops
+  re-deliveries - but if it ever fires (second round), the run becomes a no-op per MD
+  section 19's idempotency rule (identical version already processed: ack, mark the run
+  terminal against the existing document - not a `failed`), and the constraint stays
+  as the database-level backstop for S7's hardening.
 
 ### 5.4 Embed task (`embed_document`, queue `embed`)
 
@@ -432,7 +535,9 @@ rest of the API. Routers handle HTTP only; row creation + listing live in
   table**: filename, status chip, created date. Chip mapping: the four in-flight states
   render a blue "processing" style, `ready` green, `failed` red.
 - **Polling**: RTK Query `getSources` with `pollingInterval` = 2s while any row is
-  non-terminal, `false` once all rows are terminal (RTK Query's option name;
+  non-terminal, `0` once all rows are terminal (second round: the installed RTK Query
+  types type the option `number | undefined` - `false` fails the TypeScript build,
+  while `0` disables polling; and `pollingInterval` is RTK Query's option name,
   `refetchInterval` is TanStack Query's) - one endpoint drives the whole status UX,
   no extra status API.
 - New `sourcesApi` slice: `getSources` query + `uploadSource` mutation (multipart
@@ -446,31 +551,46 @@ rest of the API. Routers handle HTTP only; row creation + listing live in
 TDD throughout; pytest runs against real services from compose (slices spec section 6).
 The backend suite now requires db + RabbitMQ + Garage up (documented; no mocking of
 storage or broker).
+One pre-existing fix lands first, in its own commit (second round):
+`backend/alembic/env.py`'s stray `RAG_DATABASE_URL` override (backlog 2026-10-12) -
+the S3 migration and the fixtures must not build on that hazard.
 
 1. **Unit**: chunker golden documents; stub parser tests (committed tiny PDF fixture in
    `backend/tests/fixtures/` + an in-test generated docx); stub embedding
    (determinism, dimension, L2 normalization, empty text -> zero vector); object-key
    format; settings defaults; startup dimension guard (matching + mismatching catalog
-   fixtures -> refuse with the actionable message).
-2. **API/service (TestClient + rollback sessions)**: upload 201 + response shape + all
-   rows created (source, item, run `queued`, outbox event) + Garage object actually
-   written; validation 422s; editor/viewer 404; public-viewer GET ok / upload 404;
-   ingestion service end-to-end (fetch -> parse -> chunk -> one-commit persist, run
-   `indexing` + `document_id` linked, chunk `search_vector` matching the generated
-   column); duplicate delivery no-ops via claim guard (keyed by run id, decision 13);
-   garbage `.pdf` bytes -> `failed` with error text; embed service updates vectors in
-   place, conditional `ready` transition, idempotent re-run, batch boundaries; sources
-   list derives status + filename from the item's latest run (decision 12); project
-   delete with an uploaded source -> 204 and every cascaded row gone - the regression
-   that motivated the ON DELETE rules. `test_alembic` grows: the six new tables exist,
-   FK-index assertions per house style, and downgrade-to-base drops the `vector`
-   extension.
-3. **Outbox/worker integration (real RabbitMQ, `rag_test` vhost)**: seeded outbox rows
-   -> one dispatcher batch -> `published_at` set only after the broker confirm + the
-   message truly on the right queue (drained with a plain kombu consumer, no Celery
-   worker process); patched-publish failure -> `attempts`/`last_error` increment, row
-   retried next tick. The multi-process path (API -> broker -> dispatcher -> worker ->
-   DB) is proven by the e2e, keeping pytest fast.
+   fixtures -> refuse with the actionable message) and the `worker_init` handler itself
+   -> `SystemExit`, so Celery's Exception-swallowing signal dispatch cannot boot a
+   mismatched worker (section 4.3).
+2. **API/service (TestClient + savepoint-rollback sessions)**: upload 201 + response
+   shape + all rows created (source, item, run `queued`, outbox event with the full
+   payload) + Garage object actually written + **no DB transaction open across the
+   storage call** (second round: the storage client is patched to capture the
+   session's transaction state during the PUT - this pins the commit-vs-rollback trap
+   of section 5.1 step 4); validation 422s; editor/viewer 404; public-viewer GET ok /
+   upload 404; ingestion service end-to-end (fetch -> parse -> chunk -> one-commit
+   persist, run `indexing` + `document_id` linked, chunk `search_vector` matching the
+   generated column); duplicate delivery no-ops via claim guard (keyed by run id,
+   decision 13); garbage `.pdf` bytes -> `failed` with error text; embed service
+   updates vectors in place, conditional `ready` transition, idempotent re-run, batch
+   boundaries; sources list derives status + filename from the item's latest run
+   (decision 12); project delete with a **fully ingested** source - item + document +
+   chunks + run with `document_id` set (second round, so both cascade paths into
+   `chunks` and `ingestion_runs` are exercised, and `passive_deletes` is honest) -> 204
+   and every cascaded row gone - the regression that motivated the ON DELETE rules.
+   `test_alembic` grows: the six new tables exist, FK-index assertions per house style
+   (leading columns, section 4.3), and downgrade-to-base drops the `vector` extension.
+3. **Outbox/worker integration (real RabbitMQ, `rag_test` vhost)**: a session fixture
+   creates the `rag_test` vhost and grants `guest` on it via the 15672 management API
+   (both calls idempotent; decision 14) and reads `RAG_TEST_BROKER_URL`, so the
+   dispatcher under test runs on an injected `rag_test` app - never the module-level
+   dev default. The queues are purged before seeding (a failed run leaves messages
+   behind; a later run must not inherit them). Seeded rows -> one dispatcher batch ->
+   `published_at` set only after the broker confirm + the message truly on the right
+   queue (read with a plain kombu consumer, no Celery worker process); patched-publish
+   failure -> `attempts`/`last_error` increment, row retried next tick. The
+   multi-process path (API -> broker -> dispatcher -> worker -> DB) is proven by the
+   e2e, keeping pytest fast.
 4. **Frontend vitest**: upload posts `FormData` (MSW); Upload disabled while pending;
    client-side rejections; server 422/503 friendly copy; table rows + chips; polling
    stops at terminal; project 404 state; list-row navigation.
@@ -478,9 +598,18 @@ storage or broker).
    (8001, `rag_e2e` DB; the entry also runs `e2e_db.py bootstrap`, which creates the
    database *and* the `rag_e2e` vhost, decision 14) + celery worker `--pool=solo` on
    the `rag_e2e` vhost + the dispatcher on the same vhost + Vite (5173 -> 8001). The
-   worker and dispatcher expose no ready URL, so each logs one ready line (the worker
-   via Celery's `worker_ready` signal) and their entries wait on stdout
-   (`webServer.wait`, supported by the installed Playwright 1.64) with real timeouts.
+   entry array's order is load-bearing (second round): the installed Playwright 1.64
+   starts `webServer` entries one at a time, in array order, waiting for each to be
+   ready - so the bootstrap entry (which rebuilds `rag_e2e`) necessarily precedes the
+   worker and dispatcher entries. The worker and dispatcher expose no ready URL, so
+   each logs one ready line (the worker via Celery's `worker_ready` signal) and its
+   entry waits on it via `webServer.wait` - on **stderr** (second round), with real
+   timeouts: Celery logs to stderr, and its default `worker_redirect_stdouts` sends
+   even `print()` output there, so a stdout wait never fires and the entry times out;
+   the dispatcher logs its ready line to stderr too, since piped Python stdout is
+   block-buffered and an unflushed `print` may never arrive. The worker's ready line
+   must be visible at its default WARNING log level (or the entry passes
+   `--loglevel=INFO`).
    Journey: register -> open the Default project -> upload the committed tiny PDF
    fixture (shared from `backend/tests/fixtures/`) + a runtime-generated .docx (small
    script using python-docx) -> both chips reach `Ready` with an explicit assertion
@@ -495,12 +624,19 @@ separate gate, never in the default run.
 
 ## 9. Docs and runbook updates
 
-- README backend runbook: compose services (Garage with its fixed dev credentials),
-  the three dev commands (section 3.5), test prerequisites (db + RabbitMQ + Garage, and
-  the test vhost). The pre-existing "README lacks web instructions" backlog item remains
-  a separate docs task; S3 adds only what it introduces.
-- The slices spec's S3 roadmap row and preview section still say MinIO; those
-  references flip to Garage with this slice so the two docs do not contradict.
+- README backend runbook: compose services (Garage with its fixed dev credentials,
+  including the warning that changing `GARAGE_DEFAULT_SECRET_KEY` after first start
+  bricks the volume until the Garage metadata volume is wiped - section 3.2), the
+  three dev commands (section 3.5), test prerequisites (db + RabbitMQ + Garage, and
+  the test vhost). The pre-existing "README lacks web instructions" backlog item
+  remains a separate docs task; S3 adds only what it introduces.
+- Slices-spec sync (second round): the S3 roadmap row and the preview section flipped
+  to Garage with the first review round (`8f6ad96`), so this slice touches no other
+  `2026-10-06-rag-mvp-slices-design.md` text. The slices spec's one remaining MinIO
+  mention (its section 7 next-step line) flips with the slice-completion status update
+  below, and its S7 row keeps "Celery Beat sync polling" as an open option, because
+  decision 3 no longer decides S7's scheduler (S7's round picks between extending the
+  dispatcher loop and a standalone `celery beat` process).
 - At slice completion this spec's status and the slices spec's S3 row flip to
   implemented (as S2 did).
 
@@ -525,7 +661,9 @@ replacement/deletion and activation semantics, stuck-run recovery, retries/backo
 poison-event caps, source delete, ingestion-run status surfacing in the UI (S7); the
 API-side dimension guard (S4); website connector + multi-item sources (`url`,
 `remote_version`, `last_seen_at`, `deleted_at`, `sources.config`) (S9); table, code, and
-image_caption chunk types; pagination; batch/multi-file upload; queue purging; Celery
+image_caption chunk types; pagination; batch/multi-file upload; queue purging (as a
+product feature - the pytest fixture's pre-seed purge in section 8 is test hygiene);
+Celery
 result backends; auth changes.
 
 ## 12. Done when
