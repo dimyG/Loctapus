@@ -21,6 +21,11 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 
 ## Todo later
 
+- 2026-10-12 - README.md covers only the backend: the done-summary does not mention the
+  landed S2 web UI, and Setup/Run/Test have no `web/` instructions (npm install,
+  `npm run dev`, vitest, Playwright). Predates S2 (README created at `7b1e1d2`);
+  flagged by the review of the S2-done/S3-split spec update (`1601822`, `9c07b18`).
+  Needs a dedicated docs pass adding the web setup/run/test sections.
 - 2026-10-12 - vitest suite under extreme parallel load (S2 footer/about work, commits up to
   `1f3c76d`): running three full `npm run test` suites concurrently on this machine starves
   jsdom workers; userEvent typing tests (RegisterPage "does not post on mismatch", LoginPage
