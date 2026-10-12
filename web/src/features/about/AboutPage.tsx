@@ -10,6 +10,7 @@ export default function AboutPage() {
         <Typography component="h1" variant="h3" sx={{ fontWeight: 600 }}>
           About RAG
         </Typography>
+        {/* Draft copy pending the owner's review; do not treat as final product text. */}
         <Typography variant="body1" color="text.secondary">
           RAG is a retrieval-augmented generation workspace. Group your documents into projects and
           teams, then ask questions grounded in your own material instead of a general-purpose

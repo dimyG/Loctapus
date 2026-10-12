@@ -10,11 +10,13 @@ import ProjectsPage from "../projects/ProjectsPage";
 import LandingPage from "./LandingPage";
 
 /** Builds the authed preloaded state the redirect tests seed. */
-function authedState(status: "idle" | "busy" | "booting" = "idle") {
+function authedState(status: "idle" | "busy" = "idle") {
   return {
     ...initialRootState(),
     auth: {
-      token: status === "idle" ? "t-1" : null,
+      // The reachable mid-sign-out window keeps the stale token alongside
+      // the still-hydrated user; only sessionCleared clears both.
+      token: "t-1",
       user: { id: "u-1", email: "user@example.test" },
       status,
     },
