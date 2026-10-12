@@ -150,7 +150,7 @@ Verification (backend, unchanged): `ruff check .`, `ruff format --check .`, `myp
 
 ## 10. Out of scope (S2 bounds)
 
-Project detail/edit/delete UI, public-projects browsing UI, upload/query UI (S3), answer UI (S5), profile page, team management UI, dark-mode toggle, i18n, any auth backend change beyond §7's CORS, production deployment, password reset, refresh tokens, httpOnly cookies.
+Project detail/edit/delete UI, public-projects browsing UI, upload/query UI (S3+S4), answer UI (S6), profile page, team management UI, dark-mode toggle, i18n, any auth backend change beyond §7's CORS, production deployment, password reset, refresh tokens, httpOnly cookies.
 
 ## 11. Done when
 
