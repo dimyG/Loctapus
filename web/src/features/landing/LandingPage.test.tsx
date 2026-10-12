@@ -9,6 +9,18 @@ import RegisterPage from "../auth/RegisterPage";
 import ProjectsPage from "../projects/ProjectsPage";
 import LandingPage from "./LandingPage";
 
+/** Builds the authed preloaded state the redirect tests seed. */
+function authedState(status: "idle" | "busy" | "booting" = "idle") {
+  return {
+    ...initialRootState(),
+    auth: {
+      token: status === "idle" ? "t-1" : null,
+      user: { id: "u-1", email: "user@example.test" },
+      status,
+    },
+  };
+}
+
 /** Renders the landing page at "/" behind the routes it links and redirects within. */
 function renderLanding(preloadedState = initialRootState()) {
   return renderWithProviders(
@@ -42,15 +54,18 @@ describe("LandingPage", () => {
   });
 
   it("redirects authenticated visitors to the projects page", () => {
-    renderLanding({
-      ...initialRootState(),
-      auth: {
-        token: "t-1",
-        user: { id: "u-1", email: "user@example.test" },
-        status: "idle",
-      },
-    });
+    renderLanding(authedState());
     expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
+  });
+
+  it("renders the landing for a busy session instead of redirecting", () => {
+    // Sign-out clears the session while the router lands on "/"; a render
+    // can still see the stale user mid-transition. Redirecting then would
+    // land the user on the guarded /projects, which bounces to /login
+    // once the session clears - the race RequireAuth's splash prevents.
+    renderLanding(authedState("busy"));
+    expect(screen.getByRole("heading", { name: /searchable by meaning/i })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/");
   });
 
   it("navigates to register through the router", async () => {

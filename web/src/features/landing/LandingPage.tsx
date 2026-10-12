@@ -5,7 +5,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { Link as RouterLink, Navigate } from "react-router";
 import { useAppSelector } from "../../app/hooks";
-import { selectUser } from "../auth/authSlice";
+import { selectAuthStatus, selectUser } from "../auth/authSlice";
 import MarketingLayout from "../../layouts/MarketingLayout";
 
 const steps = [
@@ -27,9 +27,13 @@ const steps = [
 export default function LandingPage() {
   // The hydrated user, not the stored token, drives the redirect: a visitor
   // whose token has gone stale must stay on the public landing instead of
-  // being bounced to /login by the guarded route.
+  // being bounced to /login by the guarded route. Only settled sessions
+  // redirect: during sign-out the stale user rides along with a "busy"
+  // status, and redirecting then would land the user on /projects, which
+  // bounces to /login once the session clears (spec 6.2).
   const user = useAppSelector(selectUser);
-  if (user !== null) {
+  const status = useAppSelector(selectAuthStatus);
+  if (user !== null && status === "idle") {
     return <Navigate to="/projects" replace />;
   }
 
