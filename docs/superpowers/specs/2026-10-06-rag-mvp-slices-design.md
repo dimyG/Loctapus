@@ -12,7 +12,7 @@ Environment (verified 2026-10-06):
 - Windows 10, working dir `D:\Projects\RAG` (not yet a git repo at design time)
 - Docker 29.6.2 + Docker Compose v5.3.1 available
 - Python 3.14.7 venv at `.venv` (currently pip-only)
-- Node 24.14.1 / npm 11.20.0 (for the web UI, which arrives at S2)
+- Node 24.14.1 / npm 11.20.0 (for the web UI, which landed at S2)
 
 Decisions confirmed with the user:
 
