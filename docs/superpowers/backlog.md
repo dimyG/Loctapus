@@ -33,6 +33,13 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
   and never seen on single runs. The root-redirect test additionally starved React transitions
   until it got a real 5s wait budget (`fd71039`); a 4-arg `findByRole` call had silently dropped
   the timeout option. Candidate fix: vitest `pool: "vmThreads"` per its environment hint.
+- 2026-10-12 - Changing the embedding model or `RAG_EMBEDDING_DIM` (S5 swaps the stub for
+  Voyage) invalidates every stored vector, so it needs re-embedding, not just a dimension
+  migration: clear `chunks.embedding`, re-enqueue a `document_ready_for_embedding` outbox
+  event per existing document, and let sources travel indexing -> ready again.
+  Re-embedding can run from persisted `chunks.text`, so no re-parse is needed. The S3
+  spec/plan add the matching `Settings.embedding_dim` comment (dimension changes require
+  an Alembic migration); this re-embedding flow is the deferred half.
 - The 2026-10-09 pending human visual pass should now also cover the shared site footer on all
   layouts and the /about page (commits `4d6b83f`, `af03aa2`, `52d3b58`).
 - Frontend JWT lives in localStorage (chosen at the S2 design round, 2026-10-09): a script
