@@ -61,6 +61,13 @@ cd backend
 Before finishing a change, `ruff check .` and `mypy app tests` must also pass
 (see `AGENTS.md`).
 
+## Line endings
+
+`.gitattributes` pins every text file to LF (the web toolchain's prettier
+enforces LF). Clones made before that file exist need a one-time refresh -
+`git add --renormalize .` - or `prettier --check .` fails on identical
+committed content with CRLF working copies.
+
 ## Further reading
 
 - Slice design: `docs/superpowers/specs/2026-10-06-rag-mvp-slices-design.md`

@@ -6,6 +6,19 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-12 - post-merge review of the sign-out race fix (`be2f039`)
+
+- A hung `/auth/logout` revocation POST can clobber a fresh login: if the
+  revocation outlasts a full sign-out then sign-in round trip, the late
+  `logoutUser.fulfilled` matcher nulls the new session and bounces the user
+  off /projects once (self-heals on reload; the old code had the same clobber
+  with `idle`). Candidate fix: check the request id in the matcher, or
+  serialize the thunks.
+- `RequireAuth`'s `signedout` destination and `UserMenu`'s sign-out
+  `navigate("/")` are string-coupled; a shared constant would make the
+  coupling structural. Both docstrings document it today.
+
+
 ## Todo later
 
 - 2026-10-12 - vitest suite under extreme parallel load (S2 footer/about work, commits up to
