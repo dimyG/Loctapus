@@ -70,7 +70,8 @@ describe("UserMenu", () => {
     const user = userEvent.setup();
     await openMenu(user);
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
-    // The landing renders immediately; the async thunk clears the session.
+    // The session clears during the click handler; the landing renders with
+    // no user, so the authed-visitor redirect never fires mid-sign-out.
     expect(
       await screen.findByRole("heading", { name: /searchable by meaning/i }),
     ).toBeInTheDocument();

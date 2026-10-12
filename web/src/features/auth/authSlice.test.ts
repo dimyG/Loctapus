@@ -101,6 +101,16 @@ describe("auth session", () => {
     await action;
   });
 
+  it("a completed sign-out settles the session as signedout, never idle", async () => {
+    // The guard must be able to tell a just-signed-out session (route home)
+    // from an expired one (route to /login); "idle" after logout erases that
+    // distinction and reopens the sign-out race the e2e suite caught.
+    saveToken("t-login");
+    const testStore = makeStore({ ...initialRootState(), ...authenticated });
+    await testStore.dispatch(logoutUser());
+    expect(testStore.getState().auth.status).toBe("signedout");
+  });
+
   it("keeps the stored token when bootstrap fails for a non-401 reason", async () => {
     server.use(http.get("*/users/me", () => HttpResponse.error()));
     saveToken("t-keep");

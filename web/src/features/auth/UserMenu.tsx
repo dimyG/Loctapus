@@ -25,12 +25,14 @@ export default function UserMenu() {
 
   function handleSignOut() {
     setAnchor(null);
-    // Navigate before dispatching: the thunk clears the token, which the
-    // RequireAuth guard would otherwise read as "bounced to /login". The
-    // sign-out flow lands on the public landing (spec 6.2), and the thunk
-    // never rejects (revocation is best-effort).
-    navigate("/", { replace: true });
+    // Clear the session before navigating: logoutUser's synchronous section
+    // (pending -> busy, sessionCleared -> user/token null) applies during the
+    // dispatch call, so the landing can only ever render user=null and the
+    // authed-visitor redirect cannot fire mid-sign-out. The thunk settles as
+    // "signedout", so the guard routes home (never to /login) even if its
+    // re-render interleaves with the navigation (spec 6.2).
     void dispatch(logoutUser());
+    navigate("/", { replace: true });
   }
 
   return (

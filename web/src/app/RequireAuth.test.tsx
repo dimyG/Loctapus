@@ -8,6 +8,7 @@ import RequireAuth from "./RequireAuth";
 function renderGuarded(preloadedState = initialRootState()) {
   return renderWithProviders(
     <Routes>
+      <Route path="/" element={<div>landing-page</div>} />
       <Route path="/login" element={<div>login-page</div>} />
       <Route
         path="/projects"
@@ -56,5 +57,18 @@ describe("RequireAuth", () => {
     });
     expect(screen.getByText("Preparing your workspace")).toBeInTheDocument();
     expect(screen.queryByText("projects-page")).not.toBeInTheDocument();
+  });
+
+  it("sends a signed-out session to the public landing, never to /login", () => {
+    // After a completed sign-out the session is "signedout", not "idle":
+    // idle + no token means the session expired and must re-authenticate,
+    // while signedout means the sign-out flow owns routing and its target
+    // is the landing page. Bouncing here reopens the sign-out race.
+    renderGuarded({
+      ...initialRootState(),
+      auth: { token: null, user: null, status: "signedout" },
+    });
+    expect(screen.getByText("landing-page")).toBeInTheDocument();
+    expect(screen.queryByText("login-page")).not.toBeInTheDocument();
   });
 });

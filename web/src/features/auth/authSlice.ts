@@ -10,7 +10,13 @@ import { sessionCleared, sessionExpired } from "./sessionActions";
 type RejectsApiError = { rejectValue: FetchBaseQueryError };
 
 export type AuthUser = { id: string; email: string };
-export type AuthStatus = "idle" | "booting" | "busy";
+/**
+ * The session lifecycle. "signedout" is distinct from "idle": the auth
+ * guard routes a signed-out session home (the sign-out flow owns routing)
+ * while idle-without-token means the session expired and must
+ * re-authenticate. Collapsing them reopens the sign-out race.
+ */
+export type AuthStatus = "idle" | "booting" | "busy" | "signedout";
 export type AuthState = { token: string | null; user: AuthUser | null; status: AuthStatus };
 export type Credentials = { email: string; password: string };
 
@@ -194,7 +200,9 @@ const authSlice = createSlice({
       .addMatcher(isAnyOf(logoutUser.fulfilled, logoutUser.rejected), (state) => {
         state.token = null;
         state.user = null;
-        state.status = "idle";
+        // Not "idle": the guard must distinguish just-signed-out (route to
+        // the public landing) from expired (route to /login).
+        state.status = "signedout";
       });
   },
 });
