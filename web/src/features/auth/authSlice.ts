@@ -216,7 +216,7 @@ type WithAuth = { auth: AuthState };
 /** The whole auth slice. */
 export const selectAuth = (state: WithAuth): AuthState => state.auth;
 
-/** The session lifecycle: idle, booting (token present, user pending), busy. */
+/** The session lifecycle: idle, booting (token present, user pending), busy, signedout. */
 export const selectAuthStatus = (state: WithAuth): AuthStatus => state.auth.status;
 
 /** The hydrated session user, or null when signed out / still booting. */

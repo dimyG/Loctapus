@@ -111,6 +111,20 @@ describe("auth session", () => {
     expect(testStore.getState().auth.status).toBe("signedout");
   });
 
+  it("signing back in from a signed-out session returns the session to idle", async () => {
+    // The recovery path out of "signedout"; pinned in the fast suite so a
+    // future status change cannot strand the state machine there (the e2e
+    // suite covers it, but too slowly to guard a refactor).
+    saveToken("t-login");
+    const testStore = makeStore({ ...initialRootState(), ...authenticated });
+    await testStore.dispatch(logoutUser());
+    await testStore.dispatch(loginUser({ email: "user@example.test", password: "password123" }));
+    const state = testStore.getState().auth;
+    expect(state.status).toBe("idle");
+    expect(state.token).toBe("t-login");
+    expect(state.user).toEqual({ id: "u-1", email: "user@example.test" });
+  });
+
   it("keeps the stored token when bootstrap fails for a non-401 reason", async () => {
     server.use(http.get("*/users/me", () => HttpResponse.error()));
     saveToken("t-keep");
