@@ -33,13 +33,25 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
   and never seen on single runs. The root-redirect test additionally starved React transitions
   until it got a real 5s wait budget (`fd71039`); a 4-arg `findByRole` call had silently dropped
   the timeout option. Candidate fix: vitest `pool: "vmThreads"` per its environment hint.
-- 2026-10-12 - Changing the embedding model or `RAG_EMBEDDING_DIM` (S5 swaps the stub for
-  Voyage) invalidates every stored vector, so it needs re-embedding, not just a dimension
-  migration: clear `chunks.embedding`, re-enqueue a `document_ready_for_embedding` outbox
-  event per existing document, and let sources travel indexing -> ready again.
-  Re-embedding can run from persisted `chunks.text`, so no re-parse is needed. The S3
-  spec/plan add the matching `Settings.embedding_dim` comment (dimension changes require
-  an Alembic migration); this re-embedding flow is the deferred half.
+- 2026-10-12 - Changing the embedding model or dimension (S5 swaps the stub constant
+  `STUB_EMBEDDING_DIM` for Voyage) invalidates every stored vector, so it needs
+  re-embedding, not just a dimension migration: clear `chunks.embedding`, re-enqueue a
+  `document_ready_for_embedding` outbox event per existing document, and let sources
+  travel indexing -> ready again. Re-embedding can run from persisted `chunks.text`, so
+  no re-parse is needed. The S3 spec adds the matching `STUB_EMBEDDING_DIM` comment
+  (dimension changes require an Alembic migration); this re-embedding flow is the
+  deferred half.
+- 2026-10-12 - `backend/alembic/env.py` lets a stray `RAG_DATABASE_URL` environment
+  variable override the URL the pytest fixtures configure, so a configured shell can
+  make `pytest` migrate - and `test_migrations_downgrade_to_base` drop every table of -
+  an unrelated database. Flagged by the 2026-10-12 S3 spec review (branch
+  `s3-spec-review-fixes`); fix before S3's migration work relies on that env var.
+- 2026-10-12 - S7 needs stuck-run recovery (S3 spec section 10 risk table): a worker
+  crash mid-run leaves its `ingestion_runs` row - and the derived source status -
+  non-terminal forever, and S3 deliberately has no re-drive path (the claim guard
+  rejects re-delivery of a non-queued run). A stale-run sweep/re-drive belongs with
+  the S7 robustness work. Flagged by the 2026-10-12 S3 spec review (branch
+  `s3-spec-review-fixes`).
 - The 2026-10-09 pending human visual pass should now also cover the shared site footer on all
   layouts and the /about page (commits `4d6b83f`, `af03aa2`, `52d3b58`).
 - Frontend JWT lives in localStorage (chosen at the S2 design round, 2026-10-09): a script

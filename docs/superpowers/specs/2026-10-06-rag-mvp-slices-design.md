@@ -32,7 +32,7 @@ Guiding principles carried over from the MD (§29–30): replaceable providers b
 | **S0 - Scaffolding** ✅ done | git init; backend layout; pyproject + deps; settings/config; docker-compose (Postgres+pgvector, RabbitMQ, MinIO); Alembic; `/health`; pytest harness | `docker compose up` → API healthy, tests run |
 | **S1 - Identity & projects** ✅ done | users/workspaces/teams tables (long-term model, single-user flow); JWT register/login; projects CRUD | Register → login → create/list/delete projects via API, all tested |
 | **S2 - Web UI foundations** ✅ done | Devias Kit / React / Redux on Vite (SPA) in `web/`: landing; register/login/logout; projects list + create (team picked from the user's workspaces/teams), wired to the existing S1 API | Register → login → logout → list/create projects from a browser, all tested |
-| **S3 - Upload & ingestion (stub providers) + upload UI** | PDF/DOCX upload → MinIO; Celery ingestion (stub parser → normalize → chunk); chunks + outbox event in one transaction; outbox dispatcher → `embed` queue → stub embeddings; HNSW + GIN indexes; frontend: project page, upload PDF/DOCX, processing status | Upload a real PDF from the browser and watch it reach `ready` - fully offline |
+| **S3 - Upload & ingestion (stub providers) + upload UI** | PDF/DOCX upload → Garage; Celery ingestion (stub parser → normalize → chunk); chunks + outbox event in one transaction; outbox dispatcher → `embed` queue → stub embeddings; HNSW + GIN indexes; frontend: project page, upload PDF/DOCX, processing status | Upload a real PDF from the browser and watch it reach `ready` - fully offline |
 | **S4 - Retrieval (stub providers) + query UI** | `POST /projects/{id}/retrieve` (vector + FTS + RRF, no rerank); basic `query_logs`; frontend: question view on the project page, ask → ranked grounded chunks | Ask a question from the browser, get ranked grounded chunks back - fully offline |
 | **S5 - Real providers + rerank + API keys + keys/query UI** | Unstructured hosted parser; Voyage `voyage-4-lite` embeddings (dimension config + migration); Voyage `rerank-3-lite` + local diversity filter (`max_chunks_per_document`); project-scoped API keys authorizing `/retrieve`; frontend: project API-key management; rerank + `max_chunks_per_document` controls in the query UI | Same flow works with real keys; `rerank=true/false` both work from the UI |
 | **S6 - `/answer` + chat UI** | LLM provider interface + Groq `openai/gpt-oss-20b`; grounded-context prompt; `/answer` calls retrieval internally; frontend: answer in a simple AI-chat style with cited chunks | Question → answer grounded in cited chunks, from the browser |
@@ -57,7 +57,7 @@ D:\Projects\RAG\
       ingestion/    # (S3) connectors, chunking, pipeline tasks
       retrieval/    # (S4) query pipeline — clean module boundary, future service split
       providers/    # parser / embedding / reranker / llm interfaces + impls, selected via settings
-      storage/      # (S3) S3/MinIO abstraction
+      storage/      # (S3) S3 abstraction (Garage in dev)
       workers/      # (S3) celery app, tasks, outbox dispatcher
     alembic/
     tests/
@@ -127,8 +127,8 @@ Devias Kit / React / Redux SPA on Vite in `web/` (the MD's Next.js (§2, §24) s
 
 ### S3 - Upload & ingestion (stub providers) + upload UI
 
-- **Upload flow**: `POST /projects/{id}/sources` (multipart) → raw file to MinIO → `sources` + `source_items` + `ingestion_runs` rows → enqueue ingestion → return source + status. Status polling via `GET /projects/{id}/sources`. Status values per MD §6: queued | fetching | processing | indexing | ready | failed.
-- **Ingestion task**: fetch raw from MinIO → parser interface (stub: pypdf / python-docx; interface shaped for Unstructured's element model) → normalized document JSON → structure-aware recursive chunker (target 500–700 tokens, max ~1000, overlap ~80 — settings, not constants) → **one DB transaction**: document + chunks + `document_ready_for_embedding` outbox event → dispatcher (poll ~1s) publishes to RabbitMQ `embed` queue → embed worker batches stub embeddings → writes vectors → marks ready. Consumers idempotent (MD §19).
+- **Upload flow**: `POST /projects/{id}/sources` (multipart) → raw file to Garage → `sources` + `source_items` + `ingestion_runs` rows → enqueue ingestion → return source + status. Status polling via `GET /projects/{id}/sources`. Status values per MD §6: queued | fetching | processing | indexing | ready | failed.
+- **Ingestion task**: fetch raw from Garage → parser interface (stub: pypdf / python-docx; interface shaped for Unstructured's element model) → normalized document JSON → structure-aware recursive chunker (target 500–700 tokens, max ~1000, overlap ~80 — settings, not constants) → **one DB transaction**: document + chunks + `document_ready_for_embedding` outbox event → dispatcher (poll ~1s) publishes to RabbitMQ `embed` queue → embed worker batches stub embeddings → writes vectors → marks ready. Consumers idempotent (MD §19).
 - **Indexes**: HNSW on the pgvector embedding column + GIN for full-text search, created with this slice's schema; S4's retrieval queries rely on them.
 - **Frontend pairing**: project page with upload + processing status.
 
