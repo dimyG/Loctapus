@@ -21,6 +21,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models import Base
 
+# The projects and source_items tables are string-named FK targets here, and the
+# worker imports only this module's chain (never the API routers), so they must
+# load with us; mapper configuration is also global over the shared registry.
+from app.projects import models as projects_models  # noqa: F401
+from app.sources import models as sources_models  # noqa: F401
+
 
 class Document(Base):
     """A normalized parsed document, fingerprinted by its canonical JSON hash."""
