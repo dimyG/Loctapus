@@ -34,6 +34,38 @@ def test_identity_tables_exist(*, engine: Engine) -> None:
     } <= names
 
 
+def test_ingestion_tables_exist(*, engine: Engine) -> None:
+    """Check that migrations created the six S3 tables."""
+
+    with engine.connect() as conn:
+        names = set(inspect(conn).get_table_names())
+    assert {
+        "sources",
+        "source_items",
+        "documents",
+        "chunks",
+        "ingestion_runs",
+        "outbox_events",
+    } <= names
+
+
+def test_vector_and_fulltext_indexes(*, engine: Engine) -> None:
+    """Check that chunks carries the HNSW and GIN indexes and the outbox its partial index."""
+
+    with engine.connect() as conn:
+        chunk_defs = (
+            conn.execute(text("SELECT indexdef FROM pg_indexes WHERE tablename = 'chunks'")).scalars().all()
+        )
+        outbox_defs = (
+            conn.execute(text("SELECT indexdef FROM pg_indexes WHERE tablename = 'outbox_events'"))
+            .scalars()
+            .all()
+        )
+    assert any("USING hnsw (embedding vector_cosine_ops)" in definition for definition in chunk_defs)
+    assert any("USING gin (search_vector)" in definition for definition in chunk_defs)
+    assert any("published_at IS NULL" in definition for definition in outbox_defs)
+
+
 def test_citext_email_case_insensitive(*, engine: Engine, db_session: Session) -> None:
     """Check that the migrated email column matches case-insensitively."""
 
@@ -71,22 +103,27 @@ def test_foreign_key_columns_are_indexed(*, engine: Engine) -> None:
 
     # Postgres does not index foreign keys automatically; the composite uniques cover
     # team_memberships.team_id and project_team_roles.project_id as leading columns only.
+    # Only each index's leading column proves an FK is served: a non-leading column of a
+    # composite index does not serve lookups on that column alone.
     expected = {
         "workspaces": {"owner_user_id"},
         "teams": {"workspace_id"},
         "projects": {"workspace_id"},
         "team_memberships": {"user_id"},
         "project_team_roles": {"team_id"},
+        "sources": {"project_id"},
+        "chunks": {"project_id"},
+        "ingestion_runs": {"document_id", "source_item_id"},
     }
     with engine.connect() as conn:
         insp = inspect(conn)
         for table, columns in expected.items():
-            indexed = {col for index in insp.get_indexes(table) for col in index["column_names"]}
-            assert columns <= indexed, f"{table}: {columns - indexed} not indexed"
+            leading = {index["column_names"][0] for index in insp.get_indexes(table)}
+            assert columns <= leading, f"{table}: {columns - leading} not indexed"
 
 
 def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
-    """Check that downgrading to base drops every table and the citext extension."""
+    """Check that downgrading to base drops every table and the citext and vector extensions."""
 
     url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
     admin_url = url.rsplit("/", 1)[0] + "/postgres"
@@ -112,6 +149,7 @@ def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
             assert set(inspect(conn).get_table_names()) <= {"alembic_version"}
             extensions = conn.execute(text("SELECT extname FROM pg_extension")).scalars().all()
             assert "citext" not in extensions
+            assert "vector" not in extensions
     finally:
         scratch.dispose()
         _terminate_and_drop(admin=admin, db_name=db_name)
