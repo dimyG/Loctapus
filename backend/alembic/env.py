@@ -8,6 +8,7 @@ from app.identity import models as identity_models  # noqa: F401
 from app.ingestion import models as ingestion_models  # noqa: F401
 from app.outbox import models as outbox_models  # noqa: F401
 from app.projects import models as projects_models  # noqa: F401
+from app.sources import models as sources_models  # noqa: F401
 
 config = context.config
 
