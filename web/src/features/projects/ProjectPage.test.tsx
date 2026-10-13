@@ -289,6 +289,39 @@ describe("ProjectPage", () => {
     }
   });
 
+  it("shows a friendly error state and stops polling when the sources list fails", async () => {
+    let gets = 0;
+    server.use(
+      http.get("*/projects/p-1/sources", () => {
+        gets += 1;
+        return HttpResponse.json({ detail: "boom" }, { status: 500 });
+      }),
+    );
+    vi.useFakeTimers();
+    try {
+      renderProject();
+      // The request fires immediately; the failed response settles on the
+      // next clock flush, replacing the skeleton with the error state.
+      await advance(0);
+      await advance(500);
+      expect(
+        screen.getByText("Could not load the document list. Please try again."),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+      // The failure must not read as an empty list: no table, no empty-state copy.
+      expect(screen.queryByText("Filename")).not.toBeInTheDocument();
+      expect(screen.queryByText("No documents uploaded yet.")).not.toBeInTheDocument();
+
+      // From the error state on, no request may fire for three poll periods:
+      // whatever ran before the failure was known is the baseline.
+      const getsAtError = gets;
+      await advance(6000);
+      expect(gets).toBe(getsAtError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows a not-found state when the project does not exist", async () => {
     server.use(
       http.get("*/projects/p-1", () =>

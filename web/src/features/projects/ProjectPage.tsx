@@ -124,13 +124,33 @@ export default function ProjectPage() {
     [projectId],
   );
   const cachedSources = useAppSelector(selectCachedSources);
-  const projectMissing = errorStatus(projectError) === 404;
-  const sourcesPending =
-    cachedSources === undefined || cachedSources.some((source) => !isTerminal(source.status));
-  const { data: sources, isLoading: sourcesLoading } = useGetSourcesQuery(
-    projectMissing || projectId === undefined ? skipToken : projectId,
-    { pollingInterval: sourcesPending ? POLL_INTERVAL_MS : 0 },
+  // The cached error is read through the store selector for the same reason as
+  // the cached list: it must be available before the query hook call so a
+  // failed fetch can drop the polling interval to 0 in the very next commit.
+  const selectCachedSourcesError = useMemo<
+    (state: RootState) => FetchBaseQueryError | SerializedError | undefined
+  >(
+    () =>
+      projectId === undefined ? () => undefined : (state) => selectSources(projectId)(state).error,
+    [projectId],
   );
+  const cachedSourcesError = useAppSelector(selectCachedSourcesError);
+  const projectMissing = errorStatus(projectError) === 404;
+  // An error with nothing cached is terminal for polling: retrying on the poll
+  // period would hammer a failing endpoint while the page keeps showing no
+  // rows. With cached rows the pipeline statuses still decide.
+  const sourcesPending =
+    cachedSources === undefined
+      ? cachedSourcesError === undefined
+      : cachedSources.some((source) => !isTerminal(source.status));
+  const {
+    data: sources,
+    isLoading: sourcesLoading,
+    error: sourcesError,
+    refetch: refetchSources,
+  } = useGetSourcesQuery(projectMissing || projectId === undefined ? skipToken : projectId, {
+    pollingInterval: sourcesPending ? POLL_INTERVAL_MS : 0,
+  });
 
   /** Runs the client checks, then hands the file to the upload mutation. */
   async function handleFileChosen(event: ChangeEvent<HTMLInputElement>) {
@@ -231,6 +251,17 @@ export default function ProjectPage() {
             ))}
           </TableBody>
         </Table>
+      ) : sourcesError !== undefined && sources === undefined ? (
+        // Nothing cached and the fetch failed: a retryable message, never a
+        // bare table that looks identical to an empty project.
+        <Stack spacing={2} sx={{ mt: 3, py: 8, alignItems: "center" }}>
+          <Typography color="text.secondary">
+            Could not load the document list. Please try again.
+          </Typography>
+          <Button variant="outlined" onClick={() => refetchSources()}>
+            Try again
+          </Button>
+        </Stack>
       ) : (
         <Box sx={{ mt: 3, overflowX: "auto" }}>
           <Table>
