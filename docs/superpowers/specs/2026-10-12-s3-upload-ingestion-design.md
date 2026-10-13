@@ -1,8 +1,7 @@
 # S3 - Upload & Ingestion (stub providers) + Upload UI - Design
 
 Date: 2026-10-12
-Status: Approved design; ready for the implementation plan (two review rounds applied,
-both 2026-10-12; the second round's changes say so where they amend first-round text).
+Status: Implemented on master (S3).
 Source of truth: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD") and
 `2026-10-06-rag-mvp-slices-design.md` (the "slices spec"). Where those disagree with this
 document on S3 topics, this document wins; where this document is silent, they govern.

@@ -7,7 +7,7 @@ ingestion and retrieval build on top in later slices.
 ## Prerequisites
 
 - Python 3.14
-- Docker (for Postgres/pgvector, RabbitMQ, and MinIO)
+- Docker (for Postgres/pgvector, RabbitMQ, and Garage)
 
 ## Setup
 
@@ -26,10 +26,14 @@ The defaults target the compose services below.
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-This starts Postgres (pgvector, `localhost:5432`, `rag`/`rag`),
-RabbitMQ (management UI on `localhost:15672`), and MinIO (console on `localhost:9001`,
-`minio`/`minio123`). MinIO's community edition is end-of-life; see the TODO in
-`deploy/docker-compose.yml` about replacing it.
+This starts Postgres (pgvector, `localhost:5432`, `rag`/`rag`), RabbitMQ (management
+UI on `localhost:15672`), and Garage (S3 API on `localhost:3900`, admin on
+`localhost:3903`, `rag-dev-key`/`rag-dev-secret-local`, bucket `rag-dev`). Garage
+provisions its default key and bucket on first start, so there is no bootstrap step.
+
+Do not change `GARAGE_DEFAULT_SECRET_KEY` after first start: Garage binds its stored
+layout to the secret it was created with, startup fails with a different one, and the
+metadata volume must be wiped to recover.
 
 ## Migrate the development database
 
@@ -47,11 +51,33 @@ cd backend
 
 The API serves `http://localhost:8000`; `/docs` lists the endpoints.
 
+## Run the ingestion workers
+
+Uploads are processed by a Celery worker and a standalone outbox dispatcher, both
+started from `backend/` with the venv:
+
+```powershell
+cd backend
+..\.venv\Scripts\celery -A app.workers.celery_app worker --pool=solo -Q ingestion,embed
+```
+
+```powershell
+cd backend
+..\.venv\Scripts\python -m app.workers.dispatcher
+```
+
+The worker consumes the `ingestion` and `embed` queues; `--pool=solo` is the
+supported Windows pool (prefork is unsupported on Windows). The dispatcher polls
+the transactional outbox and publishes pending events to RabbitMQ. An upload stays
+`queued` until both processes are running.
+
 ## Test
 
-Tests run against the real Postgres from compose (never SQLite). The `engine`
-fixture creates a disposable `rag_test` database, applies all migrations, and drops
-it after the session.
+Tests need the compose services up: the real Postgres for every suite (never
+SQLite), plus RabbitMQ and Garage for the outbox/worker integration tests. The
+`engine` fixture creates a disposable `rag_test` database, applies all migrations,
+and drops it after the session; the `rag_test` broker vhost is created by the suite
+itself, so no manual broker setup is needed.
 
 ```powershell
 cd backend
