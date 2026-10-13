@@ -1,4 +1,4 @@
-"""Shared fixtures that provision an isolated, migration-built test database."""
+"""Shared fixtures that provision an isolated, migration-built test database and broker vhost."""
 
 import os
 from collections.abc import Iterator
@@ -15,10 +15,12 @@ from alembic import command
 from app.core.config import Settings
 from app.core.db import get_db, make_engine
 from app.main import app
+from scripts.broker_admin import ensure_broker_vhost
 from tests.helpers import SettingsForTests
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
+DEFAULT_TEST_BROKER_URL = "amqp://guest:guest@localhost:5672/rag_test"
 
 
 @pytest.fixture
@@ -68,6 +70,15 @@ def engine() -> Iterator[Engine]:
         )
         conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
     admin.dispose()
+
+
+@pytest.fixture(scope="session")
+def broker_url() -> str:
+    """Ensure the ``rag_test`` vhost exists with its user's permissions, then return its URL."""
+
+    url = os.environ.get("RAG_TEST_BROKER_URL", DEFAULT_TEST_BROKER_URL)
+    ensure_broker_vhost(broker_url=url)
+    return url
 
 
 @pytest.fixture
