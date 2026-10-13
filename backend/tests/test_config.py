@@ -53,3 +53,31 @@ def test_cors_origins_env_json(*, monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("RAG_CORS_ORIGINS", '["https://app.example.com"]')
     assert SettingsForTests().cors_origins == ["https://app.example.com"]
+
+
+def test_ingestion_settings_defaults() -> None:
+    """The S3 pipeline settings default to the compose services and the stub providers."""
+
+    s = SettingsForTests()
+    assert s.broker_url == "amqp://guest:guest@localhost:5672//"
+    assert s.s3_endpoint == "http://localhost:3900"
+    assert s.s3_access_key == "rag-dev-key"
+    assert s.s3_secret_key == "rag-dev-secret-local"
+    assert s.s3_region == "garage"
+    assert s.s3_bucket == "rag-dev"
+    assert s.parser_provider == "stub"
+    assert s.embedding_provider == "stub"
+    assert s.chunk_target_tokens == 600
+    assert s.chunk_max_tokens == 1000
+    assert s.chunk_overlap_tokens == 80
+    assert s.embedding_batch_size == 64
+    assert s.outbox_poll_interval_seconds == 1.0
+    assert s.outbox_batch_size == 20
+    assert s.max_upload_mb == 25
+
+
+def test_broker_url_env_override(*, monkeypatch: pytest.MonkeyPatch) -> None:
+    """RAG_BROKER_URL selects the pytest vhost."""
+
+    monkeypatch.setenv("RAG_BROKER_URL", "amqp://guest:guest@localhost:5672/rag_test")
+    assert SettingsForTests().broker_url == "amqp://guest:guest@localhost:5672/rag_test"

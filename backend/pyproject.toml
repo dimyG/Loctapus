@@ -17,6 +17,12 @@ dependencies = [
     "PyJWT>=2.9",
     "pwdlib[argon2]>=0.2",
     "email-validator>=2.2",
+    "celery>=5.6",
+    "boto3",
+    "pgvector",
+    "python-multipart",
+    "pypdf",
+    "python-docx",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +31,8 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.16",
     "mypy>=2.4",
+    "celery-types",
+    "boto3-stubs[s3]",
 ]
 
 [tool.setuptools.packages.find]
