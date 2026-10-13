@@ -48,9 +48,21 @@ describe("App", () => {
   it("renders the guarded projects page for an authenticated visitor", async () => {
     saveToken("t-boot");
     renderApp("/projects");
-    // The page is a scaffold until Task 9 replaces its content.
+    // Task 9 filled the scaffold in: the guarded page lists real projects.
     expect(await screen.findByText("Projects")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/projects");
+  });
+
+  it("renders the project page for an authenticated visitor", async () => {
+    saveToken("t-boot");
+    renderApp("/projects/p-1");
+    expect(await screen.findByRole("heading", { name: "Default" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to projects" })).toHaveAttribute(
+      "href",
+      "/projects",
+    );
+    expect(await screen.findByText("brief.pdf")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/projects/p-1");
   });
 
   it("redirects unauthenticated visitors from /projects to /login", async () => {

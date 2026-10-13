@@ -1,6 +1,7 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
@@ -11,6 +12,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import { Link as RouterLink } from "react-router";
 import DashboardLayout from "../../layouts/DashboardLayout";
 import CreateProjectDialog from "./CreateProjectDialog";
 import EmptyProjects from "./EmptyProjects";
@@ -78,7 +80,11 @@ export default function ProjectsPage() {
             <TableBody>
               {(projects ?? []).map((project) => (
                 <TableRow key={project.id}>
-                  <TableCell>{project.name}</TableCell>
+                  <TableCell>
+                    <Link component={RouterLink} to={`/projects/${project.id}`}>
+                      {project.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     <Chip
                       size="small"

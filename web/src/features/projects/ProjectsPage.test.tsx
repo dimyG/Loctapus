@@ -42,6 +42,14 @@ describe("ProjectsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("links project names to their project pages", async () => {
+    server.use(http.get("*/projects", () => HttpResponse.json(projectRows)));
+    renderProjects();
+    const link = await screen.findByRole("link", { name: "Research notes" });
+    expect(link).toHaveAttribute("href", "/projects/p-2");
+    expect(screen.getByRole("link", { name: "Default" })).toHaveAttribute("href", "/projects/p-1");
+  });
+
   it("shows skeletons while loading", async () => {
     let resolveRequest: (() => void) | undefined;
     server.use(
