@@ -63,6 +63,15 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
   polish here. (S2 e2e slice, commit `14b3f6d`.)
 
 
+## 2026-10-13 - Task 5, structure-aware chunker (`0ae199e`)
+
+- `chunk_elements` does not skip whitespace-only paragraph elements: one arriving
+  between paragraphs would leave a stray `\n\n` separator in the joined chunk text,
+  and one arriving alone would be emitted as an empty chunk. Unreachable today - the
+  stub parser strips and skips empty text before elements reach the chunker - but
+  worth hardening when real Unstructured replaces the stub at S5.
+
+
 ## 2026-10-09 - deferred minors in `fix-deferred-minors-2`, kept open by its final review
 
 - `revoke_token` calls `on_conflict_do_nothing()` without a conflict target, so the
