@@ -81,6 +81,19 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
   paths; add a missing-key delivery test when a later task touches this service again.
 
 
+## 2026-10-13 - Task 12, full-pipeline Playwright journey (`ee1fc66`, `66ca851`)
+
+- Cross-module string-named FK targets (`ForeignKey("projects.id")` etc.) resolve
+  lazily, and nothing asserts that the declaring model module loads its targets'
+  modules: the e2e's worker process - which imports only the ingestion chain, never
+  the API routers - failed every chunk insert with `NoReferencedTableError` because
+  `app.projects.models` had never registered there. Fixed per declaration site
+  (`66ca851`: ingestion -> projects + sources, projects -> identity, sources ->
+  projects). A cheap architecture test - after importing each model module alone,
+  every FK target table must be present in `Base.metadata` - would catch the next
+  cross-module FK automatically.
+
+
 ## 2026-10-09 - deferred minors in `fix-deferred-minors-2`, kept open by its final review
 
 - `revoke_token` calls `on_conflict_do_nothing()` without a conflict target, so the
