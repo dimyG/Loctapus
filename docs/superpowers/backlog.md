@@ -72,6 +72,15 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
   worth hardening when real Unstructured replaces the stub at S5.
 
 
+## 2026-10-13 - Task 8, ingestion and embed pipeline services (`3587104`)
+
+- `ingest_source_item`'s fetch-failure branch (storage error -> conditional `failed`
+  against `expected='fetching'`) has no direct test: the task brief fixes the test
+  list, its cases stop at parse-time and conflict-time failures, and a missing-object
+  seed was not among them. The branch shares `_mark_run_failed` with three covered
+  paths; add a missing-key delivery test when a later task touches this service again.
+
+
 ## 2026-10-09 - deferred minors in `fix-deferred-minors-2`, kept open by its final review
 
 - `revoke_token` calls `on_conflict_do_nothing()` without a conflict target, so the
