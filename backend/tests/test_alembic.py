@@ -90,7 +90,7 @@ def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
 
     url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
     admin_url = url.rsplit("/", 1)[0] + "/postgres"
-    db_name = "rag_test_downgrade"
+    db_name = f"{url.rsplit('/', 1)[1]}_downgrade"
     scratch_url = f"{url.rsplit('/', 1)[0]}/{db_name}"
 
     admin = make_engine(database_url=admin_url).execution_options(isolation_level="AUTOCOMMIT")
@@ -123,7 +123,7 @@ def test_0002_downgrade_backfills_is_personal(*, engine: Engine) -> None:
 
     url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
     admin_url = url.rsplit("/", 1)[0] + "/postgres"
-    db_name = "rag_test_0002_backfill"
+    db_name = f"{url.rsplit('/', 1)[1]}_0002_backfill"
     scratch_url = f"{url.rsplit('/', 1)[0]}/{db_name}"
 
     admin = make_engine(database_url=admin_url).execution_options(isolation_level="AUTOCOMMIT")
