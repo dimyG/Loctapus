@@ -6,6 +6,59 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-13 - S3 slice deferred minors (whole-branch review, `s3-upload-ingestion`)
+
+Per-task reviews and the final whole-branch review (all clean; the one Important
+finding, the sources-list error state, was fixed pre-merge in `3b80c5a`) deferred
+these minors. None blocks merge; each links its introducing commit.
+
+- `70cc8f3` - garage compose service has no healthcheck (db has one); a fixed dev-only
+  `rpc_secret` is committed in `deploy/garage.toml` (required for boot, same fixed-dev
+  credential pattern as compose, must never reach a real deployment).
+- `4359933` - the pytest suite's warnings (Starlette/httpx deprecation, short test JWT
+  HMAC keys) grew from 56 to 73 instances with the new test modules; a pristine-output
+  cleanup pass (filterwarnings or test-secret length) is legitimate backlog work.
+- `785c59b` - stub parser: the unsupported-suffix `ParseError` branch and multi-page /
+  blank-page PDF behavior are untested; factories live in `providers/__init__.py` so any
+  `app.providers` import eagerly loads pypdf/python-docx (revisit when real providers
+  arrive in S5).
+- `0ae199e` - chunker: the hard-split windows' heading context and flush ordering are
+  untested; the `stride < 1` ValueError guard is untested; negative `overlap_tokens`
+  silently drops words; a heading `level <= 0` would corrupt the heading-stack slice
+  (unreachable with the stub parser; note for the S5 Unstructured swap).
+- `02cf513` - storage: the key-format test mirrors the implementation's f-string shape;
+  a mid-stream protocol drop can surface as a raw urllib3 exception past the
+  `StorageUnavailableError` boundary in some botocore versions.
+- `0065db9` - `EVENT_ROUTES` is annotated `Mapping` but bound to a mutable dict;
+  `types.MappingProxyType` would enforce it.
+- `3587104` - ingestion service: `query_embedding_dimension` matches `relname` without a
+  `pg_namespace` join; the document-insert `IntegrityError` catch routes any integrity
+  error to the ready-backstop rather than only the unique-constraint conflict; the
+  fetch-failure branch (failed expected fetching) has no direct test (also recorded
+  above, `4447104`).
+- `09a3c8c` - sources API: the extension check is case-insensitive but untested;
+  `sanitize_filename` drops C0+DEL only so Unicode C1 controls survive;
+  `create_upload_source`'s `settings` parameter is unused (plan-mandated signature);
+  no 503 storage-failure test exists.
+- `81f8d8c` - dispatcher: poison rows (unknown event type) retry forever with no
+  attempts cap (S7 scope); `main()` has no error tolerance for transient DB failures
+  (restarts stateless).
+- `347efdc` - ProjectPage: the client mirror omits the server's empty-file check; the
+  `node-buffer.d.ts` ambient typing will collide if `@types/node` lands in the web
+  tsconfig; a dead `data-testid="skeleton-row"` and a stale App.test comment.
+- `ee1fc66` - e2e: the journey's intermediate tiny.pdf row assertion exceeds the
+  brief's literal shape (diagnosis aid only); stderr-wait webServer entries cannot
+  detect an orphaned consumer left by a hard-killed previous run.
+- `f4ef110` - the slices spec's S0 row still mentions MinIO (historical record of what
+  S0 shipped; a "(replaced by Garage in S3)" parenthetical would prevent confusion).
+- Final-review extras: an unknown `UploadFile.size` reports "The file is empty." copy
+  instead of a distinct message; a filename of exactly `.` or `..` passes sanitization
+  into the object key (harmless in Garage); `broker_admin.py`'s `urlopen` has no
+  timeout; the MSW source fixtures carry `type: "document"` while the real API returns
+  `"upload"`; during a Try-again refetch with no cached data the skeleton briefly
+  replaces the error card (`3b80c5a`).
+
+
 ## 2026-10-12 - post-merge review of the sign-out race fix (`be2f039`)
 
 - A hung `/auth/logout` revocation POST can clobber a fresh login: if the
