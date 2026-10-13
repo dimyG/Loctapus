@@ -41,11 +41,6 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
   no re-parse is needed. The S3 spec adds the matching `STUB_EMBEDDING_DIM` comment
   (dimension changes require an Alembic migration); this re-embedding flow is the
   deferred half.
-- 2026-10-12 - `backend/alembic/env.py` lets a stray `RAG_DATABASE_URL` environment
-  variable override the URL the pytest fixtures configure, so a configured shell can
-  make `pytest` migrate - and `test_migrations_downgrade_to_base` drop every table of -
-  an unrelated database. Flagged by the 2026-10-12 S3 spec review (branch
-  `s3-spec-review-fixes`); fix before S3's migration work relies on that env var.
 - 2026-10-12 - S7 needs stuck-run recovery (S3 spec section 10 risk table): a worker
   crash mid-run leaves its `ingestion_runs` row - and the derived source status -
   non-terminal forever, and S3 deliberately has no re-drive path (the claim guard

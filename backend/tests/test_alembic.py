@@ -4,6 +4,7 @@ import os
 import uuid
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
@@ -51,6 +52,18 @@ def test_single_head_revision() -> None:
     config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     script = ScriptDirectory.from_config(config)
     assert len(script.get_heads()) == 1
+
+
+def test_upgrade_ignores_stray_database_url_env(*, engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Check that a stray RAG_DATABASE_URL cannot redirect a configured migration run."""
+
+    monkeypatch.setenv("RAG_DATABASE_URL", "postgresql+psycopg://rag:rag@no-such-host:5432/rag_poison")
+    url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", url)
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    # The engine fixture already migrated to head, so this is a no-op run.
+    command.upgrade(config, "head")
 
 
 def test_foreign_key_columns_are_indexed(*, engine: Engine) -> None:
