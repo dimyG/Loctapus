@@ -10,7 +10,7 @@ export default defineConfig({
   use: { baseURL: "http://localhost:5173" },
   webServer: [
     {
-      // Bootstrap the dedicated E2E database, then serve the API on 8001.
+      // Bootstrap the dedicated E2E database and broker vhost, then serve the API on 8001.
       command:
         `"${PYTHON}" scripts\\e2e_db.py bootstrap && ` +
         `"${PYTHON}" -m uvicorn app.main:app --port 8001`,
@@ -19,6 +19,28 @@ export default defineConfig({
       env: { RAG_DATABASE_URL: "postgresql+psycopg://rag:rag@localhost:5432/rag_e2e" },
       reuseExistingServer: false,
       timeout: 120_000,
+    },
+    {
+      // No ready URL exists, so the entries wait on stderr lines; Celery logs to
+      // stderr and worker_redirect_stdouts sends print() output there too.
+      command: `"${PYTHON}" -m celery -A app.workers.celery_app worker --pool=solo -Q ingestion,embed`,
+      cwd: "../backend",
+      env: {
+        RAG_DATABASE_URL: "postgresql+psycopg://rag:rag@localhost:5432/rag_e2e",
+        RAG_BROKER_URL: "amqp://guest:guest@localhost:5672/rag_e2e",
+      },
+      wait: { stderr: /celery worker ready/ },
+      timeout: 120_000,
+    },
+    {
+      command: `"${PYTHON}" -m app.workers.dispatcher`,
+      cwd: "../backend",
+      env: {
+        RAG_DATABASE_URL: "postgresql+psycopg://rag:rag@localhost:5432/rag_e2e",
+        RAG_BROKER_URL: "amqp://guest:guest@localhost:5672/rag_e2e",
+      },
+      wait: { stderr: /dispatcher ready/ },
+      timeout: 60_000,
     },
     {
       command: "npm run dev -- --port 5173 --strictPort",

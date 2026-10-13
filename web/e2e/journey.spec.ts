@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import { PYTHON } from "./venv";
@@ -6,10 +9,19 @@ import { PYTHON } from "./venv";
 const execFileAsync = promisify(execFile);
 
 const E2E_DB_SCRIPT = "../backend/scripts/e2e_db.py";
+const TINY_PDF = "../backend/tests/fixtures/tiny.pdf";
 
 /** Empties the E2E database so each test starts with zero users. */
 async function truncateDatabase() {
   await execFileAsync(PYTHON, [E2E_DB_SCRIPT, "truncate"]);
+}
+
+/** Writes a fresh sample DOCX via the backend script and returns its temp dir and path. */
+async function makeSampleDocx() {
+  const dir = await mkdtemp(join(tmpdir(), "rag-e2e-"));
+  const docxPath = join(dir, "sample.docx");
+  await execFileAsync(PYTHON, ["scripts/make_sample_docx.py", docxPath], { cwd: "../backend" });
+  return { dir, docxPath };
 }
 
 /** Registers a fresh user through the UI and waits for /projects. */
@@ -69,5 +81,29 @@ test.describe("journey", () => {
     await page.getByLabel(/Confirm password/).fill("password123");
     await page.getByRole("button", { name: "Create account" }).click();
     await expect(page.getByText("That email is already registered.")).toBeVisible();
+  });
+
+  test("register -> default project -> upload pdf and docx -> ready", async ({ page }) => {
+    const { dir, docxPath } = await makeSampleDocx();
+    try {
+      const email = E2E_EMAIL();
+
+      // Register, then open the seeded Default project through its row link.
+      await register(page, email);
+      await page.getByRole("cell", { name: "Default" }).getByRole("link").click();
+      await expect(page).toHaveURL(/\/projects\/[^/]+$/);
+
+      // The native input is visually folded into the Upload button; setInputFiles
+      // fires its change event, which runs the client checks and the upload.
+      await page.getByLabel("Upload").setInputFiles(TINY_PDF);
+      await expect(page.getByRole("cell", { name: "tiny.pdf" })).toBeVisible();
+      await page.getByLabel("Upload").setInputFiles(docxPath);
+
+      // The default 5s expect timeout does not cover the full pipeline, so the
+      // assertion carries an explicit one inside the 30s test budget.
+      await expect(page.getByRole("cell", { name: "Ready" })).toHaveCount(2, { timeout: 20_000 });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
