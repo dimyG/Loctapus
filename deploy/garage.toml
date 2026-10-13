@@ -1,0 +1,20 @@
+# Garage configuration for the local development stack. docker-compose.yml mounts this
+# file at /etc/garage.toml, the default config path of the dxflrs/garage image.
+
+replication_factor = 1
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+
+# Required even for a single node; a fixed dev-only value, like the compose credentials.
+rpc_secret = "bbd3b04a3fdd8c2c276f17a8b58a251313142d00e1c709fb1bc21e86994f7ff2"
+rpc_bind_addr = "[::]:3901"
+
+[s3_api]
+# Must stay identical to the s3_region default in backend Settings, or Garage rejects
+# signatures with AuthorizationHeaderMalformed.
+s3_region = "garage"
+api_bind_addr = "0.0.0.0:3900"
+
+[admin]
+api_bind_addr = "0.0.0.0:3903"
