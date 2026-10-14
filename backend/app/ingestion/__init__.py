@@ -1,1 +1,1 @@
-"""Documents, chunks, ingestion runs, and the ingestion endpoints."""
+"""Documents, chunks, ingestion runs, and the ingest and embed pipeline."""

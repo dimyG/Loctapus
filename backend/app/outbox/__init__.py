@@ -1,1 +1,1 @@
-"""The transactional outbox and its publisher endpoints."""
+"""The transactional outbox: event rows, payload contracts, and routing."""
