@@ -6,11 +6,13 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
-## 2026-10-13 - S3 slice deferred minors (whole-branch review, `s3-upload-ingestion`)
+## 2026-10-14 - S3 review fixes (`s3-upload-ingestion`)
 
-Per-task reviews and the final whole-branch review (all clean; the one Important
-finding, the sources-list error state, was fixed pre-merge in `3b80c5a`) deferred
-these minors. None blocks merge; each links its introducing commit.
+The pre-merge review-fix round (`../plans/2026-10-14-s3-review-fixes.md`) resolved the
+2026-10-13 deferred minors it listed; the entries below survived it. Carried entries
+keep their introducing commit links.
+
+Carried from the 2026-10-13 whole-branch review:
 
 - `70cc8f3` - garage compose service has no healthcheck (db has one); a fixed dev-only
   `rpc_secret` is committed in `deploy/garage.toml` (required for boot, same fixed-dev
@@ -29,34 +31,54 @@ these minors. None blocks merge; each links its introducing commit.
 - `02cf513` - storage: the key-format test mirrors the implementation's f-string shape;
   a mid-stream protocol drop can surface as a raw urllib3 exception past the
   `StorageUnavailableError` boundary in some botocore versions.
-- `0065db9` - `EVENT_ROUTES` is annotated `Mapping` but bound to a mutable dict;
-  `types.MappingProxyType` would enforce it.
-- `3587104` - ingestion service: `query_embedding_dimension` matches `relname` without a
-  `pg_namespace` join; the document-insert `IntegrityError` catch routes any integrity
-  error to the ready-backstop rather than only the unique-constraint conflict; the
-  fetch-failure branch (failed expected fetching) has no direct test (also recorded
-  above, `4447104`).
-- `09a3c8c` - sources API: the extension check is case-insensitive but untested;
-  `sanitize_filename` drops C0+DEL only so Unicode C1 controls survive;
-  `create_upload_source`'s `settings` parameter is unused (plan-mandated signature);
-  no 503 storage-failure test exists.
-- `81f8d8c` - dispatcher: poison rows (unknown event type) retry forever with no
-  attempts cap (S7 scope); `main()` has no error tolerance for transient DB failures
-  (restarts stateless).
-- `347efdc` - ProjectPage: the client mirror omits the server's empty-file check; the
-  `node-buffer.d.ts` ambient typing will collide if `@types/node` lands in the web
-  tsconfig; a dead `data-testid="skeleton-row"` and a stale App.test comment.
+- `347efdc` - the `node-buffer.d.ts` ambient typing will collide if `@types/node` lands
+  in the web tsconfig.
 - `ee1fc66` - e2e: the journey's intermediate tiny.pdf row assertion exceeds the
   brief's literal shape (diagnosis aid only); stderr-wait webServer entries cannot
   detect an orphaned consumer left by a hard-killed previous run.
-- `f4ef110` - the slices spec's S0 row still mentions MinIO (historical record of what
-  S0 shipped; a "(replaced by Garage in S3)" parenthetical would prevent confusion).
-- Final-review extras: an unknown `UploadFile.size` reports "The file is empty." copy
-  instead of a distinct message; a filename of exactly `.` or `..` passes sanitization
-  into the object key (harmless in Garage); `broker_admin.py`'s `urlopen` has no
-  timeout; the MSW source fixtures carry `type: "document"` while the real API returns
-  `"upload"`; during a Try-again refetch with no cached data the skeleton briefly
-  replaces the error card (`3b80c5a`).
+- `4359933` mixed the FK-index test fix into the schema commit, and `e3f24cc` is its
+  fixup; history is left as is.
+- Final-review extra (`3b80c5a`): during a Try-again refetch with no cached data the
+  skeleton briefly replaces the error card.
+- `0ae199e` - `chunk_elements` does not skip whitespace-only paragraph elements: one
+  arriving between paragraphs would leave a stray `\n\n` separator in the joined chunk
+  text, and one arriving alone would be emitted as an empty chunk. Unreachable today -
+  the stub parser strips and skips empty text before elements reach the chunker - but
+  worth hardening when real Unstructured replaces the stub at S5.
+
+New deferrals from the 2026-10-14 review fixes:
+
+- Upload body size is enforced only after Starlette spools the body; a Content-Length
+  guard or a proxy limit is needed before any exposed deployment.
+- Prefork readiness: `task_reject_on_worker_lost` with a delivery limit for embed.
+- `worker_prefetch_multiplier=1` and separate worker processes per queue before S5's
+  network providers.
+- Embed re-delivery re-embeds every chunk (filter `embedding IS NULL` or skip
+  non-`indexing` runs before paid providers).
+- The identical-version backstop marks a run `ready` against a document that may be
+  half-embedded or inactive (S7).
+- A partial unique index allowing one in-flight run per item, together with the S7
+  sweep; the sweep must also cover `queued` runs whose event was published.
+- Outbox attempts cap, dead-lettering, and published-row retention (S7).
+- S4 retrieval notes: HNSW `ef_search` and `iterative_scan`, `embedding IS NOT NULL` in
+  the vector leg, pin the `pgvector/pgvector` image tag.
+- S5: record `embedding_model` per vector; prefer a side-by-side column over an
+  in-place dimension change.
+- S9: the listing must aggregate multi-item sources, and source-level sync failures
+  need a home.
+- Same-name uploads differing only in case are distinct files.
+- The parser, service, and chunker all guard empty documents with different messages
+  (consolidate at S5).
+- Viewer upload 404 copy, a live region for status changes, and the stale-data snackbar
+  parity with `ProjectsPage`.
+- The UI says "documents" for uploads while the backend's `documents` are parsed
+  versions.
+- A two-session `SKIP LOCKED` dispatcher test, and closing each test's Celery app.
+- Time-ordered `uuid7` primary keys (house-wide).
+- Optional cheap checks: `jsonb_typeof(heading_path) = 'array'`; `NormalizedElement.type`
+  as a `Literal` before S5's Unstructured swap.
+- Compose ports bind every interface; the production validator ignores the `guest`
+  broker URL.
 
 
 ## 2026-10-12 - post-merge review of the sign-out race fix (`be2f039`)
@@ -89,13 +111,13 @@ these minors. None blocks merge; each links its introducing commit.
 - 2026-10-12 - Changing the embedding model or dimension (S5 swaps the stub constant
   `STUB_EMBEDDING_DIM` for Voyage) invalidates every stored vector, so it needs
   re-embedding, not just a dimension migration: clear `chunks.embedding`, re-enqueue a
-  `document_ready_for_embedding` outbox event per existing document, and let sources
+  `document_ready_for_embedding` outbox event per existing document, and let uploads
   travel indexing -> ready again. Re-embedding can run from persisted `chunks.text`, so
   no re-parse is needed. The S3 spec adds the matching `STUB_EMBEDDING_DIM` comment
   (dimension changes require an Alembic migration); this re-embedding flow is the
   deferred half.
 - 2026-10-12 - S7 needs stuck-run recovery (S3 spec section 10 risk table): a worker
-  crash mid-run leaves its `ingestion_runs` row - and the derived source status -
+  crash mid-run leaves its `ingestion_runs` row - and the derived upload status -
   non-terminal forever, and S3 deliberately has no re-drive path (the claim guard
   rejects re-delivery of a non-queued run). A stale-run sweep/re-drive belongs with
   the S7 robustness work. Flagged by the 2026-10-12 S3 spec review (branch
@@ -114,37 +136,6 @@ these minors. None blocks merge; each links its introducing commit.
   screenshots in the S2 worktree (`.superpowers/sdd/2026-10-09-s2-web-ui-foundations/visual/`,
   git-ignored) - a human eyeball pass of those pages is still pending; note any
   polish here. (S2 e2e slice, commit `14b3f6d`.)
-
-
-## 2026-10-13 - Task 5, structure-aware chunker (`0ae199e`)
-
-- `chunk_elements` does not skip whitespace-only paragraph elements: one arriving
-  between paragraphs would leave a stray `\n\n` separator in the joined chunk text,
-  and one arriving alone would be emitted as an empty chunk. Unreachable today - the
-  stub parser strips and skips empty text before elements reach the chunker - but
-  worth hardening when real Unstructured replaces the stub at S5.
-
-
-## 2026-10-13 - Task 8, ingestion and embed pipeline services (`3587104`)
-
-- `ingest_source_item`'s fetch-failure branch (storage error -> conditional `failed`
-  against `expected='fetching'`) has no direct test: the task brief fixes the test
-  list, its cases stop at parse-time and conflict-time failures, and a missing-object
-  seed was not among them. The branch shares `_mark_run_failed` with three covered
-  paths; add a missing-key delivery test when a later task touches this service again.
-
-
-## 2026-10-13 - Task 12, full-pipeline Playwright journey (`ee1fc66`, `66ca851`)
-
-- Cross-module string-named FK targets (`ForeignKey("projects.id")` etc.) resolve
-  lazily, and nothing asserts that the declaring model module loads its targets'
-  modules: the e2e's worker process - which imports only the ingestion chain, never
-  the API routers - failed every chunk insert with `NoReferencedTableError` because
-  `app.projects.models` had never registered there. Fixed per declaration site
-  (`66ca851`: ingestion -> projects + sources, projects -> identity, sources ->
-  projects). A cheap architecture test - after importing each model module alone,
-  every FK target table must be present in `Base.metadata` - would catch the next
-  cross-module FK automatically.
 
 
 ## 2026-10-09 - deferred minors in `fix-deferred-minors-2`, kept open by its final review
