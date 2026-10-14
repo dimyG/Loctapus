@@ -62,6 +62,9 @@ class Chunk(Base):
     """A retrieval-sized piece of one document, full-text searchable before embeddings land."""
 
     __tablename__ = "chunks"
+    # A chunk INSERT must not return the computed tsvector: eager defaults would pay
+    # for every chunk of every document on every ingest.
+    __mapper_args__ = {"eager_defaults": False}
     __table_args__ = (
         UniqueConstraint("document_id", "position"),
         CheckConstraint("chunk_type IN ('text')"),
@@ -92,16 +95,17 @@ class Chunk(Base):
     text: Mapped[str] = mapped_column(Text)
     heading_path: Mapped[list[str]] = mapped_column(JSONB)
     chunk_type: Mapped[str] = mapped_column(String)
-    # metadata is reserved on SQLAlchemy declarative models, so the attribute is renamed;
-    # the column keeps the SQL name metadata, which S4's retrieval SQL queries.
+    # Metadata is a reserved name on SQLAlchemy declarative models, so the attribute is
+    # renamed; the column keeps the SQL name metadata, which S4's retrieval SQL queries.
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB)
     content_hash: Mapped[str] = mapped_column(String)
     # 384 is the literal STUB_EMBEDDING_DIM; changing it requires an Alembic migration
     # re-typing this column and re-embedding every stored chunk.
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(384))
-    search_vector: Mapped[Any] = mapped_column(
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(384), deferred=True)
+    search_vector: Mapped[str | None] = mapped_column(
         TSVECTOR,
         Computed("to_tsvector('english', text)", persisted=True),
+        deferred=True,
     )
 
 

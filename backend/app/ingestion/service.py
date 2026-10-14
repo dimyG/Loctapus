@@ -333,7 +333,7 @@ def _parse_and_index(
                 overlap_tokens=settings.chunk_overlap_tokens,
             )
         else:
-            # chunk_elements raises on an empty element list, so element-free parses skip it.
+            # The chunker raises on an empty element list, so element-free parses skip it.
             chunks = []
         if not chunks:
             # A headings-only document never becomes a silent zero-chunk document.
@@ -430,8 +430,11 @@ def _embed_batches(
         ids = chunk_ids[start : start + batch_size]
         texts = chunk_texts[start : start + batch_size]
         vectors = embedding_provider.embed_documents(texts=texts)
-        for chunk_id, vector in zip(ids, vectors, strict=True):
-            db.execute(update(Chunk).where(Chunk.id == chunk_id).values(embedding=vector))
+        # One executemany UPDATE by primary key keeps the round trips at one per batch.
+        db.execute(
+            update(Chunk),
+            [{"id": chunk_id, "embedding": vector} for chunk_id, vector in zip(ids, vectors, strict=True)],
+        )
         db.commit()
 
 
@@ -458,8 +461,8 @@ def embed_document(
     errors propagate to the task, which retries them.
     """
 
-    document = db.get(Document, document_id)
-    if document is None:
+    document_exists = db.scalar(select(Document.id).where(Document.id == document_id))
+    if document_exists is None:
         return
     rows = db.execute(
         select(Chunk.id, Chunk.text).where(Chunk.document_id == document_id).order_by(Chunk.position)
