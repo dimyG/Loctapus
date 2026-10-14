@@ -130,6 +130,10 @@ def upgrade() -> None:
         sa.Column("source_item_id", sa.Uuid(), nullable=False),
         sa.Column("document_id", sa.Uuid(), nullable=True),
         sa.Column("status", sa.String(), nullable=False),
+        # The file version the run was created for: the worker fetches by this key and
+        # verifies the fetched bytes against this hash.
+        sa.Column("raw_object_key", sa.String(), nullable=False),
+        sa.Column("content_hash", sa.String(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),

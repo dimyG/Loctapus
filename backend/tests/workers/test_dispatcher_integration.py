@@ -50,12 +50,7 @@ def _seed_event(*, db: Session, event_type: str, payload: dict[str, str]) -> Out
 def _ingestion_payload() -> dict[str, str]:
     """Return one synthetic ingestion-requested payload shaped exactly like the enqueue helper's."""
 
-    return {
-        "source_item_id": str(uuid4()),
-        "ingestion_run_id": str(uuid4()),
-        "raw_object_key": f"raw/{uuid4()}/{uuid4()}/hash/file.pdf",
-        "content_hash": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-    }
+    return {"ingestion_run_id": str(uuid4())}
 
 
 def _drain_one(*, broker_url: str, queue_name: str) -> tuple[str, dict[str, Any]]:

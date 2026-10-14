@@ -17,6 +17,7 @@ from app.ingestion.service import (
     embed_document,
     ingest_source_item,
 )
+from app.ingestion.status import RunStatus
 from app.outbox.events import DOCUMENT_READY_FOR_EMBEDDING
 from app.outbox.models import OutboxEvent
 from app.providers import get_embedding_provider, get_parser
@@ -95,14 +96,11 @@ def _ingest(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Run the ingestion task for one run, unpacking the payload the way the worker will."""
+    """Run the ingestion task for one run, the way the worker will."""
 
     ingest_source_item(
         db=db,
-        source_item_id=seeded.source_item_id,
         ingestion_run_id=seeded.ingestion_run_id,
-        raw_object_key=seeded.raw_object_key,
-        content_hash=seeded.content_hash,
         storage=storage,
         parser=get_parser(settings=settings),
         settings=settings,
@@ -251,10 +249,7 @@ def test_missing_run_no_ops(
 
     ingest_source_item(
         db=db_session,
-        source_item_id=uuid4(),
         ingestion_run_id=uuid4(),
-        raw_object_key="raw/missing/missing/missing/none.pdf",
-        content_hash="missing",
         storage=storage,
         parser=get_parser(settings=settings),
         settings=settings,
@@ -262,6 +257,69 @@ def test_missing_run_no_ops(
     assert db_session.query(Document).count() == 0
     assert db_session.query(Chunk).count() == 0
     assert db_session.query(OutboxEvent).count() == 0
+
+
+def test_fingerprint_mismatch_fails_the_run(
+    *,
+    db_session: Session,
+    settings: Settings,
+    storage: StorageService,
+) -> None:
+    """Check that bytes whose hash disagrees with the run's pinned version fail the run."""
+
+    content = _make_docx(heading="Fingerprint", paragraphs=["Fingerprinted prose."])
+    _project_id, seeded = _seed(
+        db=db_session,
+        storage=storage,
+        filename="mismatch.docx",
+        content=content,
+    )
+    # Garage now holds different bytes under the run's key, as if a write never landed.
+    storage.put_object(key=seeded.raw_object_key, content=b"other bytes")
+
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
+
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
+    assert run.status == RunStatus.FAILED
+    assert run.error == "The stored file does not match the upload. Upload the file again to retry."
+    assert run.document_id is None
+    assert db_session.query(Chunk).count() == 0
+
+
+def test_older_run_uses_its_own_version(
+    *,
+    db_session: Session,
+    settings: Settings,
+    storage: StorageService,
+) -> None:
+    """Check that a queued run processes its own file version, never the item's newer one."""
+
+    content_v1 = _make_docx(heading="Version One", paragraphs=["Version one prose."])
+    _project_id, seeded = _seed(
+        db=db_session,
+        storage=storage,
+        filename="report.docx",
+        content=content_v1,
+    )
+    # Simulate S7: the item moves to a v2 version while the v1 run is still queued.
+    content_v2 = _make_docx(heading="Version Two", paragraphs=["Version two prose."])
+    item = db_session.get(SourceItem, seeded.source_item_id)
+    assert item is not None
+    item.content_hash = hashlib.sha256(content_v2).hexdigest()
+    item.raw_object_key = f"raw/v2/{uuid4()}/report.docx"
+    db_session.commit()
+
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
+
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
+    assert run.status == RunStatus.INDEXING
+    document = db_session.get(Document, run.document_id)
+    assert document is not None
+    assert document.raw_object_key == seeded.raw_object_key
+    chunk = db_session.query(Chunk).filter(Chunk.document_id == document.id).one()
+    assert chunk.text == "Version one prose."
 
 
 def test_garbage_pdf_fails_the_run(
@@ -330,7 +388,13 @@ def test_identical_version_conflict_is_idempotent_noop(
         filename="conflict.docx",
         content=content,
     )
-    run_b = IngestionRun(id=uuid4(), source_item_id=seeded.source_item_id, status="queued")
+    run_b = IngestionRun(
+        id=uuid4(),
+        source_item_id=seeded.source_item_id,
+        status="queued",
+        raw_object_key=seeded.raw_object_key,
+        content_hash=seeded.content_hash,
+    )
     db_session.add(run_b)
     db_session.commit()
 

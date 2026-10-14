@@ -113,16 +113,13 @@ def test_upload_creates_source_item_run_and_event(
     )
     assert run.source_item_id == item.id
     assert run.status == "queued"
+    assert run.raw_object_key == item.raw_object_key
+    assert run.content_hash == item.content_hash
     assert event.event_type == SOURCE_ITEM_INGESTION_REQUESTED
     assert event.aggregate_type == "source_item"
     assert event.aggregate_id == item.id
     assert event.published_at is None
-    assert event.payload == {
-        "source_item_id": str(item.id),
-        "ingestion_run_id": str(run.id),
-        "raw_object_key": item.raw_object_key,
-        "content_hash": item.content_hash,
-    }
+    assert event.payload == {"ingestion_run_id": str(run.id)}
     assert StorageService(settings=settings).get_object(key=item.raw_object_key) == content
 
 
@@ -316,14 +313,10 @@ def test_project_delete_cascades_fully_ingested_source(
     r = _upload(client=client, headers=headers, project_id=project_id, filename="tiny.pdf", content=content)
     assert r.status_code == 201
 
-    item = db_session.query(SourceItem).one()
     run = db_session.query(IngestionRun).one()
     ingest_source_item(
         db=db_session,
-        source_item_id=item.id,
         ingestion_run_id=run.id,
-        raw_object_key=item.raw_object_key,
-        content_hash=item.content_hash,
         storage=storage,
         parser=get_parser(settings=settings),
         settings=settings,

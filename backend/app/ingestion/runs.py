@@ -59,16 +59,22 @@ def _transition(
 
 
 def request_ingestion(*, db: Session, source_item_id: UUID, raw_object_key: str, content_hash: str) -> UUID:
-    """Add one queued run and its outbox event inside the caller's transaction."""
+    """Add one queued run pinned to its file version, with its event, in the caller's transaction."""
 
     run_id = uuid4()
-    db.add(IngestionRun(id=run_id, source_item_id=source_item_id, status=RunStatus.QUEUED))
+    db.add(
+        IngestionRun(
+            id=run_id,
+            source_item_id=source_item_id,
+            status=RunStatus.QUEUED,
+            raw_object_key=raw_object_key,
+            content_hash=content_hash,
+        )
+    )
     enqueue_source_item_ingestion_requested(
         db=db,
         source_item_id=source_item_id,
         ingestion_run_id=run_id,
-        raw_object_key=raw_object_key,
-        content_hash=content_hash,
     )
     return run_id
 

@@ -123,6 +123,11 @@ class IngestionRun(Base):
     # SET NULL keeps run history when a re-upload replaces the document.
     document_id: Mapped[UUID | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String)
+    # The file version the run was created for: the worker fetches by this key and
+    # verifies the fetched bytes against this hash, so a newer item version never
+    # redirects a queued run.
+    raw_object_key: Mapped[str] = mapped_column(String)
+    content_hash: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

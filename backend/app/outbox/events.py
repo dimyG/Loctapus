@@ -26,8 +26,6 @@ def enqueue_source_item_ingestion_requested(
     db: Session,
     source_item_id: UUID,
     ingestion_run_id: UUID,
-    raw_object_key: str,
-    content_hash: str,
 ) -> OutboxEvent:
     """Append a source-item ingestion-requested event inside the caller's transaction."""
 
@@ -35,13 +33,9 @@ def enqueue_source_item_ingestion_requested(
         event_type=SOURCE_ITEM_INGESTION_REQUESTED,
         aggregate_type="source_item",
         aggregate_id=source_item_id,
-        # Payload values are JSON strings so workers decode them without UUID coercion.
-        payload={
-            "source_item_id": str(source_item_id),
-            "ingestion_run_id": str(ingestion_run_id),
-            "raw_object_key": raw_object_key,
-            "content_hash": content_hash,
-        },
+        # The run row pins the file version; the payload carries the run id only, so
+        # the worker reads its own version from the database instead of trusting a message.
+        payload={"ingestion_run_id": str(ingestion_run_id)},
     )
     db.add(event)
     return event

@@ -125,6 +125,8 @@ def test_latest_run_status_prefers_the_newest_run(*, db_session: Session) -> Non
             id=uuid4(),
             source_item_id=seeded.source_item_id,
             status=RunStatus.QUEUED,
+            raw_object_key="raw/newest/second/run.pdf",
+            content_hash="newest-second-hash",
             created_at=base_time + timedelta(seconds=1),
         )
     )
@@ -148,6 +150,8 @@ def test_latest_run_status_breaks_ties_by_id(*, db_session: Session) -> None:
                 id=UUID(int=1),
                 source_item_id=seeded.source_item_id,
                 status=RunStatus.FAILED,
+                raw_object_key="raw/tie/first/run.pdf",
+                content_hash="tie-first-hash",
                 created_at=TIE_BREAK_TIME,
                 finished_at=TIE_BREAK_TIME,
             ),
@@ -155,6 +159,8 @@ def test_latest_run_status_breaks_ties_by_id(*, db_session: Session) -> None:
                 id=UUID(int=2),
                 source_item_id=seeded.source_item_id,
                 status=RunStatus.READY,
+                raw_object_key="raw/tie/second/run.pdf",
+                content_hash="tie-second-hash",
                 created_at=TIE_BREAK_TIME,
                 finished_at=TIE_BREAK_TIME,
             ),

@@ -17,23 +17,14 @@ from app.workers.celery_app import celery_app
 
 
 @celery_app.task(name="ingest_source_item")
-def ingest_source_item(
-    *,
-    source_item_id: str,
-    ingestion_run_id: str,
-    raw_object_key: str,
-    content_hash: str,
-) -> None:
-    """Ingest one queued run's file version end to end, recording the outcome on the run."""
+def ingest_source_item(*, ingestion_run_id: str) -> None:
+    """Ingest one queued run's pinned file version end to end, recording the outcome on the run."""
 
     settings = get_settings()
     with session_scope() as db:
         ingest_source_item_service(
             db=db,
-            source_item_id=UUID(source_item_id),
             ingestion_run_id=UUID(ingestion_run_id),
-            raw_object_key=raw_object_key,
-            content_hash=content_hash,
             storage=StorageService(settings=settings),
             parser=get_parser(settings=settings),
             settings=settings,

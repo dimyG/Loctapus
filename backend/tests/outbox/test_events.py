@@ -4,6 +4,8 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from app.ingestion.models import IngestionRun
+from app.ingestion.runs import request_ingestion
 from app.outbox.events import (
     DOCUMENT_READY_FOR_EMBEDDING,
     EMBED_QUEUE,
@@ -13,6 +15,8 @@ from app.outbox.events import (
     enqueue_document_ready_for_embedding,
     enqueue_source_item_ingestion_requested,
 )
+from app.outbox.models import OutboxEvent
+from tests.factories import seed_project, seed_upload
 
 
 def test_ingestion_requested_event_row(*, db_session: Session) -> None:
@@ -24,8 +28,6 @@ def test_ingestion_requested_event_row(*, db_session: Session) -> None:
         db=db_session,
         source_item_id=source_item_id,
         ingestion_run_id=ingestion_run_id,
-        raw_object_key="raw/p1/i1/abc123/report.pdf",
-        content_hash="abc123",
     )
     db_session.flush()
     # Refresh so the payload is read back from the database, not from the Python object.
@@ -33,12 +35,7 @@ def test_ingestion_requested_event_row(*, db_session: Session) -> None:
     assert event.event_type == "source_item_ingestion_requested"
     assert event.aggregate_type == "source_item"
     assert event.aggregate_id == source_item_id
-    assert event.payload == {
-        "source_item_id": str(source_item_id),
-        "ingestion_run_id": str(ingestion_run_id),
-        "raw_object_key": "raw/p1/i1/abc123/report.pdf",
-        "content_hash": "abc123",
-    }
+    assert event.payload == {"ingestion_run_id": str(ingestion_run_id)}
     assert event.published_at is None
     assert event.attempts == 0
 
@@ -78,3 +75,32 @@ def test_routes_cover_both_events() -> None:
         SOURCE_ITEM_INGESTION_REQUESTED: ("ingest_source_item", INGESTION_QUEUE),
         DOCUMENT_READY_FOR_EMBEDDING: ("embed_document", EMBED_QUEUE),
     }
+
+
+def test_ingestion_requested_payload_carries_only_the_run_id(*, db_session: Session) -> None:
+    """Check that the payload is only the run id and the run row pins the key and hash."""
+
+    project_id = seed_project(db=db_session, email="payload-only@example.com")
+    seeded = seed_upload(db=db_session, project_id=project_id)
+    run_id = request_ingestion(
+        db=db_session,
+        source_item_id=seeded.source_item_id,
+        raw_object_key="raw/extra/key/one.pdf",
+        content_hash="extra-hash",
+    )
+    db_session.flush()
+
+    run = db_session.get(IngestionRun, run_id)
+    assert run is not None
+    assert run.raw_object_key == "raw/extra/key/one.pdf"
+    assert run.content_hash == "extra-hash"
+    events = (
+        db_session.query(OutboxEvent)
+        .filter(
+            OutboxEvent.event_type == SOURCE_ITEM_INGESTION_REQUESTED,
+            OutboxEvent.aggregate_id == seeded.source_item_id,
+        )
+        .all()
+    )
+    assert any(event.payload == {"ingestion_run_id": str(run_id)} for event in events)
+    assert all(set(event.payload) == {"ingestion_run_id"} for event in events)

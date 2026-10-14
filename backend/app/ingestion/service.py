@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.ingestion.chunking import ChunkText, chunk_elements
-from app.ingestion.models import Chunk, Document
+from app.ingestion.models import Chunk, Document, IngestionRun
 from app.ingestion.runs import claim_run, mark_failed, mark_indexing, mark_ready, start_processing
 from app.ingestion.status import RunStatus
 from app.outbox.events import enqueue_document_ready_for_embedding
@@ -24,19 +24,25 @@ from app.providers.base import EmbeddingProvider, NormalizedDocument, Parser
 from app.sources.models import SourceItem
 from app.storage.service import StorageService
 
+# User-safe copy for the fingerprint mismatch; the full detail lives in the worker log.
+FINGERPRINT_MISMATCH = "The stored file does not match the upload. Upload the file again to retry."
+
 
 @dataclass
 class _ItemContext:
-    """The item-derived pipeline inputs, held as plain values outside the session lifecycle.
+    """The run-pinned pipeline inputs, held as plain values outside the session lifecycle.
 
     Loaded ORM rows expire at every commit, while these values must survive the whole
-    choreography, including the rollbacks on the failure paths.
+    choreography, including the rollbacks on the failure paths. ``raw_object_key`` and
+    ``content_hash`` come from the run row, not the item, so the run processes exactly
+    the file version it was created for.
     """
 
     source_item_id: UUID
     project_id: UUID
     filename: str
     raw_object_key: str
+    content_hash: str
 
 
 def _claim_run(*, db: Session, ingestion_run_id: UUID) -> bool:
@@ -83,17 +89,21 @@ def _content_hash(*, text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _load_item_context(*, db: Session, source_item_id: UUID) -> _ItemContext | None:
-    """Return the item-derived pipeline inputs, read straight off the item row."""
+def _load_item_context(*, db: Session, ingestion_run_id: UUID) -> _ItemContext | None:
+    """Return the run-pinned pipeline inputs, read from the run row and its item."""
 
-    item = db.get(SourceItem, source_item_id)
+    run = db.get(IngestionRun, ingestion_run_id)
+    if run is None:
+        return None
+    item = db.get(SourceItem, run.source_item_id)
     if item is None:
         return None
     return _ItemContext(
         source_item_id=item.id,
         project_id=item.project_id,
         filename=item.filename,
-        raw_object_key=item.raw_object_key,
+        raw_object_key=run.raw_object_key,
+        content_hash=run.content_hash,
     )
 
 
@@ -111,6 +121,15 @@ def _fetch_raw_bytes(
     except Exception as exc:
         _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.FETCHING, error=str(exc))
         return None
+
+
+def _verify_run_fingerprint(*, db: Session, run_id: UUID, content_hash: str, raw_bytes: bytes) -> bool:
+    """Fail the run when the fetched bytes are not the version it was created for."""
+
+    if hashlib.sha256(raw_bytes).hexdigest() != content_hash:
+        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.FETCHING, error=FINGERPRINT_MISMATCH)
+        return False
+    return True
 
 
 def _begin_processing(*, db: Session, run_id: UUID) -> bool:
@@ -283,41 +302,42 @@ def _parse_and_index(
 def ingest_source_item(
     *,
     db: Session,
-    source_item_id: UUID,
     ingestion_run_id: UUID,
-    raw_object_key: str,
-    content_hash: str,
     storage: StorageService,
     parser: Parser,
     settings: Settings,
 ) -> None:
-    """Ingest one queued run's file version end to end, recording every outcome on the run row.
+    """Ingest one queued run's pinned file version end to end, recording every outcome on the run.
 
-    The claim guard makes duplicate and stale deliveries no-ops, and after a successful
-    claim no error is re-raised: the run row is the outcome record. ``content_hash``
-    mirrors the event payload's file-version identity; the bytes are addressed by the
-    payload's ``raw_object_key`` and the stored document hash is computed from the
-    parsed content, so the payload hash carries no further duty in this task.
+    The run row carries the file version it was created for: the bytes are fetched by
+    the run's key and verified against the run's hash before parsing, so a newer item
+    version never redirects a queued run. The claim guard makes duplicate and stale
+    deliveries no-ops, and after a successful claim no error is re-raised: the run
+    row is the outcome record.
     """
 
     if not _claim_run(db=db, ingestion_run_id=ingestion_run_id):
         return
-    context = _load_item_context(db=db, source_item_id=source_item_id)
+    context = _load_item_context(db=db, ingestion_run_id=ingestion_run_id)
     if context is None:
         # Unreachable once the claim succeeded (the run's FK guarantees the item exists).
         _mark_run_failed(
             db=db,
             run_id=ingestion_run_id,
             expected=RunStatus.FETCHING,
-            error=f"source item {source_item_id} not found",
+            error=f"ingestion run {ingestion_run_id} not found",
         )
         return
     # End the read transaction: no transaction may span the storage or parser calls.
     db.commit()
     raw_bytes = _fetch_raw_bytes(
-        db=db, run_id=ingestion_run_id, storage=storage, raw_object_key=raw_object_key
+        db=db, run_id=ingestion_run_id, storage=storage, raw_object_key=context.raw_object_key
     )
     if raw_bytes is None:
+        return
+    if not _verify_run_fingerprint(
+        db=db, run_id=ingestion_run_id, content_hash=context.content_hash, raw_bytes=raw_bytes
+    ):
         return
     if not _begin_processing(db=db, run_id=ingestion_run_id):
         return
