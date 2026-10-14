@@ -3,12 +3,15 @@
 Run as ``python -m app.workers.dispatcher``; every ``outbox_poll_interval_seconds`` it
 publishes one batch of due outbox events to the broker through the ``app/outbox/events.py``
 routing map. A failing row is backed off one exponential interval and skipped, so
-poison and outages cannot starve the rows behind them.
+poison and outages cannot starve the rows behind them, and a failing tick (a database
+restart, a dropped connection) is logged and survived.
 """
 
 import logging
 import sys
 import time
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -17,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.db import session_scope
 from app.outbox.events import EVENT_ROUTES
 from app.outbox.models import OutboxEvent
@@ -116,28 +119,63 @@ def dispatch_batch(
     return BatchResult(selected=selected, published=published)
 
 
-def main() -> None:
-    """Run the dispatch loop forever, one short batch per poll interval."""
+def run_loop(
+    *,
+    app: Celery,
+    settings: Settings,
+    session_factory: Callable[[], AbstractContextManager[Session]],
+    sleep: Callable[[float], None],
+    max_ticks: int | None = None,
+) -> None:
+    """Run the dispatch loop, one short batch per poll interval, surviving failing ticks.
 
-    settings = get_settings()
-    app = make_celery_app(broker_url=settings.broker_url)
+    A tick that raises anything is logged with its traceback and the loop keeps going:
+    a database restart under a running dispatcher must not end the process. The ready
+    line goes to stderr once, after the first successful tick, so a supervisor that
+    waits for it never sees readiness the loop cannot back. The loop sleeps only when
+    the last batch was not full - a full batch means more due rows are waiting.
+    """
+
     backoff = Backoff(
         base_seconds=settings.outbox_retry_base_seconds,
         max_seconds=settings.outbox_retry_max_seconds,
     )
-    # stderr, flushed: the e2e webServer entry waits on this line, and piped Python
-    # stdout is block-buffered, so an unflushed print may never arrive.
-    print("dispatcher ready", file=sys.stderr, flush=True)
-    while True:
-        with session_scope() as db:
-            dispatch_batch(
-                db=db,
-                app=app,
-                batch_size=settings.outbox_batch_size,
-                backoff=backoff,
-                publish_timeout_seconds=settings.outbox_publish_timeout_seconds,
-            )
-        time.sleep(settings.outbox_poll_interval_seconds)
+    ready = False
+    ticks = 0
+    while max_ticks is None or ticks < max_ticks:
+        ticks += 1
+        selected = 0
+        try:
+            with session_factory() as db:
+                result = dispatch_batch(
+                    db=db,
+                    app=app,
+                    batch_size=settings.outbox_batch_size,
+                    backoff=backoff,
+                    publish_timeout_seconds=settings.outbox_publish_timeout_seconds,
+                )
+            selected = result.selected
+        except Exception:
+            _logger.exception("dispatch tick failed")
+            continue
+        if not ready:
+            # stderr, flushed: the e2e webServer entry waits on this line, and piped
+            # Python stdout is block-buffered, so an unflushed print may never arrive.
+            print("dispatcher ready", file=sys.stderr, flush=True)
+            ready = True
+        if selected < settings.outbox_batch_size:
+            sleep(settings.outbox_poll_interval_seconds)
+
+
+def main() -> None:
+    """Run the dispatch loop forever on the settings-selected database and broker."""
+
+    run_loop(
+        app=make_celery_app(broker_url=get_settings().broker_url),
+        settings=get_settings(),
+        session_factory=session_scope,
+        sleep=time.sleep,
+    )
 
 
 if __name__ == "__main__":
