@@ -41,11 +41,17 @@ def upgrade() -> None:
         sa.CheckConstraint("type IN ('upload')"),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        # Exists only as the unique target the composite FK below requires.
+        sa.UniqueConstraint("id", "project_id", name="uq_sources_id_project_id"),
     )
     op.create_table(
         "source_items",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("source_id", sa.Uuid(), nullable=False),
+        # project_id is repeated down the chain so retrieval filters by project without
+        # joins, and the composite FK below makes the database reject any row whose
+        # project differs from its source's.
+        sa.Column("project_id", sa.Uuid(), nullable=False),
         sa.Column("external_id", sa.String(), nullable=False),
         sa.Column("filename", sa.String(), nullable=False),
         sa.Column("content_type", sa.String(), nullable=False),
@@ -53,21 +59,37 @@ def upgrade() -> None:
         sa.Column("content_hash", sa.String(), nullable=False),
         sa.Column("raw_object_key", sa.String(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["source_id"], ["sources.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["source_id", "project_id"],
+            ["sources.id", "sources.project_id"],
+            ondelete="CASCADE",
+            name="fk_source_items_source_id_project_id",
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("source_id", "external_id"),
+        sa.UniqueConstraint("id", "project_id", name="uq_source_items_id_project_id"),
     )
     op.create_table(
         "documents",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("source_item_id", sa.Uuid(), nullable=False),
+        # project_id is repeated down the chain so retrieval filters by project without
+        # joins, and the composite FK below makes the database reject any row whose
+        # project differs from its item's.
+        sa.Column("project_id", sa.Uuid(), nullable=False),
         sa.Column("content_hash", sa.String(), nullable=False),
         sa.Column("raw_object_key", sa.String(), nullable=False),
         sa.Column("normalized_content", postgresql.JSONB(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["source_item_id"], ["source_items.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["source_item_id", "project_id"],
+            ["source_items.id", "source_items.project_id"],
+            ondelete="CASCADE",
+            name="fk_documents_source_item_id_project_id",
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("source_item_id", "content_hash"),
+        sa.UniqueConstraint("id", "project_id", name="uq_documents_id_project_id"),
     )
     op.create_table(
         "chunks",
@@ -89,8 +111,15 @@ def upgrade() -> None:
             sa.Computed("to_tsvector('english', text)", persisted=True),
         ),
         sa.CheckConstraint("chunk_type IN ('text')"),
-        sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
+        # project_id is repeated down the chain so retrieval filters chunks by project
+        # without joins, and the composite FK makes the database reject any row whose
+        # project differs from its document's.
+        sa.ForeignKeyConstraint(
+            ["document_id", "project_id"],
+            ["documents.id", "documents.project_id"],
+            ondelete="CASCADE",
+            name="fk_chunks_document_id_project_id",
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("document_id", "position"),
     )

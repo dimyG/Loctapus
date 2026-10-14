@@ -11,6 +11,7 @@ from sqlalchemy import (
     Computed,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     Text,
@@ -27,10 +28,24 @@ class Document(Base):
     """A normalized parsed document, fingerprinted by its canonical JSON hash."""
 
     __tablename__ = "documents"
-    __table_args__ = (UniqueConstraint("source_item_id", "content_hash"),)
+    __table_args__ = (
+        UniqueConstraint("source_item_id", "content_hash"),
+        # project_id is repeated down sources -> source_items -> documents -> chunks so
+        # retrieval filters chunks by project without joins; the composite FK makes the
+        # database reject any row whose project differs from its item's, so the tenant
+        # boundary is enforced by Postgres rather than remembered by writers.
+        ForeignKeyConstraint(
+            ["source_item_id", "project_id"],
+            ["source_items.id", "source_items.project_id"],
+            ondelete="CASCADE",
+            name="fk_documents_source_item_id_project_id",
+        ),
+        UniqueConstraint("id", "project_id", name="uq_documents_id_project_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    source_item_id: Mapped[UUID] = mapped_column(ForeignKey("source_items.id", ondelete="CASCADE"))
+    source_item_id: Mapped[UUID] = mapped_column()
+    project_id: Mapped[UUID] = mapped_column()
     content_hash: Mapped[str] = mapped_column(String)
     raw_object_key: Mapped[str] = mapped_column(String)
     normalized_content: Mapped[dict[str, Any]] = mapped_column(JSONB)
@@ -52,13 +67,21 @@ class Chunk(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
         Index("ix_chunks_search_vector", "search_vector", postgresql_using="gin"),
+        # project_id is repeated down sources -> source_items -> documents -> chunks so
+        # retrieval filters chunks by project without joins; the composite FK makes the
+        # database reject any row whose project differs from its document's, so the
+        # tenant boundary is enforced by Postgres rather than remembered by writers.
+        ForeignKeyConstraint(
+            ["document_id", "project_id"],
+            ["documents.id", "documents.project_id"],
+            ondelete="CASCADE",
+            name="fk_chunks_document_id_project_id",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    # Intentional denormalization for the retrieval hot path: chunk queries filter by
-    # project without joining documents -> source_items -> sources.
-    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
-    document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
+    project_id: Mapped[UUID] = mapped_column()
+    document_id: Mapped[UUID] = mapped_column()
     position: Mapped[int] = mapped_column()
     text: Mapped[str] = mapped_column(Text)
     heading_path: Mapped[list[str]] = mapped_column(JSONB)

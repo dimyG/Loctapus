@@ -22,7 +22,7 @@ from app.ingestion.chunking import ChunkText, chunk_elements
 from app.ingestion.models import Chunk, Document, IngestionRun
 from app.outbox.events import enqueue_document_ready_for_embedding
 from app.providers.base import EmbeddingProvider, NormalizedDocument, Parser
-from app.sources.models import Source, SourceItem
+from app.sources.models import SourceItem
 from app.storage.service import StorageService
 
 # The catalog type of chunks.embedding looks like vector(384); the guard parses the dimension.
@@ -115,19 +115,14 @@ def _mark_run_failed(*, db: Session, run_id: UUID, expected: str, error: str) ->
 
 
 def _load_item_context(*, db: Session, source_item_id: UUID) -> _ItemContext | None:
-    """Return the item-derived pipeline inputs, joining through the item's source."""
+    """Return the item-derived pipeline inputs, read straight off the item row."""
 
-    row = db.execute(
-        select(SourceItem, Source.project_id)
-        .join(Source, Source.id == SourceItem.source_id)
-        .where(SourceItem.id == source_item_id)
-    ).first()
-    if row is None:
+    item = db.get(SourceItem, source_item_id)
+    if item is None:
         return None
-    item = row[0]
     return _ItemContext(
         source_item_id=item.id,
-        project_id=row[1],
+        project_id=item.project_id,
         filename=item.filename,
         raw_object_key=item.raw_object_key,
     )
@@ -234,6 +229,7 @@ def _commit_document_set(
     document = Document(
         id=uuid4(),
         source_item_id=context.source_item_id,
+        project_id=context.project_id,
         content_hash=document_hash,
         raw_object_key=context.raw_object_key,
         normalized_content=_normalized_payload(document=parsed),

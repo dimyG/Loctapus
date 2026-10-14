@@ -81,6 +81,7 @@ def create_upload_source(
     item = SourceItem(
         id=item_id,
         source_id=source_id,
+        project_id=project_id,
         external_id=filename,
         filename=filename,
         content_type=content_type or "application/octet-stream",

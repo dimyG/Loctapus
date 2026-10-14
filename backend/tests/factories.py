@@ -62,6 +62,7 @@ def seed_upload(
     item = SourceItem(
         id=item_id,
         source_id=source.id,
+        project_id=project_id,
         external_id=filename,
         filename=filename,
         content_type="application/octet-stream",

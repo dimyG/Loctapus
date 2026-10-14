@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     UniqueConstraint,
@@ -26,6 +27,8 @@ class Source(Base):
     __table_args__ = (
         CheckConstraint("type IN ('upload')"),
         Index("ix_sources_project_id", "project_id"),
+        # Exists only as the unique target the composite FK on source_items requires.
+        UniqueConstraint("id", "project_id", name="uq_sources_id_project_id"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -38,10 +41,24 @@ class SourceItem(Base):
     """One uploaded content version, fingerprinted by the raw bytes' sha256 hash."""
 
     __tablename__ = "source_items"
-    __table_args__ = (UniqueConstraint("source_id", "external_id"),)
+    __table_args__ = (
+        UniqueConstraint("source_id", "external_id"),
+        # project_id is repeated down sources -> source_items -> documents -> chunks so
+        # retrieval filters chunks by project without joins; the composite FK makes the
+        # database reject any row whose project differs from its source's, so the tenant
+        # boundary is enforced by Postgres rather than remembered by writers.
+        ForeignKeyConstraint(
+            ["source_id", "project_id"],
+            ["sources.id", "sources.project_id"],
+            ondelete="CASCADE",
+            name="fk_source_items_source_id_project_id",
+        ),
+        UniqueConstraint("id", "project_id", name="uq_source_items_id_project_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    source_id: Mapped[UUID] = mapped_column(ForeignKey("sources.id", ondelete="CASCADE"))
+    source_id: Mapped[UUID] = mapped_column()
+    project_id: Mapped[UUID] = mapped_column()
     external_id: Mapped[str] = mapped_column(String)
     filename: Mapped[str] = mapped_column(String)
     content_type: Mapped[str] = mapped_column(String)

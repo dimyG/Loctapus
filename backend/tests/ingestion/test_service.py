@@ -25,6 +25,7 @@ from app.outbox.models import OutboxEvent
 from app.providers import get_embedding_provider, get_parser
 from app.providers.base import EmbeddingProvider
 from app.providers.stub_embeddings import STUB_EMBEDDING_DIM
+from app.sources.models import Source, SourceItem
 from app.storage.service import StorageService
 from tests.factories import SeededUpload, seed_project, seed_upload
 from tests.helpers import SettingsForTests
@@ -194,6 +195,17 @@ def test_ingest_end_to_end(
     assert chunk.chunk_metadata == {"filename": "report.docx"}
     assert chunk.content_hash == hashlib.sha256(chunk.text.encode("utf-8")).hexdigest()
     assert chunk.embedding is None
+
+    # The project scope is carried down the whole chain: source -> item -> document -> chunk.
+    source = db_session.get(Source, seeded.source_id)
+    item = db_session.get(SourceItem, seeded.source_item_id)
+    assert source is not None
+    assert item is not None
+    for chain_chunk in chunks:
+        assert chain_chunk.project_id == document.project_id
+        assert chain_chunk.project_id == item.project_id
+        assert chain_chunk.project_id == source.project_id
+        assert chain_chunk.project_id == project_id
 
     # The generated column must equal its own definition, compared inside the database.
     vector_matches = (
