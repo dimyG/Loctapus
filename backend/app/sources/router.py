@@ -41,7 +41,11 @@ def _validated_size(*, file: UploadFile, settings: Settings) -> None:
     """Reject empty and oversized uploads via ``UploadFile.size`` before the bytes are read."""
 
     max_bytes = settings.max_upload_mb * 1024 * 1024
-    if file.size is None or file.size == 0:
+    if file.size is None:
+        # Defensive: Starlette always sets size on parsed multipart parts, so an absent
+        # size means the body was never measured and cannot be gated.
+        raise HTTPException(422, "The file size could not be determined.")
+    if file.size == 0:
         raise HTTPException(422, "The file is empty.")
     if file.size > max_bytes:
         raise HTTPException(422, f"The file is too large. The maximum size is {settings.max_upload_mb} MB.")

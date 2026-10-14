@@ -19,8 +19,8 @@ from app.ingestion.status import RunStatus
 from app.sources.models import Source, SourceItem
 from app.storage.service import StorageService, build_raw_object_key
 
-# Control characters (C0 plus DEL) must never survive into a stored filename.
-_CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
+# Control characters (C0 and C1 plus DEL) must never survive into a stored filename.
+_CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f\x80-\x9f]")
 
 # A stored filename is display data and part of the storage key, so its length is capped.
 MAX_FILENAME_LENGTH = 255
@@ -37,14 +37,14 @@ SUPPORTED_UPLOAD_TYPES: Mapping[str, str] = MappingProxyType(
 def sanitize_filename(*, filename: str) -> str:
     r"""Return the safe basename of a client-supplied filename, raising ValueError when unusable.
 
-    Only the last ``/`` or ``\\`` segment is kept and control characters are dropped; an
-    empty result or a name longer than 255 characters is rejected because the stored name
-    is both display data and part of the storage key.
+    Only the last ``/`` or ``\\`` segment is kept, control characters are dropped, and
+    dot-only names are rejected; an empty result or a name longer than 255 characters
+    is rejected because the stored name is both display data and part of the storage key.
     """
 
     basename = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
     basename = _CONTROL_CHARACTERS.sub("", basename)
-    if not basename or len(basename) > MAX_FILENAME_LENGTH:
+    if basename in (".", "..") or not basename or len(basename) > MAX_FILENAME_LENGTH:
         raise ValueError(f"filename sanitizes to an empty or over-long basename: {filename!r}")
     return basename
 
