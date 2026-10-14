@@ -12,6 +12,7 @@ from app.outbox.events import (
     EVENT_ROUTES,
     INGESTION_QUEUE,
     SOURCE_ITEM_INGESTION_REQUESTED,
+    EventRoute,
     enqueue_document_ready_for_embedding,
     enqueue_source_item_ingestion_requested,
 )
@@ -71,10 +72,18 @@ def test_routes_cover_both_events() -> None:
     assert DOCUMENT_READY_FOR_EMBEDDING == "document_ready_for_embedding"
     assert INGESTION_QUEUE == "ingestion"
     assert EMBED_QUEUE == "embed"
-    assert EVENT_ROUTES == {
-        SOURCE_ITEM_INGESTION_REQUESTED: ("ingest_source_item", INGESTION_QUEUE),
-        DOCUMENT_READY_FOR_EMBEDDING: ("embed_document", EMBED_QUEUE),
-    }
+    assert {
+        SOURCE_ITEM_INGESTION_REQUESTED: EventRoute(
+            task_name="ingest_source_item",
+            queue=INGESTION_QUEUE,
+            payload_keys=frozenset({"ingestion_run_id"}),
+        ),
+        DOCUMENT_READY_FOR_EMBEDDING: EventRoute(
+            task_name="embed_document",
+            queue=EMBED_QUEUE,
+            payload_keys=frozenset({"document_id", "ingestion_run_id"}),
+        ),
+    } == EVENT_ROUTES
 
 
 def test_ingestion_requested_payload_carries_only_the_run_id(*, db_session: Session) -> None:

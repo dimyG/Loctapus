@@ -11,12 +11,13 @@ from app.core.config import get_settings
 from app.core.db import session_scope
 from app.ingestion.service import embed_document as embed_document_service
 from app.ingestion.service import ingest_source_item as ingest_source_item_service
+from app.outbox.events import EMBED_DOCUMENT_TASK, INGEST_SOURCE_ITEM_TASK
 from app.providers import get_embedding_provider, get_parser
 from app.storage.service import StorageService
 from app.workers.celery_app import celery_app
 
 
-@celery_app.task(name="ingest_source_item")
+@celery_app.task(name=INGEST_SOURCE_ITEM_TASK)
 def ingest_source_item(*, ingestion_run_id: str) -> None:
     """Ingest one queued run's pinned file version end to end, recording the outcome on the run."""
 
@@ -31,7 +32,7 @@ def ingest_source_item(*, ingestion_run_id: str) -> None:
         )
 
 
-@celery_app.task(name="embed_document")
+@celery_app.task(name=EMBED_DOCUMENT_TASK)
 def embed_document(*, document_id: str, ingestion_run_id: str) -> None:
     """Embed one document's chunks in batches and move its run to ready."""
 

@@ -56,9 +56,8 @@ def dispatch_batch(*, db: Session, app: Celery, batch_size: int) -> int:
             # An unroutable event is poison, but it must not starve the rows behind it.
             _bump(row=row, error=f"no route for event_type {row.event_type!r}")
             continue
-        task_name, queue = route
         try:
-            app.send_task(task_name, kwargs=row.payload, queue=queue)
+            app.send_task(route.task_name, kwargs=row.payload, queue=route.queue)
         except Exception as exc:
             # The batch ends here: rows not yet published keep their state for the
             # next tick instead of retrying publishes in place under row locks.
