@@ -1,11 +1,18 @@
-"""Tests for Celery app construction and the worker_init startup guard."""
+"""Tests for Celery app construction and the worker startup signal handlers."""
+
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.outbox.events import EMBED_DOCUMENT_TASK, INGEST_SOURCE_ITEM_TASK
 from app.providers import get_embedding_provider
-from app.workers.celery_app import make_celery_app, run_worker_startup_checks
+from app.workers.celery_app import celery_app, make_celery_app, run_worker_startup_checks
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class _MismatchedEmbeddingProvider:
@@ -58,3 +65,57 @@ def test_worker_init_passes_with_stub(*, db_session: Session, settings: Settings
 
     provider = get_embedding_provider(settings=settings)
     run_worker_startup_checks(db=db_session, embedding_provider=provider)
+
+
+def test_tasks_retry_transient_database_errors() -> None:
+    """Both pipeline tasks autoretry on transient database errors, capped at five."""
+
+    from sqlalchemy.exc import InterfaceError, OperationalError
+
+    celery_app.loader.import_default_modules()
+    for task_name in (INGEST_SOURCE_ITEM_TASK, EMBED_DOCUMENT_TASK):
+        task = celery_app.tasks[task_name]
+        assert OperationalError in task.autoretry_for
+        assert InterfaceError in task.autoretry_for
+        assert task.max_retries == 5
+        assert task.retry_backoff_max == 60
+
+
+def test_dispatcher_does_not_import_the_pipeline() -> None:
+    """Importing the dispatcher must not pull the ingestion pipeline or its parsers."""
+
+    code = (
+        "import sys, app.workers.dispatcher; "
+        "assert 'app.ingestion.service' not in sys.modules; "
+        "assert 'pypdf' not in sys.modules"
+    )
+    subprocess.run([sys.executable, "-c", code], cwd=BACKEND_DIR, check=True)
+
+
+def test_worker_init_refuses_when_provider_resolution_fails(
+    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A provider that cannot be resolved refuses boot instead of starting a worker."""
+
+    provider = get_embedding_provider(settings=settings)
+
+    def _exploding_get_parser(*, settings: Settings) -> object:
+        """Stand-in for the settings-driven parser factory."""
+
+        raise ValueError("no such parser")
+
+    monkeypatch.setattr("app.workers.signals.get_parser", _exploding_get_parser)
+    with pytest.raises(SystemExit):
+        run_worker_startup_checks(db=db_session, embedding_provider=provider)
+
+
+def test_celery_app_declares_both_queues() -> None:
+    """The app declares both durable queues and defaults new tasks to ingestion."""
+
+    app = make_celery_app(broker_url="amqp://guest:guest@localhost:5672/rag_test")
+    queues = {queue.name: queue for queue in app.conf.task_queues}
+    assert set(queues) == {"ingestion", "embed"}
+    assert all(queue.durable for queue in queues.values())
+    assert app.conf.task_default_queue == "ingestion"
+    assert app.conf.broker_connection_retry_on_startup is True
+    assert app.conf.include == ["app.workers.tasks", "app.workers.signals"]

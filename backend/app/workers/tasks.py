@@ -7,6 +7,8 @@ without Celery in ``app/ingestion/service.py``.
 
 from uuid import UUID
 
+from sqlalchemy.exc import InterfaceError, OperationalError
+
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.ingestion.service import embed_document as embed_document_service
@@ -16,8 +18,18 @@ from app.providers import get_embedding_provider, get_parser
 from app.storage.service import get_storage
 from app.workers.celery_app import celery_app
 
+# Transient database failures (a restarted Postgres, a dropped pooled connection)
+# autoretry with capped exponential backoff; every other failure ends on the run row.
+_TASK_RETRY = {
+    "autoretry_for": (OperationalError, InterfaceError),
+    "retry_backoff": True,
+    "retry_backoff_max": 60,
+    "retry_jitter": True,
+    "max_retries": 5,
+}
 
-@celery_app.task(name=INGEST_SOURCE_ITEM_TASK)
+
+@celery_app.task(name=INGEST_SOURCE_ITEM_TASK, **_TASK_RETRY)
 def ingest_source_item(*, ingestion_run_id: str) -> None:
     """Ingest one queued run's pinned file version end to end, recording the outcome on the run."""
 
@@ -32,7 +44,7 @@ def ingest_source_item(*, ingestion_run_id: str) -> None:
         )
 
 
-@celery_app.task(name=EMBED_DOCUMENT_TASK)
+@celery_app.task(name=EMBED_DOCUMENT_TASK, **_TASK_RETRY)
 def embed_document(*, document_id: str, ingestion_run_id: str) -> None:
     """Embed one document's chunks in batches and move its run to ready."""
 
