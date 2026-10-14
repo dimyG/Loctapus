@@ -18,10 +18,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.models import Base
 
-# Mapper configuration is global: processes importing only this module's chain
-# need the identity relationship partners registered before the first flush.
-from app.identity import models as identity_models  # noqa: F401
-
 if TYPE_CHECKING:
     from app.identity.models import Team, Workspace
 

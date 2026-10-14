@@ -9,10 +9,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models import Base
 
-# The projects table is a string-named FK target here, and the worker imports
-# only this module's chain (never the API routers), so it must load with us.
-from app.projects import models as projects_models  # noqa: F401
-
 
 class Source(Base):
     """A project's content source; this slice creates upload sources only."""

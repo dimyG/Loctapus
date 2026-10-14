@@ -12,6 +12,7 @@ from celery import Celery
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+import app.models  # noqa: F401
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.outbox.events import EVENT_ROUTES

@@ -13,6 +13,7 @@ from celery import Celery
 from celery.signals import worker_init, worker_ready
 from sqlalchemy.orm import Session
 
+import app.models  # noqa: F401
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.ingestion.service import run_startup_checks

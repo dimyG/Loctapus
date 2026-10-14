@@ -3,6 +3,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Aliased because the FastAPI instance below is also named app; the import still
+# registers every ORM model.
+import app.models as app_models  # noqa: F401
 from app.core.config import get_settings
 from app.identity.router import router as identity_router
 from app.projects.router import router as projects_router
