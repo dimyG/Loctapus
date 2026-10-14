@@ -2,6 +2,7 @@
 
 import hashlib
 import io
+from dataclasses import replace
 from uuid import UUID, uuid4
 
 import pytest
@@ -10,7 +11,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.identity.models import User, Workspace
 from app.ingestion.models import Chunk, Document, IngestionRun
 from app.ingestion.service import (
     canonical_document_json,
@@ -22,16 +22,12 @@ from app.ingestion.service import (
 )
 from app.outbox.events import DOCUMENT_READY_FOR_EMBEDDING
 from app.outbox.models import OutboxEvent
-from app.projects.models import Project
 from app.providers import get_embedding_provider, get_parser
 from app.providers.base import EmbeddingProvider
 from app.providers.stub_embeddings import STUB_EMBEDDING_DIM
-from app.sources.models import Source, SourceItem
-from app.storage.service import StorageService, build_raw_object_key
+from app.storage.service import StorageService
+from tests.factories import SeededUpload, seed_project, seed_upload
 from tests.helpers import SettingsForTests
-
-DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-PDF_CONTENT_TYPE = "application/pdf"
 
 
 @pytest.fixture
@@ -99,74 +95,37 @@ def _make_docx(*, heading: str | None, paragraphs: list[str]) -> bytes:
     return buffer.getvalue()
 
 
-def _seed_queued_run(
+def _seed(
     *,
     db: Session,
     storage: StorageService,
     filename: str,
     content: bytes,
-    content_type: str,
-) -> tuple[Project, SourceItem, IngestionRun]:
-    """Create the identity, project, source, and item rows plus one queued run, bytes in Garage."""
+) -> tuple[UUID, SeededUpload]:
+    """Seed one upload with its bytes in Garage: a project, its rows, and the stored object."""
 
-    user = User(email=f"{uuid4().hex}@example.com", password_hash="test")
-    db.add(user)
-    db.flush()
-    workspace = Workspace(name="Default", owner_user_id=user.id)
-    db.add(workspace)
-    db.flush()
-    project = Project(workspace_id=workspace.id, name="ingest-service-test")
-    db.add(project)
-    db.flush()
-    source = Source(project_id=project.id, type="upload")
-    db.add(source)
-    db.flush()
-    content_hash = hashlib.sha256(content).hexdigest()
-    item_id = uuid4()
-    raw_object_key = build_raw_object_key(
-        project_id=project.id,
-        source_item_id=item_id,
-        content_hash=content_hash,
-        filename=filename,
-    )
-    # Bytes land in Garage before the rows commit, so no transaction spans the storage call.
-    storage.put_object(key=raw_object_key, content=content)
-    item = SourceItem(
-        id=item_id,
-        source_id=source.id,
-        external_id=filename,
-        filename=filename,
-        content_type=content_type,
-        size_bytes=len(content),
-        content_hash=content_hash,
-        raw_object_key=raw_object_key,
-    )
-    db.add(item)
-    # Flush the item before adding the run: with no relationship between the mappers the
-    # unit of work orders INSERTs by table name, which would put the run's FK first.
-    db.flush()
-    run = IngestionRun(id=uuid4(), source_item_id=item_id, status="queued")
-    db.add(run)
-    db.commit()
-    return project, item, run
+    project_id = seed_project(db=db, email=f"{uuid4().hex}@example.com")
+    seeded = seed_upload(db=db, project_id=project_id, filename=filename, content=content)
+    # The seed's commit closed the transaction, so the PUT spans no transaction either.
+    storage.put_object(key=seeded.raw_object_key, content=content)
+    return project_id, seeded
 
 
 def _ingest(
     *,
     db: Session,
-    item: SourceItem,
-    run: IngestionRun,
+    seeded: SeededUpload,
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Run the ingestion task for one run, unpacking the item the way the worker will."""
+    """Run the ingestion task for one run, unpacking the payload the way the worker will."""
 
     ingest_source_item(
         db=db,
-        source_item_id=item.id,
-        ingestion_run_id=run.id,
-        raw_object_key=item.raw_object_key,
-        content_hash=item.content_hash,
+        source_item_id=seeded.source_item_id,
+        ingestion_run_id=seeded.ingestion_run_id,
+        raw_object_key=seeded.raw_object_key,
+        content_hash=seeded.content_hash,
         storage=storage,
         parser=get_parser(settings=settings),
         settings=settings,
@@ -194,16 +153,16 @@ def test_ingest_end_to_end(
         "The third paragraph still fits inside the default target budget.",
     ]
     content = _make_docx(heading="Introduction", paragraphs=paragraphs)
-    project, item, run = _seed_queued_run(
+    project_id, seeded = _seed(
         db=db_session,
         storage=storage,
         filename="report.docx",
         content=content,
-        content_type=DOCX_CONTENT_TYPE,
     )
-    _ingest(db=db_session, item=item, run=run, settings=settings, storage=storage)
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
 
-    db_session.refresh(run)
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
     assert run.status == "indexing"
     assert run.document_id is not None
     assert run.started_at is not None
@@ -213,8 +172,8 @@ def test_ingest_end_to_end(
     parsed = get_parser(settings=settings).parse(filename="report.docx", content=content)
     expected_json = canonical_document_json(document=parsed)
     assert document.content_hash == hashlib.sha256(expected_json.encode("utf-8")).hexdigest()
-    assert document.source_item_id == item.id
-    assert document.raw_object_key == item.raw_object_key
+    assert document.source_item_id == seeded.source_item_id
+    assert document.raw_object_key == seeded.raw_object_key
     assert document.normalized_content == {
         "title": parsed.title,
         "elements": [
@@ -228,7 +187,7 @@ def test_ingest_end_to_end(
     assert len(chunks) == 1
     chunk = chunks[0]
     assert chunk.position == 0
-    assert chunk.project_id == project.id
+    assert chunk.project_id == project_id
     assert chunk.chunk_type == "text"
     assert chunk.text == "\n\n".join(paragraphs)
     assert chunk.heading_path == ["Introduction"]
@@ -268,26 +227,26 @@ def test_duplicate_delivery_no_ops(
     """Check that a re-delivered run cannot be re-claimed and writes nothing new."""
 
     content = _make_docx(heading="Introduction", paragraphs=["One paragraph of prose."])
-    _project, item, run = _seed_queued_run(
+    _project_id, seeded = _seed(
         db=db_session,
         storage=storage,
         filename="duplicate.docx",
         content=content,
-        content_type=DOCX_CONTENT_TYPE,
     )
-    _ingest(db=db_session, item=item, run=run, settings=settings, storage=storage)
-    db_session.refresh(run)
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
     status_before = run.status
     document_id_before = run.document_id
     started_at_before = run.started_at
 
-    _ingest(db=db_session, item=item, run=run, settings=settings, storage=storage)
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
 
     db_session.refresh(run)
     assert run.status == status_before
     assert run.document_id == document_id_before
     assert run.started_at == started_at_before
-    assert db_session.query(Document).filter(Document.source_item_id == item.id).count() == 1
+    assert db_session.query(Document).filter(Document.source_item_id == seeded.source_item_id).count() == 1
     events = (
         db_session.query(OutboxEvent).filter(OutboxEvent.event_type == DOCUMENT_READY_FOR_EMBEDDING).all()
     )
@@ -326,20 +285,20 @@ def test_garbage_pdf_fails_the_run(
     """Check that unparseable bytes fail the run with no document and the error recorded."""
 
     content = b"these bytes are definitely not a pdf document"
-    _project, item, run = _seed_queued_run(
+    _project_id, seeded = _seed(
         db=db_session,
         storage=storage,
         filename="broken.pdf",
         content=content,
-        content_type=PDF_CONTENT_TYPE,
     )
-    _ingest(db=db_session, item=item, run=run, settings=settings, storage=storage)
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
 
-    db_session.refresh(run)
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
     assert run.status == "failed"
     assert run.error is not None
     assert run.finished_at is not None
-    assert db_session.query(Document).filter(Document.source_item_id == item.id).count() == 0
+    assert db_session.query(Document).filter(Document.source_item_id == seeded.source_item_id).count() == 0
 
 
 def test_zero_chunk_document_fails_the_run(
@@ -351,21 +310,21 @@ def test_zero_chunk_document_fails_the_run(
     """Check that a headings-only document fails the run instead of storing zero chunks."""
 
     content = _make_docx(heading="Only A Heading", paragraphs=[])
-    _project, item, run = _seed_queued_run(
+    _project_id, seeded = _seed(
         db=db_session,
         storage=storage,
         filename="headings-only.docx",
         content=content,
-        content_type=DOCX_CONTENT_TYPE,
     )
-    _ingest(db=db_session, item=item, run=run, settings=settings, storage=storage)
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
 
-    db_session.refresh(run)
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
     assert run.status == "failed"
     assert run.error is not None
     assert "no text content" in run.error
     assert run.finished_at is not None
-    assert db_session.query(Document).filter(Document.source_item_id == item.id).count() == 0
+    assert db_session.query(Document).filter(Document.source_item_id == seeded.source_item_id).count() == 0
 
 
 def test_identical_version_conflict_is_idempotent_noop(
@@ -377,27 +336,29 @@ def test_identical_version_conflict_is_idempotent_noop(
     """Check the unique backstop: a second identical run ends ready on the stored document."""
 
     content = _make_docx(heading="Introduction", paragraphs=["Shared prose for both runs."])
-    _project, item, run_a = _seed_queued_run(
+    _project_id, seeded = _seed(
         db=db_session,
         storage=storage,
         filename="conflict.docx",
         content=content,
-        content_type=DOCX_CONTENT_TYPE,
     )
-    run_b = IngestionRun(id=uuid4(), source_item_id=item.id, status="queued")
+    run_b = IngestionRun(id=uuid4(), source_item_id=seeded.source_item_id, status="queued")
     db_session.add(run_b)
     db_session.commit()
 
-    _ingest(db=db_session, item=item, run=run_a, settings=settings, storage=storage)
-    _ingest(db=db_session, item=item, run=run_b, settings=settings, storage=storage)
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
+    _ingest(
+        db=db_session, seeded=replace(seeded, ingestion_run_id=run_b.id), settings=settings, storage=storage
+    )
 
-    db_session.refresh(run_a)
+    run_a = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run_a is not None
     db_session.refresh(run_b)
     assert run_a.status == "indexing"
     assert run_a.document_id is not None
     assert run_b.status == "ready"
     assert run_b.document_id == run_a.document_id
-    documents = db_session.query(Document).filter(Document.source_item_id == item.id).all()
+    documents = db_session.query(Document).filter(Document.source_item_id == seeded.source_item_id).all()
     assert len(documents) == 1
     assert db_session.query(Chunk).filter(Chunk.document_id == run_a.document_id).count() == 1
     events = (
@@ -416,15 +377,15 @@ def test_embed_updates_vectors_and_marks_ready(
 
     paragraphs = ["Alpha prose for the embedding pass.", "Beta prose for the embedding pass."]
     content = _make_docx(heading="Vectors", paragraphs=paragraphs)
-    _project, item, run = _seed_queued_run(
+    _project_id, seeded = _seed(
         db=db_session,
         storage=storage,
         filename="embed.docx",
         content=content,
-        content_type=DOCX_CONTENT_TYPE,
     )
-    _ingest(db=db_session, item=item, run=run, settings=settings, storage=storage)
-    db_session.refresh(run)
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
     assert run.document_id is not None
 
     embed_document(
@@ -461,15 +422,15 @@ def test_embed_is_idempotent_on_redelivery(
     """Check that re-delivering the embed task keeps the run ready with identical vectors."""
 
     content = _make_docx(heading="Stable", paragraphs=["Stable prose embeds identically."])
-    _project, item, run = _seed_queued_run(
+    _project_id, seeded = _seed(
         db=db_session,
         storage=storage,
         filename="stable.docx",
         content=content,
-        content_type=DOCX_CONTENT_TYPE,
     )
-    _ingest(db=db_session, item=item, run=run, settings=settings, storage=storage)
-    db_session.refresh(run)
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
     assert run.document_id is not None
     document_id = run.document_id
     provider = get_embedding_provider(settings=settings)
@@ -513,15 +474,15 @@ def test_embed_batches_chunks(*, db_session: Session, storage: StorageService) -
         "alpha beta eta",
     ]
     content = _make_docx(heading=None, paragraphs=paragraphs)
-    _project, item, run = _seed_queued_run(
+    _project_id, seeded = _seed(
         db=db_session,
         storage=storage,
         filename="batches.docx",
         content=content,
-        content_type=DOCX_CONTENT_TYPE,
     )
-    _ingest(db=db_session, item=item, run=run, settings=settings, storage=storage)
-    db_session.refresh(run)
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
     assert run.document_id is not None
     assert db_session.query(Chunk).filter(Chunk.document_id == run.document_id).count() == 5
 

@@ -1,7 +1,6 @@
 """API tests for the upload and sources endpoints, against real Garage."""
 
 import hashlib
-import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
@@ -20,6 +19,7 @@ from app.projects.models import ProjectTeamRole
 from app.providers import get_embedding_provider, get_parser
 from app.sources.models import Source, SourceItem
 from app.storage.service import StorageService, build_raw_object_key
+from tests.factories import seed_upload
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 PDF_CONTENT_TYPE = "application/pdf"
@@ -285,28 +285,14 @@ def test_sources_list_derives_status_and_filename(*, client: TestClient, db_sess
     db_session.commit()
 
     # A second, explicitly older source with its own item and queued run.
-    older_source = Source(
-        project_id=UUID(project_id),
-        type="upload",
-        created_at=datetime.now(UTC) - timedelta(hours=1),
+    older = seed_upload(
+        db=db_session, project_id=UUID(project_id), filename="older.pdf", content=b"older bytes"
     )
-    db_session.add(older_source)
-    db_session.flush()
-    older_item = SourceItem(
-        id=uuid.uuid4(),
-        source_id=older_source.id,
-        external_id="older.pdf",
-        filename="older.pdf",
-        content_type=PDF_CONTENT_TYPE,
-        size_bytes=4,
-        content_hash="older-content-hash",
-        raw_object_key="raw/older/source/item/older.pdf",
-    )
-    db_session.add(older_item)
-    db_session.flush()
-    db_session.add(IngestionRun(id=uuid.uuid4(), source_item_id=older_item.id, status="queued"))
-    older_source_id = str(older_source.id)
+    older_source = db_session.get(Source, older.source_id)
+    assert older_source is not None
+    older_source.created_at = datetime.now(UTC) - timedelta(hours=1)
     db_session.commit()
+    older_source_id = str(older.source_id)
 
     r = client.get(f"/projects/{project_id}/sources", headers=headers)
     assert r.status_code == 200
