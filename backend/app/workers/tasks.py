@@ -20,16 +20,18 @@ from app.workers.celery_app import celery_app
 
 # Transient database failures (a restarted Postgres, a dropped pooled connection)
 # autoretry with capped exponential backoff; every other failure ends on the run row.
-_TASK_RETRY = {
-    "autoretry_for": (OperationalError, InterfaceError),
-    "retry_backoff": True,
-    "retry_backoff_max": 60,
-    "retry_jitter": True,
-    "max_retries": 5,
-}
+# The kwargs are spelled out per decorator because the Celery task overloads do not
+# accept a dict unpack.
 
 
-@celery_app.task(name=INGEST_SOURCE_ITEM_TASK, **_TASK_RETRY)
+@celery_app.task(
+    name=INGEST_SOURCE_ITEM_TASK,
+    autoretry_for=(OperationalError, InterfaceError),
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+    max_retries=5,
+)
 def ingest_source_item(*, ingestion_run_id: str) -> None:
     """Ingest one queued run's pinned file version end to end, recording the outcome on the run."""
 
@@ -44,7 +46,14 @@ def ingest_source_item(*, ingestion_run_id: str) -> None:
         )
 
 
-@celery_app.task(name=EMBED_DOCUMENT_TASK, **_TASK_RETRY)
+@celery_app.task(
+    name=EMBED_DOCUMENT_TASK,
+    autoretry_for=(OperationalError, InterfaceError),
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+    max_retries=5,
+)
 def embed_document(*, document_id: str, ingestion_run_id: str) -> None:
     """Embed one document's chunks in batches and move its run to ready."""
 
