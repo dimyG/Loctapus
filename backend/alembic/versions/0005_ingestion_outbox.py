@@ -67,6 +67,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("source_id", "external_id"),
+        sa.CheckConstraint("size_bytes > 0"),
         sa.UniqueConstraint("id", "project_id", name="uq_source_items_id_project_id"),
     )
     op.create_table(
@@ -134,6 +135,9 @@ def upgrade() -> None:
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
         sa.CheckConstraint("status IN ('queued', 'fetching', 'processing', 'indexing', 'ready', 'failed')"),
+        # finished_at must exist exactly when the run reached a terminal status, so a
+        # finished run is never mistaken for one still in flight and vice versa.
+        sa.CheckConstraint("(status IN ('ready', 'failed')) = (finished_at IS NOT NULL)"),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["source_item_id"], ["source_items.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),

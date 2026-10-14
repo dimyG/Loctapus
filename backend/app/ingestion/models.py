@@ -22,6 +22,12 @@ from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models import Base
+from app.ingestion.status import TERMINAL_RUN_STATUSES, RunStatus
+
+# The check constraint expression is built from the one status vocabulary so the
+# database and the code can never disagree about which statuses exist.
+_STATUS_CHECK = "status IN (" + ", ".join(f"'{status.value}'" for status in RunStatus) + ")"
+_TERMINAL_VALUES = ", ".join(f"'{status.value}'" for status in TERMINAL_RUN_STATUSES)
 
 
 class Document(Base):
@@ -104,7 +110,10 @@ class IngestionRun(Base):
 
     __tablename__ = "ingestion_runs"
     __table_args__ = (
-        CheckConstraint("status IN ('queued', 'fetching', 'processing', 'indexing', 'ready', 'failed')"),
+        CheckConstraint(_STATUS_CHECK),
+        # finished_at must exist exactly when the run reached a terminal status, so a
+        # finished run is never mistaken for one still in flight and vice versa.
+        CheckConstraint(f"(status IN ({_TERMINAL_VALUES})) = (finished_at IS NOT NULL)"),
         Index("ix_ingestion_runs_document_id", "document_id"),
         Index("ix_ingestion_runs_source_item_id_created_at", "source_item_id", "created_at"),
     )

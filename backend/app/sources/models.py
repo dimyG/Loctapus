@@ -43,6 +43,7 @@ class SourceItem(Base):
     __tablename__ = "source_items"
     __table_args__ = (
         UniqueConstraint("source_id", "external_id"),
+        CheckConstraint("size_bytes > 0"),
         # project_id is repeated down sources -> source_items -> documents -> chunks so
         # retrieval filters chunks by project without joins; the composite FK makes the
         # database reject any row whose project differs from its source's, so the tenant
