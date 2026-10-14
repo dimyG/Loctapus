@@ -30,7 +30,9 @@ def _put_json(*, url: str, credentials: tuple[str, str], body: bytes) -> None:
     request = urllib.request.Request(url, data=body, method="PUT")
     request.add_header("Authorization", f"Basic {token}")
     request.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(request) as response:
+    # A bounded timeout keeps provisioning from hanging a suite bootstrap when the
+    # management API is unreachable (a stopped broker answers slowly, never).
+    with urllib.request.urlopen(request, timeout=10) as response:
         response.read()
 
 
