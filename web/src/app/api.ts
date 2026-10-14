@@ -85,7 +85,7 @@ const baseQueryWithSessionExpiry: BaseQueryFn<
 export const api = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithSessionExpiry,
-  tagTypes: ["Project", "Source", "Workspace", "Team"],
+  tagTypes: ["Project", "Upload", "Workspace", "Team"],
   endpoints: () => ({}),
 });
 

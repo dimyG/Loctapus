@@ -24,13 +24,13 @@ import type { RootState } from "../../app/store";
 import DashboardLayout from "../../layouts/DashboardLayout";
 import { useGetProjectQuery } from "./projectsApi";
 import {
-  selectSources,
-  useGetSourcesQuery,
-  useUploadSourceMutation,
-  type Source,
-} from "../sources/sourcesApi";
+  selectUploads,
+  useGetUploadsQuery,
+  useUploadFileMutation,
+  type Upload,
+} from "../uploads/uploadsApi";
 
-/** Upload limits mirroring the backend's sources endpoint. */
+/** Upload limits mirroring the backend's uploads endpoint. */
 const MAX_UPLOAD_MB = 25;
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".pdf", ".docx"] as const;
@@ -39,12 +39,12 @@ const ALLOWED_EXTENSIONS = [".pdf", ".docx"] as const;
 const POLL_INTERVAL_MS = 2000;
 
 /** The status is terminal once the pipeline decided an outcome for it. */
-function isTerminal(status: Source["status"]): boolean {
+function isTerminal(status: Upload["status"]): boolean {
   return status === "ready" || status === "failed";
 }
 
 /** Maps a status to its chip: primary while in flight, colored once decided. */
-function statusChip(status: Source["status"]): {
+function statusChip(status: Upload["status"]): {
   label: string;
   color: "primary" | "success" | "error";
 } {
@@ -112,44 +112,44 @@ export default function ProjectPage() {
     isLoading: projectLoading,
     refetch: refetchProject,
   } = useGetProjectQuery(projectId ?? skipToken);
-  const [uploadSource, { isLoading: uploading }] = useUploadSourceMutation();
+  const [uploadFile, { isLoading: uploading }] = useUploadFileMutation();
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   // The polling interval must reflect the cached list at subscription time, so
   // read it through the store selector before the query hook: the fulfillment
   // render then passes 0 in the same commit and RTK clears the pending poll.
-  const selectCachedSources = useMemo<(state: RootState) => Source[] | undefined>(
+  const selectCachedUploads = useMemo<(state: RootState) => Upload[] | undefined>(
     () =>
-      projectId === undefined ? () => undefined : (state) => selectSources(projectId)(state).data,
+      projectId === undefined ? () => undefined : (state) => selectUploads(projectId)(state).data,
     [projectId],
   );
-  const cachedSources = useAppSelector(selectCachedSources);
+  const cachedUploads = useAppSelector(selectCachedUploads);
   // The cached error is read through the store selector for the same reason as
   // the cached list: it must be available before the query hook call so a
   // failed fetch can drop the polling interval to 0 in the very next commit.
-  const selectCachedSourcesError = useMemo<
+  const selectCachedUploadsError = useMemo<
     (state: RootState) => FetchBaseQueryError | SerializedError | undefined
   >(
     () =>
-      projectId === undefined ? () => undefined : (state) => selectSources(projectId)(state).error,
+      projectId === undefined ? () => undefined : (state) => selectUploads(projectId)(state).error,
     [projectId],
   );
-  const cachedSourcesError = useAppSelector(selectCachedSourcesError);
+  const cachedUploadsError = useAppSelector(selectCachedUploadsError);
   const projectMissing = errorStatus(projectError) === 404;
   // An error with nothing cached is terminal for polling: retrying on the poll
   // period would hammer a failing endpoint while the page keeps showing no
   // rows. With cached rows the pipeline statuses still decide.
-  const sourcesPending =
-    cachedSources === undefined
-      ? cachedSourcesError === undefined
-      : cachedSources.some((source) => !isTerminal(source.status));
+  const uploadsPending =
+    cachedUploads === undefined
+      ? cachedUploadsError === undefined
+      : cachedUploads.some((upload) => !isTerminal(upload.status));
   const {
-    data: sources,
-    isLoading: sourcesLoading,
-    error: sourcesError,
-    refetch: refetchSources,
-  } = useGetSourcesQuery(projectMissing || projectId === undefined ? skipToken : projectId, {
-    pollingInterval: sourcesPending ? POLL_INTERVAL_MS : 0,
+    data: uploads,
+    isLoading: uploadsLoading,
+    error: uploadsError,
+    refetch: refetchUploads,
+  } = useGetUploadsQuery(projectMissing || projectId === undefined ? skipToken : projectId, {
+    pollingInterval: uploadsPending ? POLL_INTERVAL_MS : 0,
   });
 
   /** Runs the client checks, then hands the file to the upload mutation. */
@@ -167,7 +167,7 @@ export default function ProjectPage() {
     }
     setUploadError(null);
     try {
-      await uploadSource({ projectId, file }).unwrap();
+      await uploadFile({ projectId, file }).unwrap();
     } catch (e) {
       setUploadError(getErrorMessage(e));
     }
@@ -237,7 +237,7 @@ export default function ProjectPage() {
           </Button>
         </Stack>
       </Card>
-      {sourcesLoading ? (
+      {uploadsLoading ? (
         <Table sx={{ mt: 3 }}>
           <TableBody>
             {[0, 1, 2].map((row) => (
@@ -251,14 +251,14 @@ export default function ProjectPage() {
             ))}
           </TableBody>
         </Table>
-      ) : sourcesError !== undefined && sources === undefined ? (
+      ) : uploadsError !== undefined && uploads === undefined ? (
         // Nothing cached and the fetch failed: a retryable message, never a
         // bare table that looks identical to an empty project.
         <Stack spacing={2} sx={{ mt: 3, py: 8, alignItems: "center" }}>
           <Typography color="text.secondary">
             Could not load the document list. Please try again.
           </Typography>
-          <Button variant="outlined" onClick={() => refetchSources()}>
+          <Button variant="outlined" onClick={() => refetchUploads()}>
             Try again
           </Button>
         </Stack>
@@ -273,18 +273,18 @@ export default function ProjectPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(sources ?? []).map((source) => (
-                <TableRow key={source.id}>
-                  <TableCell>{source.filename}</TableCell>
+              {(uploads ?? []).map((upload) => (
+                <TableRow key={upload.id}>
+                  <TableCell>{upload.filename}</TableCell>
                   <TableCell>
-                    <Chip size="small" {...statusChip(source.status)} />
+                    <Chip size="small" {...statusChip(upload.status)} />
                   </TableCell>
-                  <TableCell>{new Date(source.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell>{new Date(upload.created_at).toLocaleDateString()}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          {sources !== undefined && sources.length === 0 && (
+          {uploads !== undefined && uploads.length === 0 && (
             <Typography color="text.secondary" sx={{ mt: 2 }}>
               No documents uploaded yet.
             </Typography>

@@ -48,7 +48,7 @@ describe("App", () => {
   it("renders the guarded projects page for an authenticated visitor", async () => {
     saveToken("t-boot");
     renderApp("/projects");
-    // Task 9 filled the scaffold in: the guarded page lists real projects.
+    // The heading proves the real projects list rendered, not a scaffold.
     expect(await screen.findByText("Projects")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/projects");
   });

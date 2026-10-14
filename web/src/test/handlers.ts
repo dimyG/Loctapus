@@ -30,12 +30,11 @@ export const handlers = [
       created_at: "2026-10-09T10:00:00Z",
     }),
   ),
-  http.get("*/projects/p-1/sources", () =>
+  http.get("*/projects/p-1/uploads", () =>
     HttpResponse.json([
       {
         id: "s-1",
         project_id: "p-1",
-        type: "document",
         status: "queued",
         filename: "brief.pdf",
         created_at: "2026-10-12T10:00:00Z",
@@ -43,7 +42,6 @@ export const handlers = [
       {
         id: "s-2",
         project_id: "p-1",
-        type: "document",
         status: "ready",
         filename: "report.docx",
         created_at: "2026-10-11T10:00:00Z",
@@ -51,19 +49,17 @@ export const handlers = [
       {
         id: "s-3",
         project_id: "p-1",
-        type: "document",
         status: "failed",
         filename: "broken.pdf",
         created_at: "2026-10-10T10:00:00Z",
       },
     ]),
   ),
-  http.post("*/projects/p-1/sources", () =>
+  http.post("*/projects/p-1/uploads", () =>
     HttpResponse.json(
       {
         id: "s-new",
         project_id: "p-1",
-        type: "document",
         status: "queued",
         filename: "uploaded.pdf",
         created_at: "2026-10-13T09:00:00Z",

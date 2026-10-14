@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { initialRootState } from "../../app/store";
 import { server } from "../../test/server";
 import { renderWithProviders } from "../../test/test-utils";
-import type { Source } from "../sources/sourcesApi";
+import type { Upload } from "../uploads/uploadsApi";
 import ProjectPage from "./ProjectPage";
 
 const authed = () => ({
@@ -28,29 +28,28 @@ function renderProject() {
   );
 }
 
-const queuedSource: Source = {
+const queuedUpload: Upload = {
   id: "s-1",
   project_id: "p-1",
-  type: "document",
   status: "queued",
   filename: "brief.pdf",
   created_at: "2026-10-12T10:00:00Z",
 };
-const readySource: Source = {
-  ...queuedSource,
+const readyUpload: Upload = {
+  ...queuedUpload,
   id: "s-2",
   status: "ready",
   filename: "report.docx",
   created_at: "2026-10-11T10:00:00Z",
 };
-const failedSource: Source = {
-  ...queuedSource,
+const failedUpload: Upload = {
+  ...queuedUpload,
   id: "s-3",
   status: "failed",
   filename: "broken.pdf",
   created_at: "2026-10-10T10:00:00Z",
 };
-const sourceRows: Source[] = [queuedSource, readySource, failedSource];
+const uploadRows: Upload[] = [queuedUpload, readyUpload, failedUpload];
 
 const PDF_BYTES = "%PDF-1.4 test bytes";
 
@@ -127,17 +126,17 @@ describe("ProjectPage", () => {
     const posts: { contentType: string | null; file: File | null }[] = [];
     let gets = 0;
     server.use(
-      http.get("*/projects/p-1/sources", () => {
+      http.get("*/projects/p-1/uploads", () => {
         gets += 1;
-        return HttpResponse.json(sourceRows);
+        return HttpResponse.json(uploadRows);
       }),
-      http.post("*/projects/p-1/sources", async ({ request }) => {
+      http.post("*/projects/p-1/uploads", async ({ request }) => {
         posts.push({
           contentType: request.headers.get("content-type"),
           file: (await request.formData()).get("file") as File | null,
         });
         return HttpResponse.json(
-          { ...queuedSource, id: "s-new", filename: "report.pdf" },
+          { ...queuedUpload, id: "s-new", filename: "report.pdf" },
           { status: 201 },
         );
       }),
@@ -160,11 +159,11 @@ describe("ProjectPage", () => {
   it("keeps Upload disabled while the request is pending", async () => {
     let resolveRequest: (() => void) | undefined;
     server.use(
-      http.post("*/projects/p-1/sources", async () => {
+      http.post("*/projects/p-1/uploads", async () => {
         await new Promise<void>((resolve) => {
           resolveRequest = resolve;
         });
-        return HttpResponse.json(queuedSource, { status: 201 });
+        return HttpResponse.json(queuedUpload, { status: 201 });
       }),
     );
     renderProject();
@@ -191,9 +190,9 @@ describe("ProjectPage", () => {
   it("rejects a file with an unsupported extension without posting", async () => {
     const posts: unknown[] = [];
     server.use(
-      http.post("*/projects/p-1/sources", ({ request }) => {
+      http.post("*/projects/p-1/uploads", ({ request }) => {
         posts.push(request);
-        return HttpResponse.json(queuedSource, { status: 201 });
+        return HttpResponse.json(queuedUpload, { status: 201 });
       }),
     );
     renderProject();
@@ -211,9 +210,9 @@ describe("ProjectPage", () => {
   it("rejects a file over the 25MB limit without posting", async () => {
     const posts: unknown[] = [];
     server.use(
-      http.post("*/projects/p-1/sources", ({ request }) => {
+      http.post("*/projects/p-1/uploads", ({ request }) => {
         posts.push(request);
-        return HttpResponse.json(queuedSource, { status: 201 });
+        return HttpResponse.json(queuedUpload, { status: 201 });
       }),
     );
     renderProject();
@@ -230,7 +229,7 @@ describe("ProjectPage", () => {
 
   it("shows friendly copy when the server rejects the upload with 422", async () => {
     server.use(
-      http.post("*/projects/p-1/sources", () =>
+      http.post("*/projects/p-1/uploads", () =>
         HttpResponse.json(
           { detail: [{ loc: ["body", "file"], msg: "field required" }] },
           { status: 422 },
@@ -247,7 +246,7 @@ describe("ProjectPage", () => {
 
   it("shows friendly copy when storage is unavailable (503)", async () => {
     server.use(
-      http.post("*/projects/p-1/sources", () =>
+      http.post("*/projects/p-1/uploads", () =>
         HttpResponse.json(
           { detail: "Could not store the file. Please try again." },
           { status: 503 },
@@ -262,13 +261,30 @@ describe("ProjectPage", () => {
     );
   });
 
-  it("polls while a source is in flight and stops once all rows are terminal", async () => {
+  it("shows the server's 409 copy when the filename already exists", async () => {
+    server.use(
+      http.post("*/projects/p-1/uploads", () =>
+        HttpResponse.json(
+          { detail: "A file with this name already exists in this project." },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderProject();
+    const user = userEvent.setup();
+    await user.upload(await screen.findByLabelText("Upload"), pdfFile("brief.pdf"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "A file with this name already exists in this project.",
+    );
+  });
+
+  it("polls while an upload is in flight and stops once all rows are terminal", async () => {
     let inFlight = true;
     let gets = 0;
     server.use(
-      http.get("*/projects/p-1/sources", () => {
+      http.get("*/projects/p-1/uploads", () => {
         gets += 1;
-        return HttpResponse.json(inFlight ? [queuedSource] : [readySource, failedSource]);
+        return HttpResponse.json(inFlight ? [queuedUpload] : [readyUpload, failedUpload]);
       }),
     );
     vi.useFakeTimers();
@@ -289,10 +305,10 @@ describe("ProjectPage", () => {
     }
   });
 
-  it("shows a friendly error state and stops polling when the sources list fails", async () => {
+  it("shows a friendly error state and stops polling when the uploads list fails", async () => {
     let gets = 0;
     server.use(
-      http.get("*/projects/p-1/sources", () => {
+      http.get("*/projects/p-1/uploads", () => {
         gets += 1;
         return HttpResponse.json({ detail: "boom" }, { status: 500 });
       }),
