@@ -115,7 +115,7 @@ class IngestionRun(Base):
         # finished run is never mistaken for one still in flight and vice versa.
         CheckConstraint(f"(status IN ({_TERMINAL_VALUES})) = (finished_at IS NOT NULL)"),
         Index("ix_ingestion_runs_document_id", "document_id"),
-        Index("ix_ingestion_runs_source_item_id_created_at", "source_item_id", "created_at"),
+        Index("ix_ingestion_runs_source_item_id_created_at_id", "source_item_id", "created_at", "id"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

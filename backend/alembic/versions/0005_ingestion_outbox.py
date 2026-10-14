@@ -26,7 +26,7 @@ _INDEXES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("sources", ("project_id",)),
     ("chunks", ("project_id",)),
     ("ingestion_runs", ("document_id",)),
-    ("ingestion_runs", ("source_item_id", "created_at")),
+    ("ingestion_runs", ("source_item_id", "created_at", "id")),
 )
 
 
@@ -178,7 +178,7 @@ def downgrade() -> None:
     op.drop_index("ix_outbox_events_created_at_unpublished", table_name="outbox_events")
     op.drop_index("ix_chunks_search_vector", table_name="chunks")
     op.drop_index("ix_chunks_embedding", table_name="chunks")
-    op.drop_index("ix_ingestion_runs_source_item_id_created_at", table_name="ingestion_runs")
+    op.drop_index("ix_ingestion_runs_source_item_id_created_at_id", table_name="ingestion_runs")
     op.drop_index("ix_ingestion_runs_document_id", table_name="ingestion_runs")
     op.drop_index("ix_chunks_project_id", table_name="chunks")
     op.drop_index("ix_sources_project_id", table_name="sources")

@@ -9,8 +9,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.ingestion.models import IngestionRun
-from app.ingestion.runs import request_ingestion
+from app.ingestion.runs import latest_run_status, request_ingestion
+from app.ingestion.status import RunStatus
 from app.projects.models import Project
 from app.sources.models import Source, SourceItem
 from app.storage.service import StorageService, build_raw_object_key
@@ -107,30 +107,20 @@ class SourceListItem:
 def list_sources(*, db: Session, project_id: UUID) -> list[SourceListItem]:
     """List a project's sources newest first, deriving filename and status from the latest run.
 
-    Each upload source has exactly one item in S3; the item's latest run by ``created_at``
-    supplies the status, coalesced to ``queued`` when no run row is visible (defensive).
-    There are no run ties in production because one run commits per transaction.
+    The latest run is the correlated lookup with the id tie-break, so a tied
+    ``created_at`` cannot fan one item out into several rows; an item with no visible
+    run coalesces to queued (defensive).
     """
 
-    latest = (
-        select(
-            IngestionRun.source_item_id.label("source_item_id"),
-            func.max(IngestionRun.created_at).label("latest_created_at"),
-        )
-        .group_by(IngestionRun.source_item_id)
-        .subquery()
-    )
     rows = db.execute(
-        select(Source, SourceItem, func.coalesce(IngestionRun.status, "queued").label("status"))
-        .join(SourceItem, SourceItem.source_id == Source.id)
-        .outerjoin(latest, latest.c.source_item_id == SourceItem.id)
-        .outerjoin(
-            IngestionRun,
-            (IngestionRun.source_item_id == latest.c.source_item_id)
-            & (IngestionRun.created_at == latest.c.latest_created_at),
+        select(
+            Source,
+            SourceItem,
+            func.coalesce(latest_run_status(source_item_id=SourceItem.id), RunStatus.QUEUED).label("status"),
         )
+        .join(SourceItem, SourceItem.source_id == Source.id)
         .where(Source.project_id == project_id)
-        .order_by(Source.created_at.desc())
+        .order_by(Source.created_at.desc(), Source.id.desc())
     ).all()
     return [
         SourceListItem(source=source, filename=item.filename, status=status) for source, item, status in rows
