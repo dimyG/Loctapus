@@ -22,7 +22,7 @@ from app.ingestion.status import RunStatus
 from app.outbox.events import enqueue_document_ready_for_embedding
 from app.providers.base import EmbeddingProvider, NormalizedDocument, Parser
 from app.sources.models import SourceItem
-from app.storage.service import StorageService
+from app.storage.service import StorageError, StorageService
 
 # User-safe copy for the fingerprint mismatch; the full detail lives in the worker log.
 FINGERPRINT_MISMATCH = "The stored file does not match the upload. Upload the file again to retry."
@@ -114,11 +114,15 @@ def _fetch_raw_bytes(
     storage: StorageService,
     raw_object_key: str,
 ) -> bytes | None:
-    """Fetch the run's own raw bytes from storage, recording failures on the run."""
+    """Fetch the run's own raw bytes from storage, recording failures on the run.
+
+    Every storage failure - the object missing or the backend being unavailable -
+    ends the run; which of the two it was only shapes the recorded error.
+    """
 
     try:
         return storage.get_object(key=raw_object_key)
-    except Exception as exc:
+    except StorageError as exc:
         _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.FETCHING, error=str(exc))
         return None
 

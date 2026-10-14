@@ -66,12 +66,19 @@ class StorageService:
             raise StorageUnavailableError(f"put failed for key {key!r}: {exc}") from exc
 
     def get_object(self, *, key: str) -> bytes:
-        """Return the bytes stored under ``key``."""
+        """Return the bytes stored under ``key``, raising ObjectNotFoundError when absent."""
 
         try:
             response = self._client.get_object(Bucket=self._bucket, Key=key)
             return response["Body"].read()
-        except (ClientError, BotoCoreError) as exc:
+        except ClientError as exc:
+            # Garage reports a missing object as NoSuchKey or a bare 404; every other
+            # client error means the backend served a failure instead.
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in ("NoSuchKey", "404"):
+                raise ObjectNotFoundError(f"no object under key {key!r}") from exc
+            raise StorageUnavailableError(f"get failed for key {key!r}: {exc}") from exc
+        except BotoCoreError as exc:
             raise StorageUnavailableError(f"get failed for key {key!r}: {exc}") from exc
 
 
