@@ -17,14 +17,12 @@ from app.sources.service import (
     UploadListing,
     list_uploads,
     sanitize_filename,
+    upload_content_type,
     upload_file,
 )
 from app.storage.service import StorageService, StorageUnavailableError, get_storage
 
 router = APIRouter()
-
-# The only file extensions this slice's upload path accepts.
-ALLOWED_EXTENSIONS = (".pdf", ".docx")
 
 
 def _validated_filename(*, file: UploadFile) -> str:
@@ -34,7 +32,7 @@ def _validated_filename(*, file: UploadFile) -> str:
         filename = sanitize_filename(filename=file.filename or "")
     except ValueError:
         raise HTTPException(422, "The file name is not supported.") from None
-    if not filename.lower().endswith(ALLOWED_EXTENSIONS):
+    if upload_content_type(filename=filename) is None:
         raise HTTPException(422, "Only PDF and DOCX files are supported.")
     return filename
 
@@ -85,7 +83,6 @@ def upload(
             project_id=project.id,
             filename=filename,
             content=content,
-            content_type=file.content_type,
             storage=storage,
         )
     except DuplicateUploadError:

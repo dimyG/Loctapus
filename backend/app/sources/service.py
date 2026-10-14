@@ -2,8 +2,10 @@
 
 import hashlib
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from types import MappingProxyType
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -23,6 +25,14 @@ _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
 # A stored filename is display data and part of the storage key, so its length is capped.
 MAX_FILENAME_LENGTH = 255
 
+# The only file extensions this slice's upload path accepts, with their content types.
+SUPPORTED_UPLOAD_TYPES: Mapping[str, str] = MappingProxyType(
+    {
+        ".pdf": "application/pdf",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+)
+
 
 def sanitize_filename(*, filename: str) -> str:
     r"""Return the safe basename of a client-supplied filename, raising ValueError when unusable.
@@ -37,6 +47,15 @@ def sanitize_filename(*, filename: str) -> str:
     if not basename or len(basename) > MAX_FILENAME_LENGTH:
         raise ValueError(f"filename sanitizes to an empty or over-long basename: {filename!r}")
     return basename
+
+
+def upload_content_type(*, filename: str) -> str | None:
+    """Return the content type this slice stores for ``filename``, by its suffix, or None."""
+
+    dot = filename.rfind(".")
+    if dot < 0:
+        return None
+    return SUPPORTED_UPLOAD_TYPES.get(filename[dot:].lower())
 
 
 class DuplicateUploadError(Exception):
@@ -95,17 +114,21 @@ def upload_file(
     project_id: UUID,
     filename: str,
     content: bytes,
-    content_type: str | None,
     storage: StorageService,
 ) -> UploadListing:
     """Store one uploaded file as the project's upload item, with its queued run and event.
 
-    The read transaction ends before the storage PUT (no transaction spans it), then
-    one write transaction covers source, item, run, and event. A same-name item is
-    retried only when its latest run failed with no document indexed (R2); otherwise
-    the upload is a duplicate and replacement stays S7's replace-only-after-success path.
+    The stored and Garage content types come from the file's extension (R6), never from
+    a client header. The read transaction ends before the storage PUT (no transaction
+    spans it), then one write transaction covers source, item, run, and event. A
+    same-name item is retried only when its latest run failed with no document indexed
+    (R2); otherwise the upload is a duplicate and replacement stays S7's
+    replace-only-after-success path.
     """
 
+    content_type = upload_content_type(filename=filename)
+    if content_type is None:
+        raise ValueError(f"unsupported upload filename: {filename!r}")
     existing = _upload_item(db=db, project_id=project_id, filename=filename)
     if existing is not None and not _is_retryable(db=db, item=existing):
         raise DuplicateUploadError(filename)
@@ -126,7 +149,7 @@ def upload_file(
             project_id=project_id,
             external_id=filename,
             filename=filename,
-            content_type=content_type or "application/octet-stream",
+            content_type=content_type,
             size_bytes=len(content),
             content_hash=content_hash,
             raw_object_key=raw_object_key,
@@ -146,7 +169,7 @@ def upload_file(
         item.content_hash = content_hash
         item.raw_object_key = raw_object_key
         item.size_bytes = len(content)
-        item.content_type = content_type or item.content_type
+        item.content_type = content_type
     request_ingestion(db=db, source_item_id=item_id, raw_object_key=raw_object_key, content_hash=content_hash)
     db.commit()
     db.refresh(item)
