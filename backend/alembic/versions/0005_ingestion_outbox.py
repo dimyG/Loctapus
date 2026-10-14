@@ -89,7 +89,9 @@ def upgrade() -> None:
             name="fk_documents_source_item_id_project_id",
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("source_item_id", "content_hash"),
+        sa.UniqueConstraint(
+            "source_item_id", "content_hash", name="uq_documents_source_item_id_content_hash"
+        ),
         sa.UniqueConstraint("id", "project_id", name="uq_documents_id_project_id"),
     )
     op.create_table(

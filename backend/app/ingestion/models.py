@@ -35,7 +35,7 @@ class Document(Base):
 
     __tablename__ = "documents"
     __table_args__ = (
-        UniqueConstraint("source_item_id", "content_hash"),
+        UniqueConstraint("source_item_id", "content_hash", name="uq_documents_source_item_id_content_hash"),
         # project_id is repeated down sources -> source_items -> documents -> chunks so
         # retrieval filters chunks by project without joins; the composite FK makes the
         # database reject any row whose project differs from its item's, so the tenant

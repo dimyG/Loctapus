@@ -208,15 +208,29 @@ def _build_chunk_rows(
     ]
 
 
+# The named unique constraint the identical-version backstop reconciles against.
+DOCUMENTS_CONTENT_HASH_CONSTRAINT = "uq_documents_source_item_id_content_hash"
+
+
 def _mark_run_ready_against_existing(
     *,
     db: Session,
     run_id: UUID,
     source_item_id: UUID,
     content_hash: str,
+    exc: IntegrityError,
 ) -> None:
-    """End the run as a ready no-op pointing at the already-stored identical document."""
+    """End the run as a ready no-op against the already-stored identical document.
 
+    Only a conflict on the documents content-hash constraint counts as the identical
+    version; any other integrity error that reached this reconciliation is a genuine
+    failure, so the backstop stays reserved for its own constraint.
+    """
+
+    constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+    if constraint_name != DOCUMENTS_CONTENT_HASH_CONSTRAINT:
+        _fail_run(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=_run_error_message(exc=exc))
+        return
     existing_id: UUID | None = db.scalar(
         select(Document.id).where(
             Document.source_item_id == source_item_id,
@@ -265,12 +279,12 @@ def _commit_document_set(
         # no relationship declares the FK order, and the unique(source_item_id,
         # content_hash) backstop can only fire on this insert.
         db.flush()
-    except IntegrityError:
+    except IntegrityError as exc:
         # The identical version is already stored, so this run is a no-op that ends ready
         # on the existing document instead of a failed one.
         db.rollback()
         _mark_run_ready_against_existing(
-            db=db, run_id=run_id, source_item_id=context.source_item_id, content_hash=document_hash
+            db=db, run_id=run_id, source_item_id=context.source_item_id, content_hash=document_hash, exc=exc
         )
         return
     except _TRANSIENT_DATABASE_ERRORS:
