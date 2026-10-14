@@ -95,7 +95,16 @@ def dispatch_batch(
             _bump(row=row, error=f"no route for event_type {row.event_type!r}", backoff=backoff)
             continue
         try:
-            app.send_task(route.task_name, kwargs=row.payload, queue=route.queue)
+            # task_id tags the message with its outbox row id; the timeouts bound the
+            # publish (and its broker confirmation) so a dead broker cannot hang a tick.
+            app.send_task(
+                route.task_name,
+                kwargs=row.payload,
+                queue=route.queue,
+                task_id=str(row.id),
+                timeout=publish_timeout_seconds,
+                confirm_timeout=publish_timeout_seconds,
+            )
         except Exception as exc:
             # The batch ends here: rows not yet published keep their state for the
             # next tick instead of retrying publishes in place under row locks.
