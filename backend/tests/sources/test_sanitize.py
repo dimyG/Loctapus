@@ -29,6 +29,21 @@ def test_sanitize_drops_control_characters() -> None:
     assert sanitize_filename(filename="no\x00te\x1f.pdf") == "note.pdf"
 
 
+def test_sanitize_drops_c1_controls() -> None:
+    """Check that C1 control characters never survive into the stored name."""
+
+    assert sanitize_filename(filename="no\x80te\x9f.pdf") == "note.pdf"
+
+
+def test_sanitize_rejects_dot_names() -> None:
+    """Check that dot-only names are rejected, so they can never become a stored key."""
+
+    with pytest.raises(ValueError):
+        sanitize_filename(filename=".")
+    with pytest.raises(ValueError):
+        sanitize_filename(filename="..")
+
+
 def test_sanitize_rejects_names_over_255_characters() -> None:
     """Check that an over-long basename is rejected."""
 

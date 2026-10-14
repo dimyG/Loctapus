@@ -1,4 +1,4 @@
-"""API tests for the upload and sources endpoints, against real Garage."""
+"""API tests for the uploads endpoints, against real Garage."""
 
 import hashlib
 from datetime import UTC, datetime, timedelta
@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.ingestion.models import Chunk, Document, IngestionRun
+from app.ingestion.runs import claim_run, mark_failed
 from app.ingestion.service import embed_document, ingest_source_item
+from app.ingestion.status import RunStatus
 from app.main import app
 from app.outbox.events import SOURCE_ITEM_INGESTION_REQUESTED
 from app.outbox.models import OutboxEvent
@@ -20,23 +22,11 @@ from app.providers import get_embedding_provider, get_parser
 from app.sources.models import Source, SourceItem
 from app.storage.service import StorageService, StorageUnavailableError, build_raw_object_key, get_storage
 from tests.factories import seed_upload
+from tests.helpers import _auth, _default_team_id
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 PDF_CONTENT_TYPE = "application/pdf"
-
-
-def _auth(*, client: TestClient, email: str) -> dict[str, str]:
-    """Register an account and return its bearer headers."""
-
-    r = client.post("/auth/register", json={"email": email, "password": "password123"})
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
-
-
-def _default_team_id(*, client: TestClient, headers: dict[str, str]) -> str:
-    """Return the account's default team id through the API."""
-
-    ws = client.get("/workspaces", headers=headers).json()[0]
-    return str(client.get(f"/workspaces/{ws['id']}/teams", headers=headers).json()[0]["id"])
+DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def _create_project(*, client: TestClient, headers: dict[str, str], name: str) -> str:
@@ -56,20 +46,20 @@ def _upload(
     content: bytes,
     content_type: str = PDF_CONTENT_TYPE,
 ) -> Response:
-    """POST one multipart upload to the sources endpoint and return the response."""
+    """POST one multipart upload to the uploads endpoint and return the response."""
 
     response: Response = client.post(
-        f"/projects/{project_id}/sources",
+        f"/projects/{project_id}/uploads",
         files={"file": (filename, content, content_type)},
         headers=headers,
     )
     return response
 
 
-def test_upload_creates_source_item_run_and_event(
-    *, client: TestClient, db_session: Session, settings: Settings
+def test_upload_creates_item_run_and_event(
+    *, client: TestClient, db_session: Session, storage: StorageService
 ) -> None:
-    """Check the upload happy path: 201 SourceOut shape plus all four rows and the raw object."""
+    """Check the upload happy path: 201 UploadOut shape plus the rows and the raw object."""
 
     headers = _auth(client=client, email="upload@example.com")
     project_id = _create_project(client=client, headers=headers, name="uploads")
@@ -78,10 +68,9 @@ def test_upload_creates_source_item_run_and_event(
     r = _upload(client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=content)
     assert r.status_code == 201
     body = r.json()
-    assert set(body) == {"id", "project_id", "type", "status", "filename", "created_at"}
-    assert body["type"] == "upload"
-    assert body["status"] == "queued"
+    assert set(body) == {"id", "project_id", "filename", "status", "created_at"}
     assert body["filename"] == "notes.pdf"
+    assert body["status"] == "queued"
     assert body["project_id"] == project_id
 
     source = db_session.query(Source).one()
@@ -89,17 +78,18 @@ def test_upload_creates_source_item_run_and_event(
     run = db_session.query(IngestionRun).one()
     event = db_session.query(OutboxEvent).one()
 
-    assert source.id == UUID(body["id"])
+    assert source.id == item.source_id
     assert source.project_id == UUID(project_id)
     assert source.type == "upload"
-    assert item.source_id == source.id
+    assert UUID(body["id"]) == item.id
+    assert item.project_id == UUID(project_id)
     assert item.external_id == "notes.pdf"
     assert item.filename == "notes.pdf"
     assert item.content_type == PDF_CONTENT_TYPE
     assert item.size_bytes == len(content)
-    assert item.content_hash == hashlib.sha256(content).hexdigest()
+    assert item.content_hash is not None
     assert item.raw_object_key == build_raw_object_key(
-        project_id=source.project_id,
+        project_id=UUID(project_id),
         source_item_id=item.id,
         content_hash=item.content_hash,
         filename="notes.pdf",
@@ -113,7 +103,226 @@ def test_upload_creates_source_item_run_and_event(
     assert event.aggregate_id == item.id
     assert event.published_at is None
     assert event.payload == {"ingestion_run_id": str(run.id)}
-    assert StorageService(settings=settings).get_object(key=item.raw_object_key) == content
+    assert storage.get_object(key=item.raw_object_key) == content
+
+
+def test_uploads_share_the_project_upload_source(*, client: TestClient, db_session: Session) -> None:
+    """Check that two differently named uploads land in one shared upload source."""
+
+    headers = _auth(client=client, email="shared@example.com")
+    project_id = _create_project(client=client, headers=headers, name="shared")
+
+    first = _upload(
+        client=client, headers=headers, project_id=project_id, filename="one.pdf", content=b"one bytes"
+    )
+    second = _upload(
+        client=client, headers=headers, project_id=project_id, filename="two.pdf", content=b"two bytes"
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["id"] != second.json()["id"]
+
+    assert db_session.query(Source).count() == 1
+    assert db_session.query(SourceItem).count() == 2
+
+
+def test_duplicate_filename_in_flight_is_rejected(*, client: TestClient, db_session: Session) -> None:
+    """Check that a same-name upload while the first is still processing is a 409."""
+
+    headers = _auth(client=client, email="dupes@example.com")
+    project_id = _create_project(client=client, headers=headers, name="dupes")
+
+    first = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=b"first bytes"
+    )
+    assert first.status_code == 201
+
+    second = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=b"second bytes"
+    )
+    assert second.status_code == 409
+    assert second.json() == {"detail": "A file with this name already exists in this project."}
+
+    assert db_session.query(SourceItem).count() == 1
+    assert db_session.query(IngestionRun).count() == 1
+
+
+def test_failed_file_can_be_uploaded_again(*, client: TestClient, db_session: Session) -> None:
+    """Check that a failed run with no document lets the same name upload again."""
+
+    headers = _auth(client=client, email="retry@example.com")
+    project_id = _create_project(client=client, headers=headers, name="retry")
+
+    first = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=b"first bytes"
+    )
+    assert first.status_code == 201
+    item_id = UUID(first.json()["id"])
+
+    run = db_session.query(IngestionRun).one()
+    assert claim_run(db=db_session, run_id=run.id) is True
+    mark_failed(db=db_session, run_id=run.id, expected=RunStatus.FETCHING, error="boom")
+    db_session.commit()
+
+    second = _upload(
+        client=client,
+        headers=headers,
+        project_id=project_id,
+        filename="report.pdf",
+        content=b"second bytes",
+    )
+    assert second.status_code == 201
+    assert second.json()["id"] == str(item_id)
+
+    db_session.expire_all()
+    item = db_session.get(SourceItem, item_id)
+    assert item is not None
+    assert item.content_hash == hashlib.sha256(b"second bytes").hexdigest()
+    runs = db_session.query(IngestionRun).filter(IngestionRun.source_item_id == item_id).all()
+    assert len(runs) == 2
+    statuses = sorted(run.status for run in runs)
+    assert statuses == [RunStatus.FAILED, RunStatus.QUEUED]
+    assert db_session.query(OutboxEvent).count() == 2
+
+
+def test_indexed_file_cannot_be_replaced_yet(
+    *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
+) -> None:
+    """Check that a failed latest run over an indexed document is a 409, not a retry."""
+
+    headers = _auth(client=client, email="indexed@example.com")
+    project_id = _create_project(client=client, headers=headers, name="indexed")
+    content = (FIXTURES_DIR / "tiny.pdf").read_bytes()
+
+    first = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=content
+    )
+    assert first.status_code == 201
+    item_id = UUID(first.json()["id"])
+
+    ingest_source_item(
+        db=db_session,
+        ingestion_run_id=db_session.query(IngestionRun).one().id,
+        storage=storage,
+        parser=get_parser(settings=settings),
+        settings=settings,
+    )
+    document = db_session.query(Document).one()
+    run = db_session.query(IngestionRun).one()
+    assert document is not None
+    assert run.status == RunStatus.INDEXING
+    # The latest run fails after the document exists: replacement stays S7's job.
+    mark_failed(db=db_session, run_id=run.id, expected=RunStatus.INDEXING, error="boom")
+    db_session.commit()
+
+    second = _upload(
+        client=client,
+        headers=headers,
+        project_id=project_id,
+        filename="report.pdf",
+        content=b"second bytes",
+    )
+    assert second.status_code == 409
+    assert second.json() == {"detail": "A file with this name already exists in this project."}
+    db_session.expire_all()
+    item = db_session.get(SourceItem, item_id)
+    assert item is not None
+    assert item.content_hash == hashlib.sha256(content).hexdigest()
+    assert db_session.query(IngestionRun).count() == 1
+
+
+def test_content_type_comes_from_the_extension(
+    *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
+) -> None:
+    """Check that the stored and Garage content types come from the extension, not the client."""
+
+    headers = _auth(client=client, email="content-type@example.com")
+    project_id = _create_project(client=client, headers=headers, name="content-type")
+
+    r = _upload(
+        client=client,
+        headers=headers,
+        project_id=project_id,
+        filename="report.pdf",
+        content=b"%PDF-fake",
+        content_type="text/html",
+    )
+    assert r.status_code == 201
+
+    item = db_session.query(SourceItem).one()
+    assert item.content_type == PDF_CONTENT_TYPE
+    # The stored object is labelled by its extension-derived content type too.
+    stored = storage._client.head_object(Bucket=storage._bucket, Key=item.raw_object_key)
+    assert stored["ContentType"] == PDF_CONTENT_TYPE
+
+
+def test_extension_check_is_case_insensitive(*, client: TestClient, db_session: Session) -> None:
+    """Check that the extension gate accepts upper-case suffixes."""
+
+    headers = _auth(client=client, email="upper@example.com")
+    project_id = _create_project(client=client, headers=headers, name="upper")
+
+    r = _upload(
+        client=client, headers=headers, project_id=project_id, filename="REPORT.PDF", content=b"upper bytes"
+    )
+    assert r.status_code == 201
+    assert r.json()["filename"] == "REPORT.PDF"
+
+
+def test_uploads_list_derives_the_latest_status(*, client: TestClient, db_session: Session) -> None:
+    """Check the list derives each item's status from its latest run, newest first, one row each."""
+
+    headers = _auth(client=client, email="list@example.com")
+    project_id = _create_project(client=client, headers=headers, name="listing")
+
+    upload = _upload(
+        client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=b"pdf bytes"
+    )
+    assert upload.status_code == 201
+    uploaded_item_id = upload.json()["id"]
+
+    # An explicitly older upload with its own queued run.
+    older = seed_upload(db=db_session, project_id=UUID(project_id), filename="older.pdf", content=b"older")
+    older_item = db_session.get(SourceItem, older.source_item_id)
+    assert older_item is not None
+    older_item.created_at = datetime.now(UTC) - timedelta(hours=1)
+    db_session.commit()
+
+    # Two tied runs on the uploaded item: the newest status wins and the list stays one row.
+    tie = datetime.now(UTC)
+    db_session.add_all(
+        [
+            IngestionRun(
+                id=UUID(int=1),
+                source_item_id=UUID(uploaded_item_id),
+                status=RunStatus.FAILED,
+                raw_object_key="raw/tie/first/notes.pdf",
+                content_hash="tie-first-hash",
+                created_at=tie,
+                finished_at=tie,
+            ),
+            IngestionRun(
+                id=UUID(int=2),
+                source_item_id=UUID(uploaded_item_id),
+                status=RunStatus.READY,
+                raw_object_key="raw/tie/second/notes.pdf",
+                content_hash="tie-second-hash",
+                created_at=tie,
+                finished_at=tie,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    r = client.get(f"/projects/{project_id}/uploads", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert [row["id"] for row in body] == [uploaded_item_id, str(older.source_item_id)]
+    assert body[0]["filename"] == "notes.pdf"
+    # The id tie-break picks UUID(int=2): ready.
+    assert body[0]["status"] == "ready"
+    assert body[1]["filename"] == "older.pdf"
+    assert body[1]["status"] == "queued"
 
 
 def test_storage_put_runs_with_no_open_transaction(
@@ -255,7 +464,7 @@ def test_upload_requires_editor_role(*, client: TestClient, db_session: Session)
     assert upload.status_code == 404
     assert upload.json() == {"detail": "project not found"}
 
-    listed = client.get(f"/projects/{project_id}/sources", headers=viewer)
+    listed = client.get(f"/projects/{project_id}/uploads", headers=viewer)
     assert listed.status_code == 200
     assert listed.json() == []
 
@@ -266,64 +475,27 @@ def test_upload_requires_editor_role(*, client: TestClient, db_session: Session)
 
 
 def test_public_project_viewer_can_list_but_not_upload(*, client: TestClient) -> None:
-    """Check that a stranger can list a public project's sources but cannot upload."""
+    """Check that a stranger can list a public project's uploads but cannot upload."""
 
     owner = _auth(client=client, email="public-owner@example.com")
     stranger = _auth(client=client, email="public-stranger@example.com")
     project_id = _create_project(client=client, headers=owner, name="public")
     assert client.patch(f"/projects/{project_id}", json={"is_public": True}, headers=owner).status_code == 200
 
-    listed = client.get(f"/projects/{project_id}/sources", headers=stranger)
+    listed = client.get(f"/projects/{project_id}/uploads", headers=stranger)
     assert listed.status_code == 200
     assert listed.json() == []
 
-    upload = _upload(
+    stranger_upload = _upload(
         client=client, headers=stranger, project_id=project_id, filename="notes.pdf", content=b"pdf bytes"
     )
-    assert upload.status_code == 404
-
-
-def test_sources_list_derives_status_and_filename(*, client: TestClient, db_session: Session) -> None:
-    """Check the list derives status and filename from each item's latest run, newest first."""
-
-    headers = _auth(client=client, email="list@example.com")
-    project_id = _create_project(client=client, headers=headers, name="listing")
-
-    upload = _upload(
-        client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=b"pdf bytes"
-    )
-    assert upload.status_code == 201
-    uploaded_source_id = upload.json()["id"]
-
-    # Move the uploaded source's run forward so the listed status is derived, not just queued.
-    run = db_session.query(IngestionRun).one()
-    run.status = "processing"
-    db_session.commit()
-
-    # A second, explicitly older source with its own item and queued run.
-    older = seed_upload(
-        db=db_session, project_id=UUID(project_id), filename="older.pdf", content=b"older bytes"
-    )
-    older_source = db_session.get(Source, older.source_id)
-    assert older_source is not None
-    older_source.created_at = datetime.now(UTC) - timedelta(hours=1)
-    db_session.commit()
-    older_source_id = str(older.source_id)
-
-    r = client.get(f"/projects/{project_id}/sources", headers=headers)
-    assert r.status_code == 200
-    body = r.json()
-    assert [row["id"] for row in body] == [uploaded_source_id, older_source_id]
-    assert body[0]["filename"] == "notes.pdf"
-    assert body[0]["status"] == "processing"
-    assert body[1]["filename"] == "older.pdf"
-    assert body[1]["status"] == "queued"
+    assert stranger_upload.status_code == 404
 
 
 def test_project_delete_cascades_fully_ingested_source(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check that deleting a project with a fully ingested source removes every pipeline row."""
+    """Check that deleting a project with a fully ingested upload removes every pipeline row."""
 
     headers = _auth(client=client, email="cascade@example.com")
     project_id = _create_project(client=client, headers=headers, name="cascade")
@@ -341,7 +513,7 @@ def test_project_delete_cascades_fully_ingested_source(
         settings=settings,
     )
     db_session.refresh(run)
-    assert run.status == "indexing"
+    assert run.status == RunStatus.INDEXING
     document_id = run.document_id
     assert document_id is not None
 
@@ -353,7 +525,7 @@ def test_project_delete_cascades_fully_ingested_source(
         settings=settings,
     )
     db_session.refresh(run)
-    assert run.status == "ready"
+    assert run.status == RunStatus.READY
     assert db_session.query(Chunk).count() == 1
 
     assert client.delete(f"/projects/{project_id}", headers=headers).status_code == 204

@@ -1,17 +1,19 @@
-"""Business logic for upload sources, their items, and the derived source listing."""
+"""Business logic for the project upload source, its items, and the uploads listing."""
 
 import hashlib
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings
+from app.ingestion.models import Document
 from app.ingestion.runs import latest_run_status, request_ingestion
 from app.ingestion.status import RunStatus
-from app.projects.models import Project
 from app.sources.models import Source, SourceItem
 from app.storage.service import StorageService, build_raw_object_key
 
@@ -37,91 +39,145 @@ def sanitize_filename(*, filename: str) -> str:
     return basename
 
 
-def create_upload_source(
+class DuplicateUploadError(Exception):
+    """Raised when a filename is already taken by an upload that cannot be retried."""
+
+
+@dataclass(frozen=True)
+class UploadListing:
+    """One listed upload: the item identity plus its derived latest status."""
+
+    id: UUID
+    project_id: UUID
+    filename: str
+    status: RunStatus
+    created_at: datetime
+
+
+def _upload_item(*, db: Session, project_id: UUID, filename: str) -> SourceItem | None:
+    """Return the project's upload item with this exact filename, if any."""
+
+    return db.execute(
+        select(SourceItem)
+        .join(Source, Source.id == SourceItem.source_id)
+        .where(Source.project_id == project_id, Source.type == "upload", SourceItem.external_id == filename)
+    ).scalar_one_or_none()
+
+
+def _is_retryable(*, db: Session, item: SourceItem) -> bool:
+    """Return whether the item's latest run failed with no document ever indexed."""
+
+    status = db.scalar(
+        select(latest_run_status(source_item_id=SourceItem.id)).where(SourceItem.id == item.id)
+    )
+    document_exists = db.scalar(select(Document.id).where(Document.source_item_id == item.id)) is not None
+    return status == RunStatus.FAILED and not document_exists
+
+
+def _upload_source_id(*, db: Session, project_id: UUID) -> UUID:
+    """Return the project's one upload source id, creating the row when missing (R5)."""
+
+    db.execute(
+        insert(Source)
+        .values(id=uuid4(), project_id=project_id, type="upload")
+        .on_conflict_do_nothing(index_elements=[Source.project_id], index_where=Source.type == "upload")
+    )
+    source_id = db.scalar(select(Source.id).where(Source.project_id == project_id, Source.type == "upload"))
+    if source_id is None:
+        # Unreachable: the insert above guarantees the row exists.
+        raise RuntimeError("the project's upload source vanished between insert and select")
+    return source_id
+
+
+def upload_file(
     *,
     db: Session,
-    project: Project,
+    project_id: UUID,
     filename: str,
-    content_type: str | None,
     content: bytes,
+    content_type: str | None,
     storage: StorageService,
-    settings: Settings,
-) -> Source:
-    """Store one uploaded file and commit its source, item, queued run, and outbox event.
+) -> UploadListing:
+    """Store one uploaded file as the project's upload item, with its queued run and event.
 
-    The request's read transaction is committed before the storage PUT so that no DB
-    transaction spans the storage call, and the rows land in one later transaction:
-    raw bytes persist first, then the relational state, atomically. ``settings`` is
-    accepted for signature symmetry with the worker services; the upload size gate
-    lives in the router's pre-read validation.
+    The read transaction ends before the storage PUT (no transaction spans it), then
+    one write transaction covers source, item, run, and event. A same-name item is
+    retried only when its latest run failed with no document indexed (R2); otherwise
+    the upload is a duplicate and replacement stays S7's replace-only-after-success path.
     """
 
+    existing = _upload_item(db=db, project_id=project_id, filename=filename)
+    if existing is not None and not _is_retryable(db=db, item=existing):
+        raise DuplicateUploadError(filename)
     content_hash = hashlib.sha256(content).hexdigest()
-    source_id = uuid4()
-    item_id = uuid4()
+    item_id = existing.id if existing is not None else uuid4()
     raw_object_key = build_raw_object_key(
-        project_id=project.id,
-        source_item_id=item_id,
-        content_hash=content_hash,
-        filename=filename,
+        project_id=project_id, source_item_id=item_id, content_hash=content_hash, filename=filename
     )
-    # Copy the ids the rest of the flow still needs, then end the read transaction with a
-    # commit: a rollback would discard the test harness savepoint's setup rows, and any
-    # instance access after a rollback would silently reopen a transaction across the PUT.
-    project_id = project.id
+    # End the read transaction: no transaction may span the storage PUT.
     db.commit()
     storage.put_object(key=raw_object_key, content=content, content_type=content_type)
 
-    # One transaction for source, item, run, and event, flushed in FK order because the
-    # unit of work would otherwise order these unrelated mappers by table name.
-    source = Source(id=source_id, project_id=project_id, type="upload")
-    db.add(source)
-    db.flush()
-    item = SourceItem(
-        id=item_id,
-        source_id=source_id,
-        project_id=project_id,
-        external_id=filename,
-        filename=filename,
-        content_type=content_type or "application/octet-stream",
-        size_bytes=len(content),
-        content_hash=content_hash,
-        raw_object_key=raw_object_key,
-    )
-    db.add(item)
-    db.flush()
+    source_id = _upload_source_id(db=db, project_id=project_id)
+    if existing is None:
+        item = SourceItem(
+            id=item_id,
+            source_id=source_id,
+            project_id=project_id,
+            external_id=filename,
+            filename=filename,
+            content_type=content_type or "application/octet-stream",
+            size_bytes=len(content),
+            content_hash=content_hash,
+            raw_object_key=raw_object_key,
+        )
+        db.add(item)
+        try:
+            # The flush fires the filename-unique race backstop.
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            raise DuplicateUploadError(filename) from None
+    else:
+        item = db.execute(select(SourceItem).where(SourceItem.id == item_id).with_for_update()).scalar_one()
+        if not _is_retryable(db=db, item=item):
+            db.rollback()
+            raise DuplicateUploadError(filename)
+        item.content_hash = content_hash
+        item.raw_object_key = raw_object_key
+        item.size_bytes = len(content)
+        item.content_type = content_type or item.content_type
     request_ingestion(db=db, source_item_id=item_id, raw_object_key=raw_object_key, content_hash=content_hash)
     db.commit()
-    return source
+    db.refresh(item)
+    return UploadListing(
+        id=item.id,
+        project_id=item.project_id,
+        filename=item.filename,
+        status=RunStatus.QUEUED,
+        created_at=item.created_at,
+    )
 
 
-@dataclass
-class SourceListItem:
-    """One listed source with its derived display fields."""
-
-    source: Source
-    filename: str
-    status: str
-
-
-def list_sources(*, db: Session, project_id: UUID) -> list[SourceListItem]:
-    """List a project's sources newest first, deriving filename and status from the latest run.
-
-    The latest run is the correlated lookup with the id tie-break, so a tied
-    ``created_at`` cannot fan one item out into several rows; an item with no visible
-    run coalesces to queued (defensive).
-    """
+def list_uploads(*, db: Session, project_id: UUID) -> list[UploadListing]:
+    """List a project's uploads newest first by item creation, deriving the latest status."""
 
     rows = db.execute(
         select(
-            Source,
             SourceItem,
             func.coalesce(latest_run_status(source_item_id=SourceItem.id), RunStatus.QUEUED).label("status"),
         )
-        .join(SourceItem, SourceItem.source_id == Source.id)
-        .where(Source.project_id == project_id)
-        .order_by(Source.created_at.desc(), Source.id.desc())
+        .join(Source, Source.id == SourceItem.source_id)
+        .where(Source.project_id == project_id, Source.type == "upload")
+        .order_by(SourceItem.created_at.desc(), SourceItem.id.desc())
     ).all()
     return [
-        SourceListItem(source=source, filename=item.filename, status=status) for source, item, status in rows
+        UploadListing(
+            id=item.id,
+            project_id=item.project_id,
+            filename=item.filename,
+            status=RunStatus(status),
+            created_at=item.created_at,
+        )
+        for item, status in rows
     ]

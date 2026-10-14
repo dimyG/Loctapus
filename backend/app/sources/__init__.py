@@ -1,1 +1,1 @@
-"""Sources and their uploaded content versions."""
+"""Upload sources and their content items."""

@@ -1,4 +1,4 @@
-"""Request and response bodies for the source endpoints."""
+"""Request and response bodies for the upload endpoints."""
 
 from datetime import datetime
 from uuid import UUID
@@ -8,12 +8,11 @@ from pydantic import BaseModel
 from app.ingestion.status import RunStatus
 
 
-class SourceOut(BaseModel):
-    """Source as returned by the API, with status and filename derived from its item."""
+class UploadOut(BaseModel):
+    """One uploaded file as returned by the API, with its derived latest status."""
 
     id: UUID
     project_id: UUID
-    type: str
-    status: RunStatus
     filename: str
+    status: RunStatus
     created_at: datetime

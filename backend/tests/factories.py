@@ -8,6 +8,7 @@ import hashlib
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.identity.service import register_user
@@ -45,12 +46,16 @@ def seed_upload(
 
     The caller stores ``content`` under the returned ``raw_object_key`` when a test
     needs real bytes in Garage. Rows flush in FK order because the unit of work
-    orders INSERTs of unrelated mappers by table name.
+    orders INSERTs of unrelated mappers by table name. The item reuses the project's
+    one upload source, creating it when missing, exactly as the uploads API does.
     """
 
-    source = Source(project_id=project_id, type="upload")
-    db.add(source)
-    db.flush()
+    source_id = db.scalar(select(Source.id).where(Source.project_id == project_id, Source.type == "upload"))
+    if source_id is None:
+        source = Source(project_id=project_id, type="upload")
+        db.add(source)
+        db.flush()
+        source_id = source.id
     content_hash = hashlib.sha256(content).hexdigest()
     item_id = uuid4()
     raw_object_key = build_raw_object_key(
@@ -61,7 +66,7 @@ def seed_upload(
     )
     item = SourceItem(
         id=item_id,
-        source_id=source.id,
+        source_id=source_id,
         project_id=project_id,
         external_id=filename,
         filename=filename,
@@ -77,7 +82,7 @@ def seed_upload(
     )
     db.commit()
     return SeededUpload(
-        source_id=source.id,
+        source_id=source_id,
         source_item_id=item_id,
         ingestion_run_id=run_id,
         raw_object_key=raw_object_key,

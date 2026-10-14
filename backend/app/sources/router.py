@@ -1,4 +1,4 @@
-"""Source HTTP endpoints."""
+"""Upload HTTP endpoints."""
 
 from typing import Annotated
 from uuid import UUID
@@ -10,10 +10,15 @@ from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.identity.dependencies import get_current_user
 from app.identity.models import User
-from app.ingestion.status import RunStatus
 from app.projects.service import get_project_for_user_with_role, get_project_visible_to_user
-from app.sources.schemas import SourceOut
-from app.sources.service import create_upload_source, list_sources, sanitize_filename
+from app.sources.schemas import UploadOut
+from app.sources.service import (
+    DuplicateUploadError,
+    UploadListing,
+    list_uploads,
+    sanitize_filename,
+    upload_file,
+)
 from app.storage.service import StorageService, StorageUnavailableError, get_storage
 
 router = APIRouter()
@@ -44,7 +49,19 @@ def _validated_size(*, file: UploadFile, settings: Settings) -> None:
         raise HTTPException(422, f"The file is too large. The maximum size is {settings.max_upload_mb} MB.")
 
 
-@router.post("/projects/{project_id}/sources", status_code=201, response_model=SourceOut)
+def _to_out(*, listing: UploadListing) -> UploadOut:
+    """Map one upload listing into its response body."""
+
+    return UploadOut(
+        id=listing.id,
+        project_id=listing.project_id,
+        filename=listing.filename,
+        status=listing.status,
+        created_at=listing.created_at,
+    )
+
+
+@router.post("/projects/{project_id}/uploads", status_code=201, response_model=UploadOut)
 def upload(
     *,
     project_id: UUID,
@@ -53,8 +70,8 @@ def upload(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
     storage: StorageService = Depends(get_storage),
-) -> SourceOut:
-    """Store an uploaded file as a new source, raising 404, 422, or 503 per the flow order."""
+) -> UploadOut:
+    """Store one uploaded file as the project's upload item, raising 404, 409, 422, or 503."""
 
     project = get_project_for_user_with_role(db=db, user=user, project_id=project_id, minimum_role="editor")
     if project is None:
@@ -63,48 +80,31 @@ def upload(
     _validated_size(file=file, settings=settings)
     content = file.file.read()
     try:
-        source = create_upload_source(
+        listing = upload_file(
             db=db,
-            project=project,
+            project_id=project.id,
             filename=filename,
-            content_type=file.content_type,
             content=content,
+            content_type=file.content_type,
             storage=storage,
-            settings=settings,
         )
+    except DuplicateUploadError:
+        raise HTTPException(409, "A file with this name already exists in this project.") from None
     except StorageUnavailableError:
         raise HTTPException(503, "Could not store the file. Please try again.") from None
-    # A source fresh from create_upload_source has exactly one run and it is queued.
-    return SourceOut(
-        id=source.id,
-        project_id=source.project_id,
-        type=source.type,
-        status=RunStatus.QUEUED,
-        filename=filename,
-        created_at=source.created_at,
-    )
+    return _to_out(listing=listing)
 
 
-@router.get("/projects/{project_id}/sources", response_model=list[SourceOut])
+@router.get("/projects/{project_id}/uploads", response_model=list[UploadOut])
 def list_all(
     *,
     project_id: UUID,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> list[SourceOut]:
-    """List a project's sources newest first, raising 404 when the project is not visible."""
+) -> list[UploadOut]:
+    """List a project's uploads newest first, raising 404 when the project is not visible."""
 
     project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
     if project is None:
         raise HTTPException(404, "project not found")
-    return [
-        SourceOut(
-            id=item.source.id,
-            project_id=item.source.project_id,
-            type=item.source.type,
-            status=RunStatus(item.status),
-            filename=item.filename,
-            created_at=item.source.created_at,
-        )
-        for item in list_sources(db=db, project_id=project_id)
-    ]
+    return [_to_out(listing=listing) for listing in list_uploads(db=db, project_id=project.id)]

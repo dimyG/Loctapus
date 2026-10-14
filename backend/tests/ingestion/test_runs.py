@@ -24,7 +24,7 @@ from app.ingestion.status import RunStatus
 from app.outbox.events import SOURCE_ITEM_INGESTION_REQUESTED
 from app.outbox.models import OutboxEvent
 from app.sources.models import SourceItem
-from app.sources.service import list_sources
+from app.sources.service import list_uploads
 from tests.factories import seed_project, seed_upload
 
 TIE_BREAK_TIME = datetime(2026, 10, 14, 12, 0, 0, tzinfo=UTC)
@@ -173,7 +173,7 @@ def test_latest_run_status_breaks_ties_by_id(*, db_session: Session) -> None:
     ).scalar_one()
     assert status == RunStatus.READY
 
-    rows = list_sources(db=db_session, project_id=project_id)
+    rows = list_uploads(db=db_session, project_id=project_id)
     assert len(rows) == 1
     assert rows[0].status == RunStatus.READY
 

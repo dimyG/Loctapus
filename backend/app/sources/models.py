@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -27,6 +28,13 @@ class Source(Base):
     __table_args__ = (
         CheckConstraint("type IN ('upload')"),
         Index("ix_sources_project_id", "project_id"),
+        # One upload source per project (U1), created lazily by the first upload.
+        Index(
+            "uq_sources_project_id_upload",
+            "project_id",
+            unique=True,
+            postgresql_where=text("type = 'upload'"),
+        ),
         # Exists only as the unique target the composite FK on source_items requires.
         UniqueConstraint("id", "project_id", name="uq_sources_id_project_id"),
     )
@@ -38,11 +46,16 @@ class Source(Base):
 
 
 class SourceItem(Base):
-    """One uploaded content version, fingerprinted by the raw bytes' sha256 hash."""
+    """A content item inside a source, identified by ``external_id`` (the filename for uploads).
+
+    The file fields describe the item's latest accepted version; the run rows pin the
+    version they were created for.
+    """
 
     __tablename__ = "source_items"
     __table_args__ = (
-        UniqueConstraint("source_id", "external_id"),
+        # A filename identifies one item inside its source (U1).
+        UniqueConstraint("source_id", "external_id", name="uq_source_items_source_id_external_id"),
         CheckConstraint("size_bytes > 0"),
         # project_id is repeated down sources -> source_items -> documents -> chunks so
         # retrieval filters chunks by project without joins; the composite FK makes the

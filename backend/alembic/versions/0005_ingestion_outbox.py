@@ -66,7 +66,8 @@ def upgrade() -> None:
             name="fk_source_items_source_id_project_id",
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("source_id", "external_id"),
+        # A filename identifies one item inside its source (U1).
+        sa.UniqueConstraint("source_id", "external_id", name="uq_source_items_source_id_external_id"),
         sa.CheckConstraint("size_bytes > 0"),
         sa.UniqueConstraint("id", "project_id", name="uq_source_items_id_project_id"),
     )
@@ -163,6 +164,14 @@ def upgrade() -> None:
     )
     for table, columns in _INDEXES:
         op.create_index(f"ix_{table}_{'_'.join(columns)}", table, list(columns))
+    # One upload source per project (U1), created lazily by the first upload.
+    op.create_index(
+        "uq_sources_project_id_upload",
+        "sources",
+        ["project_id"],
+        unique=True,
+        postgresql_where=sa.text("type = 'upload'"),
+    )
     op.create_index(
         "ix_chunks_embedding",
         "chunks",
@@ -181,6 +190,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("uq_sources_project_id_upload", table_name="sources")
     op.drop_index("ix_outbox_events_created_at_unpublished", table_name="outbox_events")
     op.drop_index("ix_chunks_search_vector", table_name="chunks")
     op.drop_index("ix_chunks_embedding", table_name="chunks")
