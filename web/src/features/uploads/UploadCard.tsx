@@ -63,7 +63,9 @@ export default function UploadCard({ projectId }: { projectId: string }) {
             {uploadError}
           </Alert>
         )}
-        <Button variant="contained" component="label" disabled={uploading}>
+        {/* tabIndex -1 keeps the label out of the tab order: the visually */}
+        {/* hidden input inside it is the upload control's single tab stop. */}
+        <Button variant="contained" component="label" disabled={uploading} tabIndex={-1}>
           Upload
           <Box
             component="input"

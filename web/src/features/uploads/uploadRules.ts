@@ -14,6 +14,9 @@ export function uploadRejection(file: File): string | null {
   if (!ALLOWED_EXTENSIONS.some((extension) => name.endsWith(extension))) {
     return "Only PDF and DOCX files are supported.";
   }
+  if (file.size === 0) {
+    return "The file is empty.";
+  }
   if (file.size > MAX_UPLOAD_BYTES) {
     return `The file is too large. The maximum size is ${MAX_UPLOAD_MB} MB.`;
   }

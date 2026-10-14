@@ -227,6 +227,37 @@ describe("ProjectPage", () => {
     expect(posts).toHaveLength(0);
   });
 
+  it("rejects an empty file without posting", async () => {
+    const posts: unknown[] = [];
+    server.use(
+      http.post("*/projects/p-1/uploads", ({ request }) => {
+        posts.push(request);
+        return HttpResponse.json(queuedUpload, { status: 201 });
+      }),
+    );
+    renderProject();
+    const user = userEvent.setup();
+    await user.upload(
+      await screen.findByLabelText("Upload"),
+      new File([], "empty.pdf", { type: "application/pdf" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("The file is empty.");
+    expect(posts).toHaveLength(0);
+  });
+
+  it("keeps the upload control a single tab stop", async () => {
+    renderProject();
+    const user = userEvent.setup();
+    screen.getByRole("link", { name: "Back to projects" }).focus();
+    await user.tab();
+    // The label Button is removed from the tab order, so the hidden file
+    // input is the upload control's only stop before the table.
+    expect(document.activeElement).toBe(screen.getByLabelText("Upload"));
+    await user.tab();
+    expect(document.activeElement).not.toBe(screen.getByLabelText("Upload"));
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "Upload" }));
+  });
+
   it("shows friendly copy when the server rejects the upload with 422", async () => {
     server.use(
       http.post("*/projects/p-1/uploads", () =>

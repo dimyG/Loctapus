@@ -31,6 +31,10 @@ describe("uploadRejection", () => {
     expect(uploadRejection(file("notes.txt", 8))).toBe("Only PDF and DOCX files are supported.");
   });
 
+  it("rejects an empty file with the server's copy", () => {
+    expect(uploadRejection(file("empty.pdf", 0))).toBe("The file is empty.");
+  });
+
   it("rejects a file over the limit with copy derived from MAX_UPLOAD_MB", () => {
     const tooBig = file("big.pdf", MAX_UPLOAD_MB * 1024 * 1024 + 1);
     expect(tooBig.size).toBeGreaterThan(MAX_UPLOAD_MB * 1024 * 1024);
