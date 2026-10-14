@@ -17,10 +17,11 @@ class OutboxEvent(Base):
 
     __tablename__ = "outbox_events"
     __table_args__ = (
-        # The poller scans unpublished rows oldest first; published rows leave the index.
+        # The poller scans due unpublished rows, next attempt first; published rows and
+        # backed-off rows leave the index.
         Index(
-            "ix_outbox_events_created_at_unpublished",
-            "created_at",
+            "ix_outbox_events_next_attempt_at_unpublished",
+            "next_attempt_at",
             postgresql_where=text("published_at IS NULL"),
         ),
     )
@@ -33,4 +34,7 @@ class OutboxEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int] = mapped_column(default=0, server_default=text("0"))
+    # The dispatcher's due gate: a failed row waits one backoff interval before its next
+    # attempt, so poison and failures cannot starve the rows behind them.
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_error: Mapped[str | None] = mapped_column(Text)

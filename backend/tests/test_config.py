@@ -14,6 +14,11 @@ def test_settings_defaults() -> None:
     assert s.jwt_algorithm == "HS256"
     assert s.jwt_access_token_ttl_hours == 24
     assert s.environment == "dev"
+    assert s.outbox_poll_interval_seconds == 1.0
+    assert s.outbox_batch_size == 20
+    assert s.outbox_retry_base_seconds == 1.0
+    assert s.outbox_retry_max_seconds == 300.0
+    assert s.outbox_publish_timeout_seconds == 10.0
 
 
 def test_settings_env_override(*, monkeypatch: pytest.MonkeyPatch) -> None:

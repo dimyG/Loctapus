@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 64
     outbox_poll_interval_seconds: float = 1.0
     outbox_batch_size: int = 20
+    outbox_retry_base_seconds: float = 1.0
+    outbox_retry_max_seconds: float = 300.0
+    outbox_publish_timeout_seconds: float = 10.0
     max_upload_mb: int = 25
 
     @model_validator(mode="after")

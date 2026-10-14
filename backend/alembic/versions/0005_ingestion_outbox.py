@@ -159,6 +159,11 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        # The dispatcher's due gate: a failed row waits one backoff interval before its
+        # next attempt, so poison and failures cannot starve the rows behind them.
+        sa.Column(
+            "next_attempt_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+        ),
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -180,18 +185,19 @@ def upgrade() -> None:
         postgresql_ops={"embedding": "vector_cosine_ops"},
     )
     op.create_index("ix_chunks_search_vector", "chunks", ["search_vector"], postgresql_using="gin")
-    # The outbox poller scans unpublished events oldest first; published rows leave the index.
+    # The outbox poller scans due unpublished events, next attempt first; published rows
+    # leave the index.
     op.create_index(
-        "ix_outbox_events_created_at_unpublished",
+        "ix_outbox_events_next_attempt_at_unpublished",
         "outbox_events",
-        ["created_at"],
+        ["next_attempt_at"],
         postgresql_where=sa.text("published_at IS NULL"),
     )
 
 
 def downgrade() -> None:
     op.drop_index("uq_sources_project_id_upload", table_name="sources")
-    op.drop_index("ix_outbox_events_created_at_unpublished", table_name="outbox_events")
+    op.drop_index("ix_outbox_events_next_attempt_at_unpublished", table_name="outbox_events")
     op.drop_index("ix_chunks_search_vector", table_name="chunks")
     op.drop_index("ix_chunks_embedding", table_name="chunks")
     op.drop_index("ix_ingestion_runs_source_item_id_created_at_id", table_name="ingestion_runs")
