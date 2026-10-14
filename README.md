@@ -35,6 +35,11 @@ Do not change `GARAGE_DEFAULT_SECRET_KEY` after first start: Garage binds its st
 layout to the secret it was created with, startup fails with a different one, and the
 metadata volume must be wiped to recover.
 
+RabbitMQ state lives on the named `rabbitmqdata` volume, so queues and vhosts survive a
+`docker compose up -d --force-recreate rabbitmq`. This volume was introduced after the
+broker had run without one: recreating the container discards that old anonymous volume
+once, and the `rag_test` and `rag_e2e` vhosts are recreated by their suites' bootstraps.
+
 ## Migrate the development database
 
 ```powershell

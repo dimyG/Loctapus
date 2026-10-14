@@ -19,9 +19,20 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management
+    # A stable hostname keeps the broker's data directory usable across recreates:
+    # RabbitMQ names its node after the container hostname, and a changed hostname
+    # makes it refuse the existing mnesia directory.
+    hostname: rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
 
   garage:
     image: dxflrs/garage:v2.3.0
@@ -40,5 +51,6 @@ services:
 
 volumes:
   pgdata:
+  rabbitmqdata:
   garagemeta:
   garagedata:
