@@ -2,7 +2,7 @@
 
 Date: 2026-10-06
 Updated: 2026-10-12
-Status: Approved design. S0-S2 are implemented on `master`. Roadmap re-cut on 2026-10-09: the web UI is pulled forward to S2 and, from S2 on, every slice pairs its backend work with the matching frontend part (decision 5 below). Roadmap re-cut on 2026-10-12: the former S3 is split into an upload+ingestion slice and a retrieval slice (decision 6 below).
+Status: Approved design. S0-S3 are implemented on `master`. Roadmap re-cut on 2026-10-09: the web UI is pulled forward to S2 and, from S2 on, every slice pairs its backend work with the matching frontend part (decision 5 below). Roadmap re-cut on 2026-10-12: the former S3 is split into an upload+ingestion slice and a retrieval slice (decision 6 below).
 Source of truth for product/architecture intent: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD"). This document records the decomposition decisions made during brainstorming and the detailed design for the first implementation slices. Where the two disagree, this document wins for the topics it covers.
 
 ## 1. Context and decisions from brainstorming
@@ -29,14 +29,14 @@ Guiding principles carried over from the MD (§29–30): replaceable providers b
 
 | Slice | Contents | Done when |
 |---|---|---|
-| **S0 - Scaffolding** ✅ done | git init; backend layout; pyproject + deps; settings/config; docker-compose (Postgres+pgvector, RabbitMQ, MinIO); Alembic; `/health`; pytest harness | `docker compose up` → API healthy, tests run |
+| **S0 - Scaffolding** ✅ done | git init; backend layout; pyproject + deps; settings/config; docker-compose (Postgres+pgvector, RabbitMQ, MinIO (replaced by Garage in S3)); Alembic; `/health`; pytest harness | `docker compose up` → API healthy, tests run |
 | **S1 - Identity & projects** ✅ done | users/workspaces/teams tables (long-term model, single-user flow); JWT register/login; projects CRUD | Register → login → create/list/delete projects via API, all tested |
 | **S2 - Web UI foundations** ✅ done | Devias Kit / React / Redux on Vite (SPA) in `web/`: landing; register/login/logout; projects list + create (team picked from the user's workspaces/teams), wired to the existing S1 API | Register → login → logout → list/create projects from a browser, all tested |
 | **S3 - Upload & ingestion (stub providers) + upload UI** ✅ done | PDF/DOCX upload → Garage; Celery ingestion (stub parser → normalize → chunk); chunks + outbox event in one transaction; outbox dispatcher → `embed` queue → stub embeddings; HNSW + GIN indexes; frontend: project page, upload PDF/DOCX, processing status | Upload a real PDF from the browser and watch it reach `ready` - fully offline |
 | **S4 - Retrieval (stub providers) + query UI** | `POST /projects/{id}/retrieve` (vector + FTS + RRF, no rerank); basic `query_logs`; frontend: question view on the project page, ask → ranked grounded chunks | Ask a question from the browser, get ranked grounded chunks back - fully offline |
 | **S5 - Real providers + rerank + API keys + keys/query UI** | Unstructured hosted parser; Voyage `voyage-4-lite` embeddings (dimension config + migration); Voyage `rerank-3-lite` + local diversity filter (`max_chunks_per_document`); project-scoped API keys authorizing `/retrieve`; frontend: project API-key management; rerank + `max_chunks_per_document` controls in the query UI | Same flow works with real keys; `rerank=true/false` both work from the UI |
 | **S6 - `/answer` + chat UI** | LLM provider interface + Groq `openai/gpt-oss-20b`; grounded-context prompt; `/answer` calls retrieval internally; frontend: answer in a simple AI-chat style with cited chunks | Question → answer grounded in cited chunks, from the browser |
-| **S7 - Ingestion robustness + source management UI** | Idempotency hardening (`source_item_id, content_hash`); Celery Beat sync polling per `sources.sync_interval`; stale document/chunk replacement; source delete; retries + `ingestion_runs` status surfacing; frontend: delete source, ingestion-run status in the project page | Re-upload of a changed file replaces old chunks only after new ones are indexed; visible in the UI |
+| **S7 - Ingestion robustness + source management UI** | Idempotency hardening (`source_item_id, content_hash`); sync polling per `sources.sync_interval` (scheduler decided at S7's round); stale document/chunk replacement; file delete and replace; retries + `ingestion_runs` status surfacing; frontend: file delete, ingestion-run status in the project page | Re-upload of a changed file replaces old chunks only after new ones are indexed; visible in the UI |
 | **S8 - Retrieval evaluation + labeling UI** | Labeling workflow over `query_logs`; Recall@K + MRR harness; frontend: labeling workflow UI over `query_logs` | Can score retrieval-config changes against a labeled set |
 | **S9 - Website connector** (post-MVP) | sitemap discovery → HTTP fetch → HTML extraction → normalized document; frontend: add-website-source flow | Website source ingests via the same pipeline, from the browser |
 
@@ -125,7 +125,9 @@ DELETE /projects/{id}  -> delete project (admin role required)
 
 Devias Kit / React / Redux SPA on Vite in `web/` (the MD's Next.js (§2, §24) superseded on 2026-10-09; no SSR and no Node server - FastAPI stays the sole server, serving the JSON API), wired to the existing S1 endpoints: landing; register/login/logout; projects list + create (team picked from the user's workspaces/teams). Implemented on `master` under `../plans/2026-10-09-s2-web-ui-foundations.md` (app structure, auth-state handling, CORS with the FastAPI backend, frontend test approach).
 
-### S3 - Upload & ingestion (stub providers) + upload UI
+### S3 - Upload & ingestion (stub providers) + upload UI (✅ done)
+
+Implemented on `master` under `../plans/2026-10-13-s3-upload-ingestion.md` (design: `2026-10-12-s3-upload-ingestion-design.md`, amended by the 2026-10-14 review fixes - the uploads API, the run state machine, the composite project scope, the outbox backoff, and the worker hardening described there supersede this preview).
 
 - **Upload flow**: `POST /projects/{id}/sources` (multipart) → raw file to Garage → `sources` + `source_items` + `ingestion_runs` rows → enqueue ingestion → return source + status. Status polling via `GET /projects/{id}/sources`. Status values per MD §6: queued | fetching | processing | indexing | ready | failed.
 - **Ingestion task**: fetch raw from Garage → parser interface (stub: pypdf / python-docx; interface shaped for Unstructured's element model) → normalized document JSON → structure-aware recursive chunker (target 500–700 tokens, max ~1000, overlap ~80 — settings, not constants) → **one DB transaction**: document + chunks + `document_ready_for_embedding` outbox event → dispatcher (poll ~1s) publishes to RabbitMQ `embed` queue → embed worker batches stub embeddings → writes vectors → marks ready. Consumers idempotent (MD §19).
@@ -137,7 +139,7 @@ Devias Kit / React / Redux SPA on Vite in `web/` (the MD's Next.js (§2, §24) s
 | # (MD §31) | Decision | Proposed default |
 |---|---|---|
 | 3 | Normalized elements in Postgres | `documents.normalized_content` JSONB holding the elements array |
-| 4 | Embedding dimension | Settings-driven `EMBEDDING_DIM`; pgvector column created per configured dim (stub: 384; voyage-4-lite dim set at S5) |
+| 4 | Embedding dimension | The provider constant `STUB_EMBEDDING_DIM` (stub: 384), not a setting: the migration hardcodes the literal and the startup guard cross-checks the constant; Voyage's dim lands with its own migration at S5 |
 | 7 | S3 object-key convention | `raw/{project_id}/{source_item_id}/{content_hash}/{filename}` |
 | 9 | Stale doc/chunk deletion | Replace-only-after-success (MD §20): old document + chunks deleted in the transaction that activates the replacement |
 
@@ -164,4 +166,4 @@ Devias Kit / React / Redux SPA on Vite in `web/` (the MD's Next.js (§2, §24) s
 
 ## 7. Next step
 
-S0-S2 are complete on `master`. Next: brainstorming/design round + implementation plan for **S3 - Upload & ingestion (stub providers) + upload UI** (PDF/DOCX upload → Garage → Celery ingestion pipeline → stub embeddings, plus the project-page upload/status UI), then execution via subagent-driven development with TDD. Each later slice follows the same pattern, with backend + matching frontend designed and tested together.
+S0-S3 are complete on `master`. Next: brainstorming/design round + implementation plan for **S4 - Retrieval (stub providers) + query UI** (`POST /projects/{id}/retrieve`: vector + FTS + RRF over the S3 indexes, plus the question view on the project page), then execution via subagent-driven development with TDD. Each later slice follows the same pattern, with backend + matching frontend designed and tested together.
