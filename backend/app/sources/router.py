@@ -14,7 +14,7 @@ from app.ingestion.status import RunStatus
 from app.projects.service import get_project_for_user_with_role, get_project_visible_to_user
 from app.sources.schemas import SourceOut
 from app.sources.service import create_upload_source, list_sources, sanitize_filename
-from app.storage.service import StorageService, StorageUnavailableError
+from app.storage.service import StorageService, StorageUnavailableError, get_storage
 
 router = APIRouter()
 
@@ -52,6 +52,7 @@ def upload(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    storage: StorageService = Depends(get_storage),
 ) -> SourceOut:
     """Store an uploaded file as a new source, raising 404, 422, or 503 per the flow order."""
 
@@ -68,7 +69,7 @@ def upload(
             filename=filename,
             content_type=file.content_type,
             content=content,
-            storage=StorageService(settings=settings),
+            storage=storage,
             settings=settings,
         )
     except StorageUnavailableError:

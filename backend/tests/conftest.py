@@ -15,6 +15,7 @@ from alembic import command
 from app.core.config import Settings
 from app.core.db import get_db, make_engine
 from app.main import app
+from app.storage.service import StorageService
 from scripts.broker_admin import ensure_broker_vhost
 from tests.helpers import SettingsForTests
 
@@ -31,6 +32,13 @@ def settings() -> Settings:
         database_url=os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL),
         jwt_secret="test-secret",
     )
+
+
+@pytest.fixture
+def storage(*, settings: Settings) -> StorageService:
+    """Return the real storage service pointed at the compose Garage with the dev bucket."""
+
+    return StorageService(settings=settings)
 
 
 @pytest.fixture(scope="session")

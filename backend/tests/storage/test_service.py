@@ -4,7 +4,13 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.storage import StorageService, StorageUnavailableError, build_raw_object_key
+from app.storage import (
+    ObjectNotFoundError,
+    StorageService,
+    StorageUnavailableError,
+    build_raw_object_key,
+    get_storage,
+)
 from tests.helpers import SettingsForTests
 
 PROJECT_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -47,8 +53,8 @@ def test_put_get_roundtrip() -> None:
     assert service.get_object(key=key) == b"no content type"
 
 
-def test_get_missing_key_raises() -> None:
-    """Check that reading an absent key raises StorageUnavailableError."""
+def test_get_missing_key_raises_object_not_found() -> None:
+    """Check that reading an absent key raises ObjectNotFoundError, not unavailable."""
 
     service = _service()
     key = build_raw_object_key(
@@ -57,5 +63,20 @@ def test_get_missing_key_raises() -> None:
         content_hash=CONTENT_HASH,
         filename="missing.bin",
     )
-    with pytest.raises(StorageUnavailableError):
+    with pytest.raises(ObjectNotFoundError):
         service.get_object(key=key)
+
+
+def test_unreachable_endpoint_raises_unavailable() -> None:
+    """Check that an unreachable storage endpoint raises StorageUnavailableError."""
+
+    service = StorageService(settings=SettingsForTests(s3_endpoint="http://127.0.0.1:1"))
+    with pytest.raises(StorageUnavailableError):
+        service.get_object(key="raw/nowhere/nowhere/none/missing.bin")
+
+
+def test_get_storage_returns_one_cached_service() -> None:
+    """Check that get_storage hands out one cached service per process."""
+
+    first = get_storage()
+    assert get_storage() is first

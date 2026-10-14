@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
-import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy.orm import Session
@@ -13,23 +12,17 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.ingestion.models import Chunk, Document, IngestionRun
 from app.ingestion.service import embed_document, ingest_source_item
+from app.main import app
 from app.outbox.events import SOURCE_ITEM_INGESTION_REQUESTED
 from app.outbox.models import OutboxEvent
 from app.projects.models import ProjectTeamRole
 from app.providers import get_embedding_provider, get_parser
 from app.sources.models import Source, SourceItem
-from app.storage.service import StorageService, build_raw_object_key
+from app.storage.service import StorageService, StorageUnavailableError, build_raw_object_key, get_storage
 from tests.factories import seed_upload
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 PDF_CONTENT_TYPE = "application/pdf"
-
-
-@pytest.fixture
-def storage(*, settings: Settings) -> StorageService:
-    """Return the real storage service pointed at the compose Garage with the dev bucket."""
-
-    return StorageService(settings=settings)
 
 
 def _auth(*, client: TestClient, email: str) -> dict[str, str]:
@@ -124,7 +117,7 @@ def test_upload_creates_source_item_run_and_event(
 
 
 def test_storage_put_runs_with_no_open_transaction(
-    *, client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    *, client: TestClient, db_session: Session, settings: Settings
 ) -> None:
     """Check that no DB transaction is open on the request session across the storage PUT."""
 
@@ -142,13 +135,39 @@ def test_storage_put_runs_with_no_open_transaction(
             recorded.append(db_session.in_transaction())
             super().put_object(key=key, content=content, content_type=content_type)
 
-    monkeypatch.setattr("app.sources.router.StorageService", RecordingStorageService)
+    app.dependency_overrides[get_storage] = lambda: RecordingStorageService(settings=settings)
 
     r = _upload(
         client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=b"pdf bytes"
     )
     assert r.status_code == 201
     assert recorded == [False]
+
+
+def test_upload_storage_failure_returns_503(
+    *, client: TestClient, db_session: Session, settings: Settings
+) -> None:
+    """Check that a storage failure during upload yields a 503 and leaves no rows."""
+
+    headers = _auth(client=client, email="storage-failure@example.com")
+    project_id = _create_project(client=client, headers=headers, name="storage-failure")
+
+    class FailingStorageService(StorageService):
+        """Storage service whose puts fail as if the backend were down."""
+
+        def put_object(self, *, key: str, content: bytes, content_type: str | None = None) -> None:
+            """Refuse the put with the unavailable error."""
+
+            raise StorageUnavailableError("backend down")
+
+    app.dependency_overrides[get_storage] = lambda: FailingStorageService(settings=settings)
+
+    r = _upload(
+        client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=b"pdf bytes"
+    )
+    assert r.status_code == 503
+    assert r.json()["detail"] == "Could not store the file. Please try again."
+    assert db_session.query(SourceItem).count() == 0
 
 
 def test_upload_validates_extension_empty_and_size(*, client: TestClient) -> None:

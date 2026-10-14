@@ -29,13 +29,6 @@ from tests.factories import SeededUpload, seed_project, seed_upload
 from tests.helpers import SettingsForTests
 
 
-@pytest.fixture
-def storage(*, settings: Settings) -> StorageService:
-    """Return the real storage service pointed at the compose Garage with the dev bucket."""
-
-    return StorageService(settings=settings)
-
-
 class _CountingEmbeddingProvider:
     """Embedding provider wrapper that records the size of every embed_documents call."""
 

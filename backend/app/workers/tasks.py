@@ -13,7 +13,7 @@ from app.ingestion.service import embed_document as embed_document_service
 from app.ingestion.service import ingest_source_item as ingest_source_item_service
 from app.outbox.events import EMBED_DOCUMENT_TASK, INGEST_SOURCE_ITEM_TASK
 from app.providers import get_embedding_provider, get_parser
-from app.storage.service import StorageService
+from app.storage.service import get_storage
 from app.workers.celery_app import celery_app
 
 
@@ -26,7 +26,7 @@ def ingest_source_item(*, ingestion_run_id: str) -> None:
         ingest_source_item_service(
             db=db,
             ingestion_run_id=UUID(ingestion_run_id),
-            storage=StorageService(settings=settings),
+            storage=get_storage(),
             parser=get_parser(settings=settings),
             settings=settings,
         )

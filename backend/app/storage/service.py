@@ -1,15 +1,24 @@
 """Garage-backed object storage and the raw object key convention."""
 
+from functools import lru_cache
 from uuid import UUID
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 
 
-class StorageUnavailableError(Exception):
+class StorageError(Exception):
+    """Base for every object storage failure."""
+
+
+class ObjectNotFoundError(StorageError):
+    """Raised when the requested object does not exist in the bucket."""
+
+
+class StorageUnavailableError(StorageError):
     """Raised when the object storage backend cannot serve a request."""
 
 
@@ -26,14 +35,23 @@ class StorageService:
         """Create the boto3 client from the settings' S3 block, with path-style addressing."""
 
         self._bucket = settings.s3_bucket
-        self._client = boto3.client(
+        # A dedicated session keeps this client independent of boto3's shared default
+        # session, and the timeouts plus standard retries bound every request this
+        # process makes against Garage.
+        session = boto3.session.Session()
+        self._client = session.client(
             "s3",
             endpoint_url=settings.s3_endpoint,
             aws_access_key_id=settings.s3_access_key,
             aws_secret_access_key=settings.s3_secret_key,
             region_name=settings.s3_region,
             # Garage is addressed as {endpoint}/{bucket}/{key}, not DNS-style virtual hosts.
-            config=Config(s3={"addressing_style": "path"}),
+            config=Config(
+                s3={"addressing_style": "path"},
+                connect_timeout=5,
+                read_timeout=30,
+                retries={"mode": "standard", "max_attempts": 3},
+            ),
         )
 
     def put_object(self, *, key: str, content: bytes, content_type: str | None = None) -> None:
@@ -55,3 +73,14 @@ class StorageService:
             return response["Body"].read()
         except (ClientError, BotoCoreError) as exc:
             raise StorageUnavailableError(f"get failed for key {key!r}: {exc}") from exc
+
+
+@lru_cache
+def get_storage() -> StorageService:
+    """Return the process-wide storage service, built from the current settings.
+
+    Both the FastAPI dependency and the worker accessor resolve through this one
+    cache, so each process owns a single configured client.
+    """
+
+    return StorageService(settings=get_settings())
