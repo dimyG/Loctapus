@@ -1,7 +1,7 @@
 """Provider interfaces, stub implementations, and the string-based factories."""
 
 from app.core.config import Settings
-from app.providers.base import EmbeddingProvider, NormalizedDocument, NormalizedElement, Parser
+from app.providers.base import EmbeddingProvider, NormalizedDocument, NormalizedElement, ParseError, Parser
 from app.providers.stub_embeddings import STUB_EMBEDDING_DIM, StubEmbeddingProvider
 from app.providers.stub_parser import StubParser
 
@@ -9,6 +9,7 @@ __all__ = [
     "EmbeddingProvider",
     "NormalizedDocument",
     "NormalizedElement",
+    "ParseError",
     "Parser",
     "STUB_EMBEDDING_DIM",
     "StubEmbeddingProvider",

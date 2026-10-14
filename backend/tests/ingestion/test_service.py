@@ -2,12 +2,13 @@
 
 import hashlib
 import io
+import logging
 from dataclasses import replace
 from uuid import UUID, uuid4
 
 import pytest
 from docx import Document as DocxDocument
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -21,7 +22,7 @@ from app.ingestion.status import RunStatus
 from app.outbox.events import DOCUMENT_READY_FOR_EMBEDDING
 from app.outbox.models import OutboxEvent
 from app.providers import get_embedding_provider, get_parser
-from app.providers.base import EmbeddingProvider
+from app.providers.base import EmbeddingProvider, NormalizedDocument
 from app.providers.stub_embeddings import STUB_EMBEDDING_DIM
 from app.sources.models import Source, SourceItem
 from app.storage.service import StorageService
@@ -280,6 +281,74 @@ def test_fingerprint_mismatch_fails_the_run(
     assert db_session.query(Chunk).count() == 0
 
 
+def test_missing_object_fails_the_run(
+    *,
+    db_session: Session,
+    settings: Settings,
+    storage: StorageService,
+) -> None:
+    """Check that a run whose object was never stored fails with the object-missing copy."""
+
+    project_id = seed_project(db=db_session, email="missing-object@example.com")
+    # The rows exist but no bytes ever landed in Garage.
+    seeded = seed_upload(db=db_session, project_id=project_id, filename="never-stored.docx")
+
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
+
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
+    assert run.status == RunStatus.FAILED
+    assert run.error == "The stored file is missing. Upload the file again to retry."
+    assert run.document_id is None
+    assert db_session.query(Chunk).count() == 0
+
+
+def test_unexpected_parser_error_is_logged_not_shown(
+    *,
+    db_session: Session,
+    settings: Settings,
+    storage: StorageService,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Check that an unexpected parser crash is logged in full and shown safely."""
+
+    class _ExplodingParser:
+        """Parser stand-in whose exception leaks what looks like sensitive SQL."""
+
+        def parse(self, *, filename: str, content: bytes) -> NormalizedDocument:
+            """Raise an unexpected error carrying potentially sensitive text."""
+
+            raise RuntimeError("SELECT secret FROM x")
+
+    content = _make_docx(heading="Exploding", paragraphs=["Prose for the exploding parser."])
+    project_id, seeded = _seed(
+        db=db_session,
+        storage=storage,
+        filename="explode.docx",
+        content=content,
+    )
+
+    with caplog.at_level(logging.ERROR, logger="app.ingestion.service"):
+        ingest_source_item(
+            db=db_session,
+            ingestion_run_id=seeded.ingestion_run_id,
+            storage=storage,
+            parser=_ExplodingParser(),
+            settings=settings,
+        )
+
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
+    assert run.status == RunStatus.FAILED
+    assert run.error == "Processing failed unexpectedly."
+    failures = [
+        record for record in caplog.records if record.levelname == "ERROR" and record.exc_info is not None
+    ]
+    assert failures
+    assert str(seeded.ingestion_run_id) in failures[0].getMessage()
+    assert "SELECT secret FROM x" in caplog.text
+
+
 def test_older_run_uses_its_own_version(
     *,
     db_session: Session,
@@ -335,7 +404,7 @@ def test_garbage_pdf_fails_the_run(
     run = db_session.get(IngestionRun, seeded.ingestion_run_id)
     assert run is not None
     assert run.status == "failed"
-    assert run.error is not None
+    assert run.error == "This PDF file could not be read."
     assert run.finished_at is not None
     assert db_session.query(Document).filter(Document.source_item_id == seeded.source_item_id).count() == 0
 
@@ -360,8 +429,7 @@ def test_zero_chunk_document_fails_the_run(
     run = db_session.get(IngestionRun, seeded.ingestion_run_id)
     assert run is not None
     assert run.status == "failed"
-    assert run.error is not None
-    assert "no text content" in run.error
+    assert run.error == "No text could be extracted from this file."
     assert run.finished_at is not None
     assert db_session.query(Document).filter(Document.source_item_id == seeded.source_item_id).count() == 0
 
@@ -542,6 +610,63 @@ def test_embed_batches_chunks(*, db_session: Session, storage: StorageService) -
     assert counting.call_sizes == [2, 2, 1]
     db_session.refresh(run)
     assert run.status == "ready"
+
+
+def test_embed_provider_failure_fails_the_run(
+    *,
+    db_session: Session,
+    settings: Settings,
+    storage: StorageService,
+) -> None:
+    """Check that a provider failure during embed fails the run with every vector empty."""
+
+    class _ExplodingEmbeddingProvider:
+        """Embedding provider whose batch calls always raise."""
+
+        dimension = STUB_EMBEDDING_DIM
+
+        def embed_documents(self, *, texts: list[str]) -> list[list[float]]:
+            """Refuse every batch."""
+
+            raise RuntimeError("provider exploded")
+
+        def embed_query(self, *, text: str) -> list[float]:
+            """Refuse every query."""
+
+            raise RuntimeError("provider exploded")
+
+    content = _make_docx(heading="Failing", paragraphs=["Prose for a failing embed."])
+    _project_id, seeded = _seed(
+        db=db_session,
+        storage=storage,
+        filename="failing-embed.docx",
+        content=content,
+    )
+    _ingest(db=db_session, seeded=seeded, settings=settings, storage=storage)
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
+    assert run.document_id is not None
+
+    embed_document(
+        db=db_session,
+        document_id=run.document_id,
+        ingestion_run_id=run.id,
+        embedding_provider=_ExplodingEmbeddingProvider(),
+        settings=settings,
+    )
+
+    db_session.expire_all()
+    run = db_session.get(IngestionRun, seeded.ingestion_run_id)
+    assert run is not None
+    assert run.status == RunStatus.FAILED
+    assert run.error == "Processing failed unexpectedly."
+    vectors = (
+        db_session.execute(select(Chunk.embedding).where(Chunk.document_id == run.document_id))
+        .scalars()
+        .all()
+    )
+    assert vectors
+    assert all(vector is None for vector in vectors)
 
 
 def test_embed_missing_document_no_ops(*, db_session: Session, settings: Settings) -> None:

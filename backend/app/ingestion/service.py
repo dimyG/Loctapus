@@ -2,16 +2,18 @@
 
 Every run-status change is a guarded transition from ``app.ingestion.runs`` so
 duplicate or stale deliveries can never clobber newer state, and no transaction ever
-spans a storage or provider call.
+spans a storage or provider call. Transient database errors propagate to the task
+(which retries them); every other failure ends on the run row with a user-safe error.
 """
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -20,12 +22,53 @@ from app.ingestion.models import Chunk, Document, IngestionRun
 from app.ingestion.runs import claim_run, mark_failed, mark_indexing, mark_ready, start_processing
 from app.ingestion.status import RunStatus
 from app.outbox.events import enqueue_document_ready_for_embedding
-from app.providers.base import EmbeddingProvider, NormalizedDocument, Parser
+from app.providers.base import EmbeddingProvider, NormalizedDocument, ParseError, Parser
 from app.sources.models import SourceItem
-from app.storage.service import StorageError, StorageService
+from app.storage.service import ObjectNotFoundError, StorageError, StorageService, StorageUnavailableError
 
-# User-safe copy for the fingerprint mismatch; the full detail lives in the worker log.
+_logger = logging.getLogger(__name__)
+
+# User-safe run errors; the full exception detail goes to the worker log only.
 FINGERPRINT_MISMATCH = "The stored file does not match the upload. Upload the file again to retry."
+OBJECT_MISSING = "The stored file is missing. Upload the file again to retry."
+STORAGE_UNAVAILABLE = "File storage was unavailable. Upload the file again to retry."
+NO_TEXT_CONTENT = "No text could be extracted from this file."
+UNEXPECTED_FAILURE = "Processing failed unexpectedly."
+
+# Connection-level database failures reach the task so its autoretry can re-drive the run.
+_TRANSIENT_DATABASE_ERRORS = (OperationalError, InterfaceError)
+
+
+class _FingerprintMismatchError(Exception):
+    """Raised when the fetched bytes are not the run's pinned file version."""
+
+
+def _run_error_message(*, exc: BaseException) -> str:
+    """Return the user-safe run error for one failure, per the copy table.
+
+    ``ParseError`` messages are already user-facing; the storage and fingerprint
+    cases map to their fixed copy; anything else is unexpected by definition.
+    """
+
+    if isinstance(exc, ParseError):
+        message = str(exc)
+    elif isinstance(exc, _FingerprintMismatchError):
+        message = FINGERPRINT_MISMATCH
+    elif isinstance(exc, ObjectNotFoundError):
+        message = OBJECT_MISSING
+    elif isinstance(exc, StorageUnavailableError):
+        message = STORAGE_UNAVAILABLE
+    else:
+        message = UNEXPECTED_FAILURE
+    return message[:500]
+
+
+def _fail_run(*, db: Session, run_id: UUID, expected: RunStatus, error: str) -> None:
+    """Log the current failure in full, then record its safe message on the run and commit."""
+
+    _logger.exception("ingestion run %s failed", run_id)
+    mark_failed(db=db, run_id=run_id, expected=expected, error=error)
+    db.commit()
 
 
 @dataclass
@@ -51,13 +94,6 @@ def _claim_run(*, db: Session, ingestion_run_id: UUID) -> bool:
     claimed = claim_run(db=db, run_id=ingestion_run_id)
     db.commit()
     return claimed
-
-
-def _mark_run_failed(*, db: Session, run_id: UUID, expected: RunStatus, error: str) -> None:
-    """Move the run from ``expected`` to failed with the error text, then commit."""
-
-    mark_failed(db=db, run_id=run_id, expected=expected, error=error)
-    db.commit()
 
 
 def _normalized_payload(*, document: NormalizedDocument) -> dict[str, object]:
@@ -114,7 +150,7 @@ def _fetch_raw_bytes(
     storage: StorageService,
     raw_object_key: str,
 ) -> bytes | None:
-    """Fetch the run's own raw bytes from storage, recording failures on the run.
+    """Fetch the run's own raw bytes from storage, ending the run on any storage failure.
 
     Every storage failure - the object missing or the backend being unavailable -
     ends the run; which of the two it was only shapes the recorded error.
@@ -123,17 +159,15 @@ def _fetch_raw_bytes(
     try:
         return storage.get_object(key=raw_object_key)
     except StorageError as exc:
-        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.FETCHING, error=str(exc))
+        _fail_run(db=db, run_id=run_id, expected=RunStatus.FETCHING, error=_run_error_message(exc=exc))
         return None
 
 
-def _verify_run_fingerprint(*, db: Session, run_id: UUID, content_hash: str, raw_bytes: bytes) -> bool:
-    """Fail the run when the fetched bytes are not the version it was created for."""
+def _verify_run_fingerprint(*, content_hash: str, raw_bytes: bytes) -> None:
+    """Raise when the fetched bytes are not the version the run was created for."""
 
     if hashlib.sha256(raw_bytes).hexdigest() != content_hash:
-        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.FETCHING, error=FINGERPRINT_MISMATCH)
-        return False
-    return True
+        raise _FingerprintMismatchError("fingerprint mismatch") from None
 
 
 def _begin_processing(*, db: Session, run_id: UUID) -> bool:
@@ -191,7 +225,7 @@ def _mark_run_ready_against_existing(
     )
     if existing_id is None:
         # Unreachable in S3 (the conflict proves the row exists); recorded for completeness.
-        _mark_run_failed(
+        _fail_run(
             db=db,
             run_id=run_id,
             expected=RunStatus.PROCESSING,
@@ -211,7 +245,11 @@ def _commit_document_set(
     document_hash: str,
     chunks: list[ChunkText],
 ) -> None:
-    """Commit the document, its chunks, the outbox event, and the indexing transition atomically."""
+    """Commit the document, its chunks, the outbox event, and the indexing transition atomically.
+
+    Transient database errors propagate to the task; every other failure ends on the
+    run row.
+    """
 
     document = Document(
         id=uuid4(),
@@ -235,13 +273,13 @@ def _commit_document_set(
             db=db, run_id=run_id, source_item_id=context.source_item_id, content_hash=document_hash
         )
         return
-    except Exception as exc:
+    except _TRANSIENT_DATABASE_ERRORS:
+        # Connection-level failures must reach the task so its autoretry can re-drive it.
         db.rollback()
-        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=str(exc))
-        return
-    db.add_all(_build_chunk_rows(context=context, document_id=document.id, chunks=chunks))
-    enqueue_document_ready_for_embedding(db=db, document_id=document.id, ingestion_run_id=run_id)
+        raise
     try:
+        db.add_all(_build_chunk_rows(context=context, document_id=document.id, chunks=chunks))
+        enqueue_document_ready_for_embedding(db=db, document_id=document.id, ingestion_run_id=run_id)
         # Flush the chunks and event, then transition the run with its document_id FK satisfied.
         db.flush()
         transitioned = mark_indexing(db=db, run_id=run_id, document_id=document.id)
@@ -250,10 +288,14 @@ def _commit_document_set(
             db.rollback()
             return
         db.commit()
+    except _TRANSIENT_DATABASE_ERRORS:
+        # Connection-level failures must reach the task so its autoretry can re-drive it.
+        db.rollback()
+        raise
     except Exception as exc:
         # Chunk or event failures, including their own integrity errors, are failures.
         db.rollback()
-        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=str(exc))
+        _fail_run(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=_run_error_message(exc=exc))
 
 
 def _parse_and_index(
@@ -281,12 +323,7 @@ def _parse_and_index(
             chunks = []
         if not chunks:
             # A headings-only document never becomes a silent zero-chunk document.
-            _mark_run_failed(
-                db=db,
-                run_id=run_id,
-                expected=RunStatus.PROCESSING,
-                error=_no_text_content_error(filename=context.filename),
-            )
+            _fail_run(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=NO_TEXT_CONTENT)
             return
         document_hash = _content_hash(text=canonical_document_json(document=parsed))
         _commit_document_set(
@@ -297,10 +334,14 @@ def _parse_and_index(
             document_hash=document_hash,
             chunks=chunks,
         )
-    except Exception as exc:
-        # After the claim, no error is ever re-raised: the run row is the outcome record.
+    except _TRANSIENT_DATABASE_ERRORS:
+        # Connection-level failures must reach the task so its autoretry can re-drive it.
         db.rollback()
-        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=str(exc))
+        raise
+    except Exception as exc:
+        # After the claim, no other error is re-raised: the run row is the outcome record.
+        db.rollback()
+        _fail_run(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=_run_error_message(exc=exc))
 
 
 def ingest_source_item(
@@ -316,8 +357,8 @@ def ingest_source_item(
     The run row carries the file version it was created for: the bytes are fetched by
     the run's key and verified against the run's hash before parsing, so a newer item
     version never redirects a queued run. The claim guard makes duplicate and stale
-    deliveries no-ops, and after a successful claim no error is re-raised: the run
-    row is the outcome record.
+    deliveries no-ops; after a successful claim, transient database errors propagate
+    to the task (which retries them) and every other failure ends on the run row.
     """
 
     if not _claim_run(db=db, ingestion_run_id=ingestion_run_id):
@@ -325,7 +366,7 @@ def ingest_source_item(
     context = _load_item_context(db=db, ingestion_run_id=ingestion_run_id)
     if context is None:
         # Unreachable once the claim succeeded (the run's FK guarantees the item exists).
-        _mark_run_failed(
+        _fail_run(
             db=db,
             run_id=ingestion_run_id,
             expected=RunStatus.FETCHING,
@@ -339,9 +380,15 @@ def ingest_source_item(
     )
     if raw_bytes is None:
         return
-    if not _verify_run_fingerprint(
-        db=db, run_id=ingestion_run_id, content_hash=context.content_hash, raw_bytes=raw_bytes
-    ):
+    try:
+        _verify_run_fingerprint(content_hash=context.content_hash, raw_bytes=raw_bytes)
+    except _FingerprintMismatchError as exc:
+        _fail_run(
+            db=db,
+            run_id=ingestion_run_id,
+            expected=RunStatus.FETCHING,
+            error=_run_error_message(exc=exc),
+        )
         return
     if not _begin_processing(db=db, run_id=ingestion_run_id):
         return
@@ -391,9 +438,10 @@ def embed_document(
 ) -> None:
     """Embed one document's chunks in batches and move the run to ready.
 
-    A missing document is an acked no-op. In-place vector updates plus the deterministic
-    stub provider make re-delivery naturally idempotent, and every failure lands on the
-    run row instead of being re-raised.
+    A missing document is an acked no-op. In-place vector updates plus the
+    deterministic stub provider make re-delivery naturally idempotent; provider
+    failures end on the run row with a user-safe error, and transient database
+    errors propagate to the task, which retries them.
     """
 
     document = db.get(Document, document_id)
@@ -412,7 +460,14 @@ def embed_document(
             embedding_provider=embedding_provider,
             batch_size=settings.embedding_batch_size,
         )
-        _mark_run_ready(db=db, run_id=ingestion_run_id)
+    except _TRANSIENT_DATABASE_ERRORS:
+        # Connection-level failures must reach the task so its autoretry can re-drive it.
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
-        _mark_run_failed(db=db, run_id=ingestion_run_id, expected=RunStatus.INDEXING, error=str(exc))
+        _fail_run(
+            db=db, run_id=ingestion_run_id, expected=RunStatus.INDEXING, error=_run_error_message(exc=exc)
+        )
+        return
+    _mark_run_ready(db=db, run_id=ingestion_run_id)

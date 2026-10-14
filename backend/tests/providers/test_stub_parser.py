@@ -57,10 +57,21 @@ def test_docx_headings_and_paragraphs() -> None:
 
 
 def test_empty_document_raises_parse_error() -> None:
-    """Check that unusable content raises ParseError."""
+    """Check that unusable content raises ParseError with the user-safe copy."""
 
-    with pytest.raises(ParseError):
+    with pytest.raises(ParseError, match="This PDF file could not be read."):
         StubParser().parse(filename="x.pdf", content=b"")
+
+
+def test_parser_copy_is_user_safe() -> None:
+    """Check that every parser failure mode reports its fixed user-facing copy."""
+
+    with pytest.raises(ParseError, match="This file type is not supported."):
+        StubParser().parse(filename="x.txt", content=b"text")
+    with pytest.raises(ParseError, match="This PDF file could not be read."):
+        StubParser().parse(filename="x.pdf", content=b"not a pdf at all")
+    with pytest.raises(ParseError, match="This DOCX file could not be read."):
+        StubParser().parse(filename="x.docx", content=b"not a docx at all")
 
 
 def test_unknown_parser_provider_raises() -> None:

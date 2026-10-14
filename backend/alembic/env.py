@@ -9,7 +9,9 @@ from app.core.models import Base
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Disabling existing loggers would silence every logger created before a migration
+    # run, including the application's own in processes that also serve traffic.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

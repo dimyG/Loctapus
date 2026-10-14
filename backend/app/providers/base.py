@@ -5,7 +5,7 @@ from typing import Protocol
 
 
 class ParseError(Exception):
-    """Raised when a parser cannot extract a usable document."""
+    """Raised when a parser cannot extract a usable document; its message is shown to users."""
 
 
 @dataclass

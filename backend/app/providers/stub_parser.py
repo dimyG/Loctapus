@@ -31,9 +31,9 @@ class StubParser:
         elif suffix == ".docx":
             elements = self._parse_docx(content=content)
         else:
-            raise ParseError(f"unsupported document type: {filename!r}")
+            raise ParseError("This file type is not supported.")
         if not elements:
-            raise ParseError(f"no extractable elements in {filename!r}")
+            raise ParseError("No text could be extracted from this file.")
         return NormalizedDocument(
             title=PurePosixPath(filename).stem, elements=elements, metadata={"filename": filename}
         )
@@ -46,7 +46,7 @@ class StubParser:
             texts = [page.extract_text() or "" for page in reader.pages]
         except Exception as exc:
             # pypdf raises a mix of exception types for damaged input, so convert them all.
-            raise ParseError("unreadable PDF document") from exc
+            raise ParseError("This PDF file could not be read.") from exc
         return [NormalizedElement(type="paragraph", text=text.strip()) for text in texts if text.strip()]
 
     def _parse_docx(self, *, content: bytes) -> list[NormalizedElement]:
@@ -56,7 +56,7 @@ class StubParser:
             document = Document(io.BytesIO(content))
         except Exception as exc:
             # python-docx raises zipfile errors for damaged input, so convert them all.
-            raise ParseError("unreadable DOCX document") from exc
+            raise ParseError("This DOCX file could not be read.") from exc
         elements: list[NormalizedElement] = []
         for paragraph in document.paragraphs:
             text = paragraph.text.strip()
