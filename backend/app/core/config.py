@@ -40,11 +40,28 @@ class Settings(BaseSettings):
     max_upload_mb: int = 25
 
     @model_validator(mode="after")
+    def _validate_chunk_budgets(self) -> Self:
+        """Reject chunk budgets that would make the chunker miss or overlap wrongly.
+
+        The packer assumes 0 <= overlap < target <= max; anything else either packs
+        nothing per pass or lets a chunk exceed the max the embedding budget counts on.
+        """
+
+        if not (0 <= self.chunk_overlap_tokens < self.chunk_target_tokens <= self.chunk_max_tokens):
+            raise ValueError(
+                "chunk budgets must satisfy "
+                "0 <= chunk_overlap_tokens < chunk_target_tokens <= chunk_max_tokens"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _reject_default_secret_in_production(self) -> Self:
-        """Reject the development JWT secret when running in production."""
+        """Reject the development secrets when running in production."""
 
         if self.environment == "production" and self.jwt_secret == "dev-secret-change-me":
             raise ValueError("jwt_secret must be set explicitly when environment is production")
+        if self.environment == "production" and self.s3_secret_key == "rag-dev-secret-local":
+            raise ValueError("s3_secret_key must be set explicitly when environment is production")
         return self
 
 

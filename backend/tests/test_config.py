@@ -65,6 +65,29 @@ def test_unknown_provider_setting_is_rejected() -> None:
         SettingsForTests.model_validate({"embedding_provider": "nope"})
 
 
+def test_chunk_budgets_must_be_ordered() -> None:
+    """Check that the chunk budgets must satisfy 0 <= overlap < target <= max."""
+
+    with pytest.raises(ValidationError):
+        SettingsForTests(chunk_overlap_tokens=600, chunk_target_tokens=600)
+    with pytest.raises(ValidationError):
+        SettingsForTests(chunk_target_tokens=2000, chunk_max_tokens=1000)
+    assert SettingsForTests(chunk_overlap_tokens=80).chunk_target_tokens == 600
+
+
+def test_production_rejects_default_s3_secret() -> None:
+    """Check that production refuses the development storage secret."""
+
+    with pytest.raises(ValidationError):
+        SettingsForTests(environment="production", jwt_secret="a-real-production-secret")
+    s = SettingsForTests(
+        environment="production",
+        jwt_secret="a-real-production-secret",
+        s3_secret_key="a-real-storage-secret",
+    )
+    assert s.s3_secret_key == "a-real-storage-secret"
+
+
 def test_cors_origins_default() -> None:
     """CORS defaults to the Vite dev origin."""
 
