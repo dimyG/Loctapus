@@ -1,8 +1,8 @@
 """Tests for the stub embedding provider."""
 
 import pytest
+from pydantic import ValidationError
 
-from app.providers import get_embedding_provider
 from app.providers.stub_embeddings import STUB_EMBEDDING_DIM, StubEmbeddingProvider
 from tests.helpers import SettingsForTests
 
@@ -50,9 +50,12 @@ def test_empty_text_yields_zero_vector() -> None:
     assert provider.embed_documents(texts=["", "   "]) == [[0.0] * STUB_EMBEDDING_DIM] * 2
 
 
-def test_unknown_embedding_provider_raises() -> None:
-    """Check that an unknown embedding provider string is rejected."""
+def test_unknown_embedding_provider_setting_is_rejected() -> None:
+    """An unknown embedding provider string is rejected at settings construction.
 
-    settings = SettingsForTests(embedding_provider="nope")
-    with pytest.raises(ValueError, match="nope"):
-        get_embedding_provider(settings=settings)
+    The invalid value goes through ``model_validate`` because the typed constructor
+    signature itself refuses it: rejection at construction is the feature.
+    """
+
+    with pytest.raises(ValidationError, match="stub"):
+        SettingsForTests.model_validate({"embedding_provider": "nope"})

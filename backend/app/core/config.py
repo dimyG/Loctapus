@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     # Must stay identical to s3_region in deploy/garage.toml, or Garage rejects signatures.
     s3_region: str = "garage"
     s3_bucket: str = "rag-dev"
-    parser_provider: str = "stub"
-    embedding_provider: str = "stub"
+    parser_provider: Literal["stub"] = "stub"
+    embedding_provider: Literal["stub"] = "stub"
     chunk_target_tokens: int = 600
     chunk_max_tokens: int = 1000
     chunk_overlap_tokens: int = 80

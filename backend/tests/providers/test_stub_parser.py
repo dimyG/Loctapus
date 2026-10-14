@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 from docx import Document
+from pydantic import ValidationError
 
-from app.providers import get_parser
 from app.providers.base import ParseError
 from app.providers.stub_parser import StubParser
 from tests.helpers import SettingsForTests
@@ -74,9 +74,12 @@ def test_parser_copy_is_user_safe() -> None:
         StubParser().parse(filename="x.docx", content=b"not a docx at all")
 
 
-def test_unknown_parser_provider_raises() -> None:
-    """Check that an unknown parser provider string is rejected."""
+def test_unknown_parser_provider_setting_is_rejected() -> None:
+    """An unknown provider string is rejected at settings construction, before any boot.
 
-    settings = SettingsForTests(parser_provider="nope")
-    with pytest.raises(ValueError, match="nope"):
-        get_parser(settings=settings)
+    The invalid value goes through ``model_validate`` because the typed constructor
+    signature itself refuses it: rejection at construction is the feature.
+    """
+
+    with pytest.raises(ValidationError, match="stub"):
+        SettingsForTests.model_validate({"parser_provider": "nope"})

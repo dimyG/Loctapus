@@ -26,6 +26,7 @@ def test_settings_env_override(*, monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("RAG_DATABASE_URL", "postgresql+psycopg://u:p@h:1/db")
     monkeypatch.setenv("RAG_JWT_SECRET", "abc")
+    monkeypatch.setenv("RAG_S3_SECRET_KEY", "prod-s3-secret")
     monkeypatch.setenv("RAG_ENVIRONMENT", "production")
     s = SettingsForTests()
     assert s.database_url == "postgresql+psycopg://u:p@h:1/db"
@@ -43,8 +44,25 @@ def test_production_rejects_default_jwt_secret() -> None:
 def test_production_accepts_explicit_jwt_secret() -> None:
     """Check that production accepts an explicitly configured secret."""
 
-    s = SettingsForTests(environment="production", jwt_secret="a-real-production-secret")
+    s = SettingsForTests(
+        environment="production",
+        jwt_secret="a-real-production-secret",
+        s3_secret_key="a-real-storage-secret",
+    )
     assert s.environment == "production"
+
+
+def test_unknown_provider_setting_is_rejected() -> None:
+    """Check that settings construction rejects a provider the factories cannot resolve.
+
+    The invalid values go through ``model_validate`` because the typed constructor
+    signature itself refuses them: rejection at construction is the feature.
+    """
+
+    with pytest.raises(ValidationError):
+        SettingsForTests.model_validate({"parser_provider": "nope"})
+    with pytest.raises(ValidationError):
+        SettingsForTests.model_validate({"embedding_provider": "nope"})
 
 
 def test_cors_origins_default() -> None:
