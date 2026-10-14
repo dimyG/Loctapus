@@ -8,6 +8,15 @@ from app.core.config import Settings
 from app.core.db import make_engine
 
 
+def test_engine_pings_connections_before_use() -> None:
+    """Check that every pooled connection is pinged before the pool hands it out."""
+
+    engine = make_engine(database_url="postgresql+psycopg://rag:rag@localhost:5432/rag")
+    # _pre_ping is the pool's private flag; a pre-ping engine builds True here.
+    assert engine.pool._pre_ping is True
+    engine.dispose()
+
+
 def test_make_engine_connects(*, settings: Settings, engine: Engine) -> None:
     """Check that an engine built directly from settings can connect and select.
 

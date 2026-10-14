@@ -1,4 +1,9 @@
-"""Database engine construction and request-scoped session management."""
+"""Database engine construction and request-scoped session management.
+
+Two session helpers live here: ``session_scope``, the transaction boundary the worker
+tasks and the dispatcher loop share, and ``get_db``, the request-scoped FastAPI
+dependency. Both bind to the module-level ``engine``.
+"""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -11,12 +16,18 @@ from app.core.config import get_settings
 
 
 def make_engine(*, database_url: str) -> Engine:
-    """Create a SQLAlchemy engine bound to ``database_url``."""
+    """Create a SQLAlchemy engine bound to ``database_url``.
 
-    return create_engine(database_url)
+    Every pooled connection is pinged before use (``pool_pre_ping``): a database
+    restart under a long-lived worker invalidates pooled connections, and a ping turns
+    that into a reconnect instead of a broken task.
+    """
+
+    return create_engine(database_url, pool_pre_ping=True)
 
 
-SessionLocal = sessionmaker(bind=make_engine(database_url=get_settings().database_url))
+engine = make_engine(database_url=get_settings().database_url)
+SessionLocal = sessionmaker(bind=engine)
 
 
 @contextmanager
