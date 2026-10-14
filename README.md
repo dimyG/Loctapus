@@ -1,8 +1,9 @@
 # RAG MVP
 
 FastAPI + SQLAlchemy 2.0 + pgvector backend for a RAG MVP, sliced into incremental
-deliverables. Identity (users, workspaces, teams) and projects are done; document
-ingestion and retrieval build on top in later slices.
+deliverables. Identity (users, workspaces, teams), projects, and the upload+ingestion
+pipeline (upload -> parse -> chunk -> embed) are done; retrieval builds on top in later
+slices.
 
 ## Prerequisites
 
@@ -54,7 +55,10 @@ cd backend
 ..\.venv\Scripts\uvicorn app.main:app --reload
 ```
 
-The API serves `http://localhost:8000`; `/docs` lists the endpoints.
+The API serves `http://localhost:8000`; `/docs` lists the endpoints. Uploads POST to
+`/projects/{project_id}/uploads` and land as a queued ingestion run; the
+`GET /projects/{project_id}/uploads` listing derives each row's status from its
+latest run.
 
 ## Run the ingestion workers
 
@@ -78,9 +82,10 @@ the transactional outbox and publishes pending events to RabbitMQ. An upload sta
 
 ## Test
 
-Tests need the compose services up: the real Postgres for every suite (never
-SQLite), plus RabbitMQ and Garage for the outbox/worker integration tests. The
-`engine` fixture creates a disposable `rag_test` database, applies all migrations,
+Tests need the compose services up: the real Postgres for every suite (never SQLite),
+plus RabbitMQ for the outbox/worker integration tests and Garage for the storage,
+uploads, and ingestion suites (the upload and ingest paths read and write real bytes).
+The `engine` fixture creates a disposable `rag_test` database, applies all migrations,
 and drops it after the session; the `rag_test` broker vhost is created by the suite
 itself, so no manual broker setup is needed.
 
