@@ -18,11 +18,13 @@ dependencies = [
     "pwdlib[argon2]>=0.2",
     "email-validator>=2.2",
     "celery>=5.6",
-    "boto3",
-    "pgvector",
-    "python-multipart",
-    "pypdf",
-    "python-docx",
+    # The floors pin the installed major.minor of the S3-pipeline dependencies so a
+    # fresh environment cannot resolve to an older, untested line.
+    "boto3>=1.43",
+    "pgvector>=0.5",
+    "python-multipart>=0.0.32",
+    "pypdf>=6.20",
+    "python-docx>=1.2",
 ]
 
 [project.optional-dependencies]
