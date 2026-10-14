@@ -30,12 +30,4 @@ export const uploadsApi = api.injectEndpoints({
   }),
 });
 
-/**
- * Reads the cached uploads list of one project without subscribing to it. The
- * project page needs the list before its query hook call, so a terminal list
- * can drop the polling interval to 0 in the same render that delivered it.
- */
-export const selectUploads = (projectId: string) =>
-  uploadsApi.endpoints.getUploads.select(projectId);
-
 export const { useGetUploadsQuery, useUploadFileMutation } = uploadsApi;

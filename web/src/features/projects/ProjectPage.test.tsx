@@ -113,10 +113,10 @@ describe("ProjectPage", () => {
     expect(screen.getByText("report.docx")).toBeInTheDocument();
     expect(screen.getByText("broken.pdf")).toBeInTheDocument();
     // In-flight statuses are primary (blue), terminal ones color the outcome.
-    // The color classes sit on the chip root, not on the label span.
-    expect(screen.getByText("Queued").closest(".MuiChip-root")).toHaveClass("MuiChip-colorPrimary");
-    expect(screen.getByText("Ready").closest(".MuiChip-root")).toHaveClass("MuiChip-colorSuccess");
-    expect(screen.getByText("Failed").closest(".MuiChip-root")).toHaveClass("MuiChip-colorError");
+    // The colors are pinned in uploadStatus.test.tsx; here the rendered labels.
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(screen.getByText("Ready")).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(
       screen.getByText(new Date("2026-10-12T10:00:00Z").toLocaleDateString()),
     ).toBeInTheDocument();
