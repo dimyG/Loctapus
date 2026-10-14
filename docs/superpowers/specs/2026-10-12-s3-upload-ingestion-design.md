@@ -1,7 +1,7 @@
 # S3 - Upload & Ingestion (stub providers) + Upload UI - Design
 
 Date: 2026-10-12
-Status: Implemented on master (S3).
+Status: Implemented on master (S3); amended by the 2026-10-14 review fixes.
 Source of truth: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD") and
 `2026-10-06-rag-mvp-slices-design.md` (the "slices spec"). Where those disagree with this
 document on S3 topics, this document wins; where this document is silent, they govern.
@@ -41,7 +41,12 @@ resolved here).
    in-place vector updates absorb re-delivery (section 5.4); a re-delivered *ingestion*
    message is dropped by its claim guard and the run stays non-terminal - the accepted
    stuck-run cost (section 10). The ingestion leg is at-least-once into the claim guard,
-   not into execution.
+   not into execution. Review fixes (2026-10-14): transient database failures retry
+   instead of stranding the run - every engine pings pooled connections before use
+    (`pool_pre_ping=True`), and both Celery tasks autoretry on SQLAlchemy
+    `OperationalError`/`InterfaceError` (backoff capped at 60s, 5 attempts); the claim
+   guard makes a retried ingestion safe and embed is idempotent. A database loss after
+   the claim still strands the run (S7 sweep, section 10).
 3. **The S3 outbox dispatcher is a standalone polling process** (review amendment; the
    design round had Celery Beat, whose CLI refuses `-B` outright on Windows: "-B option
    does not work on Windows"): a plain `while True: dispatch_batch(); sleep` loop over
@@ -53,7 +58,10 @@ resolved here).
    polling", and S7's own design round picks between the two real options - extending
    this same dispatcher loop, or running `celery beat` as its own process (only the
    *embedded* `-B` form is refused on Windows; a standalone beat process runs fine).
-   S3 must not preclude either.
+   S3 must not preclude either. Review fixes (2026-10-14): the loop is fault-tolerant -
+   each tick runs inside try/except with the traceback logged, so a database restart
+   under a running dispatcher ends no process, and the ready line prints to stderr
+   once, after the first successful tick (section 5.2).
 4. **The stub embedding is a deterministic hash-bag**: lowercase word split, each token
    sha256-hashed into one of `STUB_EMBEDDING_DIM` buckets with a sign bit, L2-normalized.
    Same text always yields the same vector - idempotent re-runs and reproducible tests -
@@ -76,7 +84,11 @@ resolved here).
    the migration + re-embedding comment (section 3.3); #7 object key
    `raw/{project_id}/{source_item_id}/{content_hash}/{filename}`; #9
    replace-only-after-success - decided now, with the deletion logic itself shipping in
-   S7 (no replacement path exists in S3: each upload creates a new source).
+   S7 (no replacement path exists in S3: each upload creates a new source). Review
+   fixes (2026-10-14): #9 has an S3 leg after all - a filename whose item's latest run
+   is `failed` and that has no `documents` row is re-uploadable (a new version of the
+   same item); every other same-name upload is a 409. Replacing indexed content stays
+   S7 (decision 11).
 8. **`ingestion_runs` keys on `source_item_id` only** (design-round amendment; the MD
    section 27 draft had `source_id`, which is one join away through `source_items`).
    `created_at` (`func.now()`, set by the inserting transaction - one row per
@@ -104,12 +116,21 @@ resolved here).
     recognized as the *same item with new content* and S7's replace-only-after-success
     path has something to replace. `content_hash` alone tracks the content version; the
     design round's `external_id = sha256(bytes)` made identity change with content,
-    which silently breaks that path and duplicates `content_hash`.
+    which silently breaks that path and duplicates `content_hash`. Review fixes
+    (2026-10-14): one upload source per project - every uploaded file is an item in
+    it, identified by `external_id` = the sanitized filename (exact, case-sensitive:
+    `REPORT.PDF` and `report.pdf` are distinct). A same-name upload is a 409 - "A file
+    with this name already exists in this project." - except the retry path of
+    deferred decision #9: a failed latest run with no `documents` row re-opens the
+    item as its new version.
 12. **Source status is derived, not stored** (review amendment): status lives on
-    `ingestion_runs` only (the check constraint); the sources list endpoint joins each
-    source to its item's latest run (`created_at`) and returns that status. No mirrored
+    `ingestion_runs` only (the check constraint); the uploads listing derives each
+    item's status from its latest run (`created_at`). No mirrored
     column means no double writes to drift, no cross-module write discipline, and S9
     defines multi-item aggregation in one query instead of reinventing a stored rollup.
+    Review fixes (2026-10-14): the list is a correlated `latest_run_status` subquery
+    (`ORDER BY created_at DESC, id DESC LIMIT 1`) coalesced to `queued`, so a tied
+    `created_at` resolves by id instead of fanning an item into two rows (section 6).
 13. **Event payloads carry the ids consumers act on** (review amendment):
     `source_item_ingestion_requested` payloads carry `source_item_id` +
     `ingestion_run_id` + `raw_object_key` + `content_hash` (second round: the last two
@@ -119,6 +140,10 @@ resolved here).
     `ingestion_run_id`; and every run transition is `UPDATE ... WHERE id = :run_id AND
     status = :expected`. Claims stay per-run when S7 adds per-attempt runs, and
     re-delivery of a finished run is a no-op instead of re-claiming a queued sibling.
+    Review fixes (2026-10-14): the payload shrank to `{"ingestion_run_id"}` - the run
+    row itself carries `raw_object_key` + `content_hash` (its file version), so the
+    worker reads its own version from the database and the message never holds data
+    that can drift from it (S7's stale-run sweep can re-drive a run from its row).
 14. **One broker vhost per environment** (review amendment): dev (`/`), pytest
     (`rag_test`), and e2e (`rag_e2e`) each get their own RabbitMQ vhost inside
     `broker_url`, created by the same bootstraps that build each database. Without
@@ -210,14 +235,19 @@ hardcode the literal, never a runtime value) **and** re-embedding every stored c
 
 ```
 backend/app/
-  core/         session_scope helper (db.py)                  # Base stays alone in models.py
-  sources/      models.py, router.py, schemas.py, service.py    # upload + list
-  ingestion/    models.py (documents, chunks, ingestion_runs), service.py, chunking.py
-  storage/      service.py                                       # boto3 put/get
+  models.py     the entry-point registry: imports every models module and configures
+                mappers; only entry points import it (app.main, app.workers.celery_app,
+                app.workers.dispatcher, alembic/env.py)
+  core/         engine + session_scope helper (db.py)                  # Base stays alone in models.py
+  sources/      models.py, router.py, schemas.py, service.py    # uploads + list
+  ingestion/    models.py (documents, chunks, ingestion_runs), status.py (RunStatus),
+                runs.py (guarded transitions, request_ingestion, latest_run_status),
+                schema_guard.py (dimension guard), service.py, chunking.py
+  storage/      service.py                                       # boto3 put/get, one cached client
   providers/    base.py (Parser, EmbeddingProvider, NormalizedDocument),
                 stub_parser.py, stub_embeddings.py
-  outbox/       models.py, events.py                            # ORM + event -> queue map
-  workers/      celery_app.py, tasks.py, dispatcher.py         # app, thin tasks, poll loop
+  outbox/       models.py, events.py                            # ORM + payload/routing contract
+  workers/      celery_app.py, tasks.py, dispatcher.py, signals.py   # app, thin tasks, poll loop, boot handlers
 ```
 
 Queue names `ingestion` / `embed`, event types, their payloads, and the event ->
@@ -253,41 +283,64 @@ its own plain process (decision 3).
 
 ```
 sources          id, project_id -> projects ON DELETE CASCADE, type (check 'upload'),
-                 created_at
-source_items     id, source_id -> sources ON DELETE CASCADE, external_id (the uploaded
-                 filename; unique(source_id, external_id)), filename, content_type,
-                 size_bytes, content_hash (sha256 of the raw bytes), raw_object_key,
-                 created_at
-documents        id, source_item_id -> source_items ON DELETE CASCADE, content_hash
-                 (sha256 of the canonical normalized JSON - title + elements + metadata only,
+                 created_at; unique(id, project_id) (the composite-FK target) and a
+                 partial unique index on (project_id) WHERE type = 'upload' - one
+                 upload source per project, created lazily by its first upload
+source_items     id, source_id, project_id (both NOT NULL), external_id (the uploaded
+                 filename; unique(source_id, external_id), named
+                 uq_source_items_source_id_external_id), filename, content_type (from
+                 the extension, never the client header), size_bytes (check > 0),
+                 content_hash (sha256 of the raw bytes), raw_object_key, created_at;
+                 composite FK (source_id, project_id) -> sources(id, project_id) ON
+                 DELETE CASCADE, unique(id, project_id) (the composite-FK target)
+documents        id, source_item_id, project_id (both NOT NULL), content_hash (sha256 of
+                 the canonical normalized JSON - title + elements + metadata only,
                  never ids or timestamps: those inside the hashed JSON make every hash
-                 unique and the `unique(source_item_id, content_hash)` duplicate guard dead),
-                 raw_object_key (copied from the item; MD section 27), normalized_content
-                 JSONB (the full normalized
-                 document: title, elements, metadata), created_at,
-                 unique(source_item_id, content_hash)
-chunks           id, project_id -> projects ON DELETE CASCADE (intentional
-                 denormalization for the retrieval hot path - rationale comment in the
-                 model, MD section 27), document_id -> documents ON DELETE CASCADE,
-                 position, text, heading_path JSONB (string array), chunk_type (check
-                 'text'), chunk_metadata JSONB - only the Python *attribute* is renamed
-                 (`metadata` is reserved on SQLAlchemy declarative models); the column keeps
-                 the MD's `metadata` name, which S4's SQL will query - content_hash
-                 (sha256 of text), embedding vector(384) NULL until embedded,
-                 search_vector tsvector GENERATED ALWAYS AS (to_tsvector('english',
-                 text)) STORED, unique(document_id, position)
+                 unique and the uq_documents_source_item_id_content_hash duplicate
+                 guard dead), raw_object_key (copied from the item's accepted version;
+                 MD section 27), normalized_content JSONB (the full normalized
+                 document: title, elements, metadata), created_at;
+                 uq_documents_source_item_id_content_hash, composite FK
+                 (source_item_id, project_id) -> source_items(id, project_id) ON DELETE
+                 CASCADE, unique(id, project_id) (the composite-FK target)
+chunks           id, project_id, document_id, position, text, heading_path JSONB
+                 (string array), chunk_type (check 'text'), chunk_metadata JSONB - only
+                 the Python *attribute* is renamed (`metadata` is reserved on SQLAlchemy
+                 declarative models); the column keeps the MD's `metadata` name, which
+                 S4's SQL will query - content_hash (sha256 of text), embedding
+                 vector(384) NULL until embedded, search_vector tsvector GENERATED
+                 ALWAYS AS (to_tsvector('english', text)) STORED, unique(document_id,
+                 position); composite FK (document_id, project_id) ->
+                 documents(id, project_id) ON DELETE CASCADE replaces both single FKs
+                 (project_id -> projects and document_id -> documents)
 ingestion_runs   id, source_item_id -> source_items ON DELETE CASCADE, document_id ->
-                 documents ON DELETE SET NULL, status (check 4.2), created_at,
-                 started_at (set by the claim), finished_at, error
+                 documents ON DELETE SET NULL, status (check 4.2), raw_object_key,
+                 content_hash (both NOT NULL: the file version the run was created for),
+                 created_at, started_at (set by the claim), finished_at, error; check
+                 (status IN ('ready','failed')) = (finished_at IS NOT NULL)
 outbox_events    id, event_type, aggregate_type, aggregate_id (uuid), payload JSONB,
-                 created_at, published_at (nullable), attempts (default 0), last_error;
-                 partial index on created_at WHERE published_at IS NULL
+                 created_at, published_at (nullable), attempts (default 0),
+                 next_attempt_at NOT NULL DEFAULT now() (the dispatcher's due gate),
+                 last_error; partial index on (next_attempt_at) WHERE published_at IS
+                 NULL
 ```
 
-- `ingestion_runs` keys on `source_item_id` only (decision 8); `created_at` defines the
-  latest run per item (no ties: one row per transaction).
-- No `sources.status` column (decision 12): the list endpoint derives each source's
-  status from its item's latest run, so the schema has exactly one stored status.
+Review fixes (2026-10-14): `project_id` is repeated down sources -> source_items ->
+documents -> chunks so retrieval filters chunks by project without joins, and every
+child references its parent through a composite FK `(parent_id, project_id) ->
+parent(id, project_id)` - so the database rejects any row whose project differs from
+its parent's, and the tenant boundary is enforced by Postgres rather than remembered
+by writers. Each parent carries `unique(id, project_id)` only because a composite FK
+needs a unique target; each composite FK carries a model comment explaining the chain.
+The identical-version backstop reconciles only on
+`uq_documents_source_item_id_content_hash`; any other IntegrityError fails the run.
+
+- `ingestion_runs` keys on `source_item_id` only (decision 8); the latest run is the
+  correlated `latest_run_status` lookup - `ORDER BY created_at DESC, id DESC` - so a
+  tied `created_at` resolves by id instead of fanning an item into rows (review fixes,
+  decision 12).
+- No `sources.status` column (decision 12): the uploads listing derives each item's
+  status from its latest run, so the schema has exactly one stored status.
 - File metadata (filename, content type, size) describes one content *version*, so it
   lives on `source_items` (decision 11), not in a source-level config blob; upload
   sources carry no connector config at all - `sources.config` arrives in S9 when
@@ -320,7 +373,7 @@ outbox_events    id, event_type, aggregate_type, aggregate_id (uuid), payload JS
 ### 4.2 Status machine (MD section 6)
 
 `queued | fetching | processing | indexing | ready | failed`, as a check constraint on
-`ingestion_runs.status` - the only stored status; the sources list derives (decision 12).
+`ingestion_runs.status` - the only stored status; the uploads listing derives it (decision 12).
 Every transition is `UPDATE ... WHERE id = :run_id AND status = :expected`; zero rows
 updated means a duplicate or stale delivery -> ack, no-op (decision 13).
 Second round, `expected` is concrete: the status the writing task last set -
@@ -348,12 +401,16 @@ so a stale delivery can never clobber a newer state.
 - `search_vector` is a `GENERATED ALWAYS ... STORED` column (section 4.1), so the
   formula lives in one place and every write path gets it for free; on this Postgres
   17, `ALTER COLUMN ... SET EXPRESSION` lets S4 reweight it in one migration that
-  recomputes every row.
+  recomputes every row. Review fixes (2026-10-14): `chunks.embedding` and
+  `search_vector` load `deferred` with `eager_defaults` off, so a chunk INSERT returns
+  no tsvector and plain chunk reads stay cheap; every migrated index is declared on its
+  ORM model under the migration's exact name (a parity test pins the two together).
 - FK indexes where no composite unique already covers the leading column (second round,
   trimming the blanket list): `sources.project_id`, `chunks.project_id` (what retrieval
   filters on), `ingestion_runs.document_id` (the SET NULL target), plus
-  `ingestion_runs (source_item_id, created_at)` - one composite serving both the item FK
-  and the latest-run lookup (decision 12). Skipped as redundant: `source_items.source_id`,
+  `ingestion_runs (source_item_id, created_at, id)` (review fixes: the id joined so the
+  latest-run lookup is a pure index scan) - one composite serving both the item FK and
+  the latest-run lookup (decision 12). Skipped as redundant: `source_items.source_id`,
   `documents.source_item_id`, and `chunks.document_id` lead their composite unique
   constraints (a leading column is served by the constraint's index, migration 0004's
   house reading), and an index on `chunks.document_id` would tax every chunk insert.
@@ -374,48 +431,59 @@ so a stale delivery can never clobber a newer state.
 
 ## 5. Ingestion pipeline
 
-### 5.1 Upload flow (`POST /projects/{project_id}/sources`)
+### 5.1 Upload flow (`POST /projects/{project_id}/uploads`, review fixes)
 
 1. Authorization: `get_project_for_user_with_role(minimum_role="editor")`; None -> 404
    "project not found" (house convention: 404 hides both missing and forbidden).
    Viewer-role and public-project users cannot upload.
 2. Validation (before reading the body): extension `.pdf`/`.docx`, non-empty, and
    `UploadFile.size` <= `max_upload_mb` - the size check skips reading the bytes,
-   which matters at the 25MB cap. Violations -> 422 with a friendly detail. The stored
-   filename is sanitized first (basename only; no separators, traversals, or control
-   characters; length capped): it is both display data and part of the storage key.
-3. sha256 the bytes; build the key
-   `raw/{project_id}/{source_item_id}/{content_hash}/{filename}` (decision #7). House
-   UUIDs are client-generated, so the key is buildable before any row exists.
-4. Copy the ids the rest of the flow still needs (project id, user) into locals, then
-   end the request's read transaction (the auth dependency opened one) with `commit()` -
-   not `rollback()` (second round) - and PUT the object to Garage: raw persisted before
-   parsing, and no DB transaction open across the storage call (MD section 30). Why
-   `commit()` and pre-copied locals: the test harness wraps each test in a savepoint, so
-   `rollback()` unwinds to it and silently discards uncommitted setup rows the test added
-   (a granted role, a seeded user) - a mid-test upload then 404s on its next request; and
-   after a rollback, touching any loaded instance (even reading `project.id`) implicitly
-   opens a *new* transaction, which then stays open across the Garage PUT. An API test
-   pins this down (section 8): the storage client is patched to capture the session's
-   transaction state during the PUT, and it must read "no transaction open".
-   Storage failure -> 503 with a retryable message, no rows written; an object
-   orphaned by a failed later commit is harmless (no delete path in S3).
-5. One transaction: `sources` (type `upload`) + `source_items` (identity + file
-   metadata + `raw_object_key`, decision 11) + `ingestion_runs` (`queued`) +
-   `outbox_events` row `source_item_ingestion_requested` (aggregate source_item;
-   payload `{"source_item_id": ..., "ingestion_run_id": ..., "raw_object_key": ...,
-   "content_hash": ...}` - decision 13, second round: the run consumes its own file
-   version, immune to an S7 re-upload rewriting the item's latest) -> commit
-   -> 201 `SourceOut`.
-
+   which matters at the 25MB cap. Violations -> 422 with a friendly detail; an absent
+   size -> 422 "The file size could not be determined." (defensive: Starlette always
+   sets it). The stored filename is sanitized first (basename only; no separators,
+   traversals, C0/C1 controls, or dot-only names; length capped): it is both display
+   data and part of the storage key.
+3. Pre-check in the read transaction: look up the project's upload item by
+   `external_id == filename`. An item that exists and is not retryable raises
+   `DuplicateUploadError` -> 409 "A file with this name already exists in this
+   project." before anything is stored. Retryable means its latest run is `failed`
+   and no `documents` row exists for it (deferred decision #9's S3 leg).
+4. sha256 the bytes; pick the item id (the existing one when retrying); build the key
+   `raw/{project_id}/{source_item_id}/{content_hash}/{filename}` (decision #7); end the
+   read transaction with `commit()` - not `rollback()` (the test harness savepoint
+   trap, second round) - and PUT the object to Garage with the content type derived
+   from the extension (never the client header): raw persisted before parsing, and no
+   DB transaction open across the storage call (MD section 30). Storage failure ->
+   503 with a retryable message, no rows written.
+5. One write transaction: get or create the project's one upload source
+   (`INSERT ... ON CONFLICT DO NOTHING` against the partial unique index, then
+   select); a new name inserts the item (an `IntegrityError` on
+   `uq_source_items_source_id_external_id` is the race backstop -> roll back, 409); a
+   retry locks the item `FOR UPDATE`, re-checks retryable, and updates
+   `content_hash`/`raw_object_key`/`size_bytes`/`content_type`; then
+   `request_ingestion` adds the queued run (carrying the file version, decision 13)
+   and its outbox event -> commit -> 201 `UploadOut`.
 ### 5.2 Outbox dispatcher (standalone process, `app/workers/dispatcher.py`)
 
 - A plain loop, no Celery Beat (decision 3): every `outbox_poll_interval_seconds`, one
-  batch - select unpublished rows (`outbox_batch_size`, ordered `created_at`, `FOR
-  UPDATE SKIP LOCKED`), publish each via the injected app's `send_task` (decision 14)
-  to the queue routed from `event_type` through the `app/outbox/events.py` map, set
-  `published_at` on success; on failure `attempts += 1` + record `last_error`, retried
-  next tick.
+  batch - select due rows (`published_at IS NULL AND next_attempt_at <= now()`,
+  `outbox_batch_size`, ordered `next_attempt_at, id`, `FOR UPDATE SKIP LOCKED` -
+  review fixes: the due gate replaces the created_at scan), publish each via the
+  injected app's `send_task` (decision 14) to the queue routed from `event_type`
+  through the `app/outbox/events.py` map, set `published_at` on success; on failure
+  `attempts += 1`, record `last_error`, and set `next_attempt_at = now() + backoff`.
+- Review fixes (2026-10-14), backoff: the delay doubles from
+  `outbox_retry_base_seconds` (1.0) per failed attempt, capped at
+  `outbox_retry_max_seconds` (300.0). An unroutable row is backed off and the batch
+  continues - more poison rows than one batch holds cannot starve the valid rows
+  behind them; a failed publish is backed off and ends the batch. Each publish passes
+  `timeout`/`confirm_timeout` = `outbox_publish_timeout_seconds` (10.0) so a dead
+  broker cannot hang a tick, and tags the message with `task_id = str(row.id)` so a
+  published message traces back to its outbox row. The loop tolerates a failing tick:
+  each tick runs inside try/except with the traceback logged, the ready line goes to
+  stderr once after the first successful tick, and the loop sleeps only when the last
+  batch was not full (a full batch means more due rows wait). Attempts caps and
+  dead-lettering stay S7.
 - Second round, transaction shape: one *short* transaction per batch - select, publish,
   mark, commit - and nothing held while sleeping; a dispatcher idling inside a
   transaction would block the e2e suite's `TRUNCATE` between tests and sit on locks
@@ -435,7 +503,8 @@ so a stale delivery can never clobber a newer state.
   re-delivers, and consumers are idempotent (claim guards, decision 13; the embed leg
   absorbs re-delivery, the ingestion leg drops it - decision 2).
 - Duplicate publishes are expected (crash between publish and mark, MD section 18).
-  Poison events retry indefinitely in S3; backoff/caps are S7 robustness scope.
+  Poison events are backed off (the backoff bullet above); attempts caps,
+  dead-lettering, and published-row retention are S7 robustness scope.
 - Routing (the one map, `app/outbox/events.py`): `source_item_ingestion_requested` ->
   `ingestion`; `document_ready_for_embedding` -> `embed`.
 
@@ -446,10 +515,14 @@ so a stale delivery can never clobber a newer state.
   per-attempt runs cannot claim each other. Zero rows updated -> duplicate delivery or
   stale message -> ack, no-op. Missing subject rows -> ack, skip (absorbs stale queue
   messages, e.g. after e2e DB truncation).
-- fetching: pull raw bytes from Garage through the storage module, by the
-  `raw_object_key`/`content_hash` carried in the event payload (decision 13) - never by
-  rebuilding the key from item columns, which an S7 re-upload could have rewritten
-  since the run was queued.
+- fetching: load the run row and its item; pull the raw bytes from Garage through the
+  storage module, **by the run's own `raw_object_key`/`content_hash`** (decision 13,
+  review fixes: the run row carries them - never the item's, which an S7 re-upload
+  could have rewritten since the run was queued) and fail the run when
+  `sha256(raw_bytes) != run.content_hash` - the fingerprint copy: "The stored file
+  does not match the upload. Upload the file again to retry." A missing object and an
+  unavailable backend each record their own fixed copy (section 5.3's safe-error
+  bullet).
 - processing: parser provider -> `NormalizedDocument` (title from filename; elements
   `{type, level?, text}`); document `content_hash` from the canonical JSON. A document
   with zero extractable elements (e.g. a scanned PDF) raises a parse error -> run
@@ -460,13 +533,20 @@ so a stale delivery can never clobber a newer state.
   outbox row + run -> `indexing` -> commit. No transaction spans storage or provider
   calls - the embed task keeps the same rule: `embed_documents` runs outside any
   transaction and the vector UPDATEs commit per batch (section 5.4).
-- Any failure -> run `failed` with the error text; the sources list derives it
-  (decision 12). A document-insert conflict on `unique(source_item_id, content_hash)`
-  cannot happen in S3 - one item per upload, one run per item, and the claim guard drops
+- Any failure -> run `failed` with a user-safe error; the uploads listing derives it
+  (decision 12). Review fixes (2026-10-14): the run stores fixed copy - `ParseError`
+  messages (themselves fixed), the fingerprint/object/storage copies, and "Processing
+  failed unexpectedly." for anything else, capped at 500 characters - while the full
+  exception (traceback included) goes only to the worker log. Transient database
+  errors (`OperationalError`/`InterfaceError`) propagate to the task, whose autoretry
+  re-drives the run (decision 2); every other failure ends on the run row. A
+  document-insert conflict on `uq_documents_source_item_id_content_hash` cannot happen
+  in S3 - one item per upload, one run per item, and the claim guard drops
   re-deliveries - but if it ever fires (second round), the run becomes a no-op per MD
   section 19's idempotency rule (identical version already processed: ack, mark the run
-  terminal against the existing document - not a `failed`), and the constraint stays
-  as the database-level backstop for S7's hardening.
+  terminal against the existing document - not a `failed`); any *other* IntegrityError
+  fails the run (review fixes: the backstop reconciles only on its own constraint). The
+  constraint stays as the database-level backstop for S7's hardening.
 
 ### 5.4 Embed task (`embed_document`, queue `embed`)
 
@@ -474,8 +554,11 @@ so a stale delivery can never clobber a newer state.
   `embed_documents`; UPDATE `chunks.embedding` in place - in-place updates make
   duplicate delivery naturally idempotent (deterministic stub: same text -> same vector).
 - Then run -> `ready` (`finished_at` set) via a conditional `WHERE id = :run_id AND
-  status='indexing'` transition; the sources list derives it (decision 12). Missing
-  document -> ack, skip. Errors -> `failed`.
+  status='indexing'` transition; the uploads listing derives it (decision 12). Missing
+  document -> ack, skip. Errors -> `failed` with the same user-safe mapping as the
+  ingest leg (review fixes); provider failures end on the run row while transient
+  database errors propagate to the task's autoretry. The vector UPDATEs run as one
+  ORM bulk UPDATE per batch, by primary key.
 
 ### 5.5 Chunker (`app/ingestion/chunking.py`, replaceable by design)
 
@@ -511,39 +594,49 @@ Structure-aware recursive chunking (MD section 9):
 
 | Endpoint | Auth | Behavior |
 |---|---|---|
-| `POST /projects/{project_id}/sources` | `get_current_user` + editor role | section 5.1; 201 `SourceOut`; 422 validation; 503 storage; 404 house convention |
-| `GET /projects/{project_id}/sources` | `get_current_user` + `get_project_visible_to_user` | list newest-first; no pagination in S3 |
+| `POST /projects/{project_id}/uploads` | `get_current_user` + editor role | section 5.1; 201 `UploadOut`; 409 duplicate name; 422 validation; 503 storage; 404 house convention |
+| `GET /projects/{project_id}/uploads` | `get_current_user` + `get_project_visible_to_user` | list newest-first by item `created_at`, then `id`; no pagination in S3 |
 
-`SourceOut = {id, project_id, type, status, filename, created_at}` - house `*Out`
-naming, not `SourceRead`. The list joins each source to its (single) item's latest run
-(`created_at`; `DISTINCT ON` or lateral) and derives `status` and `filename` from it
-(decision 12): each upload source has exactly one item in S3, and S7/S9 generalize the
-join only if multiple items ever arrive. Errors use FastAPI's `{detail}` shape like the
-rest of the API. Routers handle HTTP only; row creation + listing live in
-`app/sources/service.py`.
+`UploadOut = {id, project_id, filename, status, created_at}` (review fixes: `id` is
+the source item id, `status` the `RunStatus` enum) - house `*Out` naming. The listing
+derives each item's status through the correlated `latest_run_status` subquery
+(`ORDER BY created_at DESC, id DESC`, coalesced to `queued`) so a tied `created_at`
+resolves by id and never fans an item into rows (decision 12). With one upload source
+per project (decision 11) the rows users list are its items, so the `/sources` routes
+are gone; S9 adds a sources listing when website sources make sources user-visible.
+Errors use FastAPI's `{detail}` shape like the rest of the API. Routers handle HTTP
+only; row creation + listing live in `app/sources/service.py`
+(`upload_file`/`list_uploads` returning an immutable `UploadListing`).
 
 ## 7. Frontend (`web/`)
 
 - New guarded route `/projects/:projectId` (DashboardLayout); `ProjectsPage` project
   names become links to it.
-- **ProjectPage**: header with the project name (`GET /projects/{id}`, existing S1
-  endpoint) + a back link to `/projects`. **Upload card**: file picker accepting
-  `.pdf,.docx`, client-side extension and size checks (client limit mirrors the server
-  default; the server 422/503 remain the real gate with friendly copy), Upload
-  disabled while the mutation is pending, inline `role="alert"` errors. **Sources
-  table**: filename, status chip, created date. Chip mapping: the four in-flight states
-  render a blue "processing" style, `ready` green, `failed` red.
-- **Polling**: RTK Query `getSources` with `pollingInterval` = 2s while any row is
-  non-terminal, `0` once all rows are terminal (second round: the installed RTK Query
-  types type the option `number | undefined` - `false` fails the TypeScript build,
-  while `0` disables polling; and `pollingInterval` is RTK Query's option name,
-  `refetchInterval` is TanStack Query's) - one endpoint drives the whole status UX,
-  no extra status API.
-- New `sourcesApi` slice: `getSources` query + `uploadSource` mutation (multipart
-  `FormData` through the existing `fetchBaseQuery`), a `Source` cache tag invalidated on
-  upload success. Deep-module rule unchanged (S2 spec section 5.3): pages never build
-  URLs or parse response bodies.
-- Devias styling continuity per S2 spec section 4.
+- **ProjectPage** composes the header (project name from `GET /projects/{id}`, the
+  existing S1 endpoint, + a back link to `/projects`), the `UploadCard`, and the
+  uploads section (skeleton while loading, error state, or the `UploadsTable`).
+- **`uploadsApi`**: `getUploads` query + `uploadFile` mutation (multipart `FormData`
+  through the existing `fetchBaseQuery`), an `Upload` cache tag (`{type: "Upload",
+  id: projectId}`) invalidated on upload success. `Upload = {id, project_id,
+  filename, status, created_at}` - no `type` field.
+- **`uploadRules`**: `MAX_UPLOAD_MB = 25`, `ALLOWED_EXTENSIONS`, and
+  `uploadRejection(file) -> string | null` mirroring the server's checks - extension,
+  size, and (review fixes) the empty file ("The file is empty.") - so invalid files
+  never leave the browser; the server 422/409/503 remain the real gate.
+- **`uploadStatus`**: `isTerminal(status)` and `statusChip(status)`; the four
+  in-flight states render a blue "processing" style, `ready` green, `failed` red.
+- **`useProjectUploads(projectId, {skip})`** owns the polling decision: 2s
+  `pollingInterval` while any row is non-terminal, `0` once all rows are terminal or
+  an uncached fetch failed (the installed RTK Query types type the option
+  `number | undefined`; `0` disables polling). Its cached reads go through store
+  selectors memoized per `projectId` (created once per project, never per store
+  update), so the poll period reflects the cached list at subscription time.
+- **`UploadCard`** owns the mutation, the client checks, and the alert (the server's
+  409/422/503 detail); its copy derives the limit from `MAX_UPLOAD_MB`, and the
+  label Button sets `tabIndex={-1}` so the hidden input is the only tab stop.
+- **`UploadsTable`**: filename, status chip, created date, and the empty state.
+- Deep-module rule unchanged (S2 spec section 5.3): pages never build URLs or parse
+  response bodies. Devias styling continuity per S2 spec section 4.
 
 ## 8. Testing strategy
 
@@ -572,8 +665,11 @@ the S3 migration and the fixtures must not build on that hazard.
    generated column); duplicate delivery no-ops via claim guard (keyed by run id,
    decision 13); garbage `.pdf` bytes -> `failed` with error text; embed service
    updates vectors in place, conditional `ready` transition, idempotent re-run, batch
-   boundaries; sources list derives status + filename from the item's latest run
-   (decision 12); project delete with a **fully ingested** source - item + document +
+   boundaries; uploads listing derives status + filename through the latest-run
+   subquery with the id tie-break (decision 12); duplicate and indexed same-name
+   uploads are 409s, a failed item without a document re-opens for retry, and the
+   composite project scope rejects cross-project writes at each level (review fixes);
+   project delete with a **fully ingested** upload - item + document +
    chunks + run with `document_id` set (second round, so both cascade paths into
    `chunks` and `ingestion_runs` are exercised, and `passive_deletes` is honest) -> 204
    and every cascaded row gone - the regression that motivated the ON DELETE rules.
@@ -646,7 +742,9 @@ separate gate, never in the default run.
 | Celery on Windows (prefork unsupported) | `--pool=solo` in dev/e2e, documented |
 | Garage provisioning | `garage server --single-node --default-bucket` with compose-fixed credentials; nothing to order, re-run, or write out |
 | Dispatcher is a third local process | documented runbook + e2e entries; the loop is one screenful and restarts stateless |
-| Worker crash mid-run leaves the run (and the derived source status) non-terminal | accepted S3 cost: dev restarts the worker and re-uploads; recovery (stale-run sweep) is S7, backlog-tracked |
+| Worker crash mid-run leaves the run (and the derived upload status) non-terminal | accepted S3 cost: dev restarts the worker and re-uploads; recovery (stale-run sweep) is S7, backlog-tracked |
+| Transient failures retried, but a database loss *after* the claim still strands that run | accepted S3 cost: the claim committed, so no autoretry can re-drive it; the S7 sweep covers it (backlog-tracked) |
+| Broker loss before a published event is consumed | durable queues + persistent messages + a named `rabbitmqdata` volume (compose) keep it; a non-persistent broker setup would still lose in-flight messages - accepted, the outbox row keeps its `published_at` unset only if the confirm never arrived |
 | Stub PDF parser yields no headings | honest: PDFs get page-paragraphs and empty `heading_path`; DOCX gives real paths; real structure arrives with Unstructured (S5) |
 | Stub embeddings = lexical-ish similarity | intentional: makes S4 retrievable offline; provider swap is S5 |
 | Whole file bytes in memory (sync stack) | fine at the 25MB cap, documented |
