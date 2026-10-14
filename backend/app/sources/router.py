@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.identity.dependencies import get_current_user
 from app.identity.models import User
+from app.ingestion.status import RunStatus
 from app.projects.service import get_project_for_user_with_role, get_project_visible_to_user
 from app.sources.schemas import SourceOut
 from app.sources.service import create_upload_source, list_sources, sanitize_filename
@@ -77,7 +78,7 @@ def upload(
         id=source.id,
         project_id=source.project_id,
         type=source.type,
-        status="queued",
+        status=RunStatus.QUEUED,
         filename=filename,
         created_at=source.created_at,
     )
@@ -100,7 +101,7 @@ def list_all(
             id=item.source.id,
             project_id=item.source.project_id,
             type=item.source.type,
-            status=item.status,
+            status=RunStatus(item.status),
             filename=item.filename,
             created_at=item.source.created_at,
         )

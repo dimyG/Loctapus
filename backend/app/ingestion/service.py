@@ -9,17 +9,17 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, text, update
-from sqlalchemy.engine import CursorResult
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.ingestion.chunking import ChunkText, chunk_elements
-from app.ingestion.models import Chunk, Document, IngestionRun
+from app.ingestion.models import Chunk, Document
+from app.ingestion.runs import claim_run, mark_failed, mark_indexing, mark_ready, start_processing
+from app.ingestion.status import RunStatus
 from app.outbox.events import enqueue_document_ready_for_embedding
 from app.providers.base import EmbeddingProvider, NormalizedDocument, Parser
 from app.sources.models import SourceItem
@@ -43,21 +43,19 @@ class _ItemContext:
     raw_object_key: str
 
 
-def _transition_run(*, db: Session, run_id: UUID, expected: str, values: dict[str, object]) -> bool:
-    """Run one guarded run-status UPDATE and report whether it matched exactly one row.
+def _claim_run(*, db: Session, ingestion_run_id: UUID) -> bool:
+    """Claim the queued run, returning False for a duplicate or stale delivery."""
 
-    Zero matched rows means a duplicate or stale delivery, which callers turn into a no-op.
-    """
+    claimed = claim_run(db=db, run_id=ingestion_run_id)
+    db.commit()
+    return claimed
 
-    result = db.execute(
-        update(IngestionRun)
-        .where(IngestionRun.id == run_id, IngestionRun.status == expected)
-        .values(**values)
-    )
-    # Session.execute is typed as Result, but DML returns a CursorResult, the one result
-    # class whose typing carries rowcount.
-    rowcount = cast(CursorResult[Any], result).rowcount
-    return rowcount == 1
+
+def _mark_run_failed(*, db: Session, run_id: UUID, expected: RunStatus, error: str) -> None:
+    """Move the run from ``expected`` to failed with the error text, then commit."""
+
+    mark_failed(db=db, run_id=run_id, expected=expected, error=error)
+    db.commit()
 
 
 def _normalized_payload(*, document: NormalizedDocument) -> dict[str, object]:
@@ -89,31 +87,6 @@ def _content_hash(*, text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _claim_run(*, db: Session, ingestion_run_id: UUID) -> bool:
-    """Claim the queued run, returning False for a duplicate or stale delivery."""
-
-    claimed = _transition_run(
-        db=db,
-        run_id=ingestion_run_id,
-        expected="queued",
-        values={"status": "fetching", "started_at": func.now()},
-    )
-    db.commit()
-    return claimed
-
-
-def _mark_run_failed(*, db: Session, run_id: UUID, expected: str, error: str) -> None:
-    """Move the run from ``expected`` to failed with the error text, then commit."""
-
-    _transition_run(
-        db=db,
-        run_id=run_id,
-        expected=expected,
-        values={"status": "failed", "error": error, "finished_at": func.now()},
-    )
-    db.commit()
-
-
 def _load_item_context(*, db: Session, source_item_id: UUID) -> _ItemContext | None:
     """Return the item-derived pipeline inputs, read straight off the item row."""
 
@@ -140,14 +113,14 @@ def _fetch_raw_bytes(
     try:
         return storage.get_object(key=raw_object_key)
     except Exception as exc:
-        _mark_run_failed(db=db, run_id=run_id, expected="fetching", error=str(exc))
+        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.FETCHING, error=str(exc))
         return None
 
 
 def _begin_processing(*, db: Session, run_id: UUID) -> bool:
     """Move the claimed run to processing, committed so the parse spans no transaction."""
 
-    transitioned = _transition_run(db=db, run_id=run_id, expected="fetching", values={"status": "processing"})
+    transitioned = start_processing(db=db, run_id=run_id)
     db.commit()
     return transitioned
 
@@ -202,16 +175,11 @@ def _mark_run_ready_against_existing(
         _mark_run_failed(
             db=db,
             run_id=run_id,
-            expected="processing",
+            expected=RunStatus.PROCESSING,
             error="conflicting document disappeared before reconciliation",
         )
         return
-    _transition_run(
-        db=db,
-        run_id=run_id,
-        expected="processing",
-        values={"status": "ready", "document_id": existing_id, "finished_at": func.now()},
-    )
+    mark_ready(db=db, run_id=run_id, expected=RunStatus.PROCESSING, document_id=existing_id)
     db.commit()
 
 
@@ -250,19 +218,14 @@ def _commit_document_set(
         return
     except Exception as exc:
         db.rollback()
-        _mark_run_failed(db=db, run_id=run_id, expected="processing", error=str(exc))
+        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=str(exc))
         return
     db.add_all(_build_chunk_rows(context=context, document_id=document.id, chunks=chunks))
     enqueue_document_ready_for_embedding(db=db, document_id=document.id, ingestion_run_id=run_id)
     try:
         # Flush the chunks and event, then transition the run with its document_id FK satisfied.
         db.flush()
-        transitioned = _transition_run(
-            db=db,
-            run_id=run_id,
-            expected="processing",
-            values={"status": "indexing", "document_id": document.id},
-        )
+        transitioned = mark_indexing(db=db, run_id=run_id, document_id=document.id)
         if not transitioned:
             # The run moved elsewhere mid-flight: a stale delivery lands nothing.
             db.rollback()
@@ -271,7 +234,7 @@ def _commit_document_set(
     except Exception as exc:
         # Chunk or event failures, including their own integrity errors, are failures.
         db.rollback()
-        _mark_run_failed(db=db, run_id=run_id, expected="processing", error=str(exc))
+        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=str(exc))
 
 
 def _parse_and_index(
@@ -302,7 +265,7 @@ def _parse_and_index(
             _mark_run_failed(
                 db=db,
                 run_id=run_id,
-                expected="processing",
+                expected=RunStatus.PROCESSING,
                 error=_no_text_content_error(filename=context.filename),
             )
             return
@@ -318,7 +281,7 @@ def _parse_and_index(
     except Exception as exc:
         # After the claim, no error is ever re-raised: the run row is the outcome record.
         db.rollback()
-        _mark_run_failed(db=db, run_id=run_id, expected="processing", error=str(exc))
+        _mark_run_failed(db=db, run_id=run_id, expected=RunStatus.PROCESSING, error=str(exc))
 
 
 def ingest_source_item(
@@ -349,7 +312,7 @@ def ingest_source_item(
         _mark_run_failed(
             db=db,
             run_id=ingestion_run_id,
-            expected="fetching",
+            expected=RunStatus.FETCHING,
             error=f"source item {source_item_id} not found",
         )
         return
@@ -394,12 +357,7 @@ def _embed_batches(
 def _mark_run_ready(*, db: Session, run_id: UUID) -> None:
     """Move the run from indexing to ready with finished_at, then commit."""
 
-    _transition_run(
-        db=db,
-        run_id=run_id,
-        expected="indexing",
-        values={"status": "ready", "finished_at": func.now()},
-    )
+    mark_ready(db=db, run_id=run_id, expected=RunStatus.INDEXING)
     db.commit()
 
 
@@ -437,7 +395,7 @@ def embed_document(
         _mark_run_ready(db=db, run_id=ingestion_run_id)
     except Exception as exc:
         db.rollback()
-        _mark_run_failed(db=db, run_id=ingestion_run_id, expected="indexing", error=str(exc))
+        _mark_run_failed(db=db, run_id=ingestion_run_id, expected=RunStatus.INDEXING, error=str(exc))
 
 
 def query_embedding_dimension(*, db: Session) -> int | None:

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.ingestion.models import IngestionRun
-from app.outbox.events import enqueue_source_item_ingestion_requested
+from app.ingestion.runs import request_ingestion
 from app.projects.models import Project
 from app.sources.models import Source, SourceItem
 from app.storage.service import StorageService, build_raw_object_key
@@ -59,7 +59,6 @@ def create_upload_source(
     content_hash = hashlib.sha256(content).hexdigest()
     source_id = uuid4()
     item_id = uuid4()
-    run_id = uuid4()
     raw_object_key = build_raw_object_key(
         project_id=project.id,
         source_item_id=item_id,
@@ -91,14 +90,7 @@ def create_upload_source(
     )
     db.add(item)
     db.flush()
-    db.add(IngestionRun(id=run_id, source_item_id=item_id, status="queued"))
-    enqueue_source_item_ingestion_requested(
-        db=db,
-        source_item_id=item_id,
-        ingestion_run_id=run_id,
-        raw_object_key=raw_object_key,
-        content_hash=content_hash,
-    )
+    request_ingestion(db=db, source_item_id=item_id, raw_object_key=raw_object_key, content_hash=content_hash)
     db.commit()
     return source
 

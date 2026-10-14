@@ -5,6 +5,12 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select, text, update
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.ingestion.models import Document, IngestionRun
 from app.ingestion.runs import (
     claim_run,
     latest_run_status,
@@ -14,12 +20,6 @@ from app.ingestion.runs import (
     request_ingestion,
     start_processing,
 )
-from sqlalchemy import select, text, update
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-
-from app.ingestion.models import Document, IngestionRun
 from app.ingestion.status import RunStatus
 from app.outbox.events import SOURCE_ITEM_INGESTION_REQUESTED
 from app.outbox.models import OutboxEvent
@@ -38,13 +38,15 @@ def test_status_enum_matches_the_migrated_check(*, engine: Engine) -> None:
             conn.execute(
                 text(
                     "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
-                    "WHERE conrelid = 'ingestion_runs' AND contype = 'c'"
+                    "WHERE conrelid = 'ingestion_runs'::regclass AND contype = 'c'"
                 )
             )
             .scalars()
             .all()
         )
-    status_check = next(definition for definition in definitions if "status IN" in definition)
+    # Postgres renders IN checks as "= ANY (ARRAY[...])", so pick the constraint by a
+    # value only the status vocabulary contains.
+    status_check = next(definition for definition in definitions if "'queued'" in definition)
     literals = set(re.findall(r"'([^']*)'", status_check))
     assert literals == {status.value for status in RunStatus}
 
@@ -116,7 +118,7 @@ def test_latest_run_status_prefers_the_newest_run(*, db_session: Session) -> Non
     db_session.execute(
         update(IngestionRun)
         .where(IngestionRun.id == seeded.ingestion_run_id)
-        .values(status=RunStatus.FAILED, created_at=base_time)
+        .values(status=RunStatus.FAILED, created_at=base_time, finished_at=base_time)
     )
     db_session.add(
         IngestionRun(
@@ -128,9 +130,9 @@ def test_latest_run_status_prefers_the_newest_run(*, db_session: Session) -> Non
     )
     db_session.flush()
 
-    status = db_session.scalar(
+    status = db_session.execute(
         select(latest_run_status(source_item_id=SourceItem.id)).where(SourceItem.id == seeded.source_item_id)
-    )
+    ).scalar_one()
     assert status == RunStatus.QUEUED
 
 
@@ -160,9 +162,9 @@ def test_latest_run_status_breaks_ties_by_id(*, db_session: Session) -> None:
     )
     db_session.flush()
 
-    status = db_session.scalar(
+    status = db_session.execute(
         select(latest_run_status(source_item_id=SourceItem.id)).where(SourceItem.id == seeded.source_item_id)
-    )
+    ).scalar_one()
     assert status == RunStatus.READY
 
     rows = list_sources(db=db_session, project_id=project_id)

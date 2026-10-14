@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.orm import Session
 
 from app.identity.service import register_user
-from app.ingestion.models import IngestionRun
+from app.ingestion.runs import request_ingestion
 from app.sources.models import Source, SourceItem
 from app.storage.service import build_raw_object_key
 
@@ -72,13 +72,14 @@ def seed_upload(
     )
     db.add(item)
     db.flush()
-    run = IngestionRun(id=uuid4(), source_item_id=item_id, status="queued")
-    db.add(run)
+    run_id = request_ingestion(
+        db=db, source_item_id=item_id, raw_object_key=raw_object_key, content_hash=content_hash
+    )
     db.commit()
     return SeededUpload(
         source_id=source.id,
         source_item_id=item_id,
-        ingestion_run_id=run.id,
+        ingestion_run_id=run_id,
         raw_object_key=raw_object_key,
         content_hash=content_hash,
     )
