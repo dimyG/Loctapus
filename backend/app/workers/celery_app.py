@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401
 from app.core.config import get_settings
 from app.core.db import session_scope
-from app.ingestion.service import run_startup_checks
+from app.ingestion.schema_guard import run_startup_checks
 from app.providers import EmbeddingProvider, get_embedding_provider
 
 _logger = logging.getLogger(__name__)
