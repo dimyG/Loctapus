@@ -102,6 +102,15 @@ test.describe("journey", () => {
       // The default 5s expect timeout does not cover the full pipeline, so the
       // assertion carries an explicit one inside the 30s test budget.
       await expect(page.getByRole("cell", { name: "Ready" })).toHaveCount(2, { timeout: 20_000 });
+
+      // A same-name re-upload of an indexed file is a 409: the alert carries the
+      // server copy and the table keeps exactly its two data rows.
+      await page.getByLabel("Upload").setInputFiles(TINY_PDF);
+      await expect(page.getByRole("alert")).toContainText(
+        "A file with this name already exists in this project.",
+      );
+      // The header's cells are columnheaders, so rows with cells are the data rows.
+      await expect(page.getByRole("row").filter({ has: page.getByRole("cell") })).toHaveCount(2);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
