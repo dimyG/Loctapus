@@ -309,13 +309,18 @@ def test_loop_survives_a_failing_tick(
     settings: SettingsForTests,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A failing first tick does not end the loop: the second tick publishes and stays ready."""
+    """A failing first tick does not end the loop, and every tick sleeps a bounded interval.
+
+    A prolonged database outage must not turn the loop into a hot spin: the failing
+    tick sleeps the poll interval before trying again, exactly like an idle tick.
+    """
 
     event = _seed_event(
         db=db_session, event_type=SOURCE_ITEM_INGESTION_REQUESTED, payload=_ingestion_payload()
     )
     app = make_celery_app(broker_url=broker_url)
     ticks = {"count": 0}
+    sleeps: list[float] = []
 
     @contextmanager
     def _session_factory() -> Iterator[Session]:
@@ -330,13 +335,16 @@ def test_loop_survives_a_failing_tick(
         app=app,
         settings=settings,
         session_factory=_session_factory,
-        sleep=_no_sleep,
+        sleep=sleeps.append,
         max_ticks=2,
     )
     db_session.refresh(event)
     assert event.published_at is not None
     captured = capsys.readouterr()
     assert captured.err.count("dispatcher ready") == 1
+    # The failing tick slept before its retry, and the publishing tick (1 selected
+    # against a batch of 20) slept too: both ticks were bounded.
+    assert sleeps == [settings.outbox_poll_interval_seconds, settings.outbox_poll_interval_seconds]
 
 
 def _no_sleep(*_seconds: float) -> None:

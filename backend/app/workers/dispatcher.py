@@ -157,6 +157,9 @@ def run_loop(
             selected = result.selected
         except Exception:
             _logger.exception("dispatch tick failed")
+            # A prolonged outage must not hot-spin the loop: bound the failing tick's
+            # rate exactly like an idle tick's.
+            sleep(settings.outbox_poll_interval_seconds)
             continue
         if not ready:
             # stderr, flushed: the e2e webServer entry waits on this line, and piped
