@@ -10,30 +10,11 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.outbox.events import EMBED_DOCUMENT_TASK, INGEST_SOURCE_ITEM_TASK
 from app.providers import get_embedding_provider
-from app.workers.celery_app import celery_app, make_celery_app, run_worker_startup_checks
+from app.workers.celery_app import celery_app, make_celery_app
+from app.workers.signals import run_worker_startup_checks
+from tests.fakes import MismatchedEmbeddingProvider
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-
-
-class _MismatchedEmbeddingProvider:
-    """Embedding provider whose dimension disagrees with the migrated chunks.embedding column."""
-
-    dimension: int
-
-    def __init__(self, *, dimension: int) -> None:
-        """Record the deliberately mismatching dimension."""
-
-        self.dimension = dimension
-
-    def embed_documents(self, *, texts: list[str]) -> list[list[float]]:
-        """Return zero vectors of the declared dimension."""
-
-        return [[0.0] * self.dimension for _ in texts]
-
-    def embed_query(self, *, text: str) -> list[float]:
-        """Return a zero vector of the declared dimension."""
-
-        return [0.0] * self.dimension
 
 
 def test_make_celery_app_configures_broker_and_acks() -> None:
@@ -51,7 +32,7 @@ def test_make_celery_app_configures_broker_and_acks() -> None:
 def test_worker_init_refuses_on_dimension_mismatch(*, db_session: Session) -> None:
     """The handler turns a dimension mismatch into a SystemExit naming both numbers."""
 
-    provider = _MismatchedEmbeddingProvider(dimension=512)
+    provider = MismatchedEmbeddingProvider(dimension=512)
     with pytest.raises(SystemExit) as excinfo:
         run_worker_startup_checks(db=db_session, embedding_provider=provider)
     message = str(excinfo.value)
@@ -70,11 +51,15 @@ def test_worker_init_passes_with_stub(*, db_session: Session, settings: Settings
 def test_tasks_retry_transient_database_errors() -> None:
     """Both pipeline tasks autoretry on transient database errors, capped at five."""
 
+    from typing import Any
+
     from sqlalchemy.exc import InterfaceError, OperationalError
 
     celery_app.loader.import_default_modules()
     for task_name in (INGEST_SOURCE_ITEM_TASK, EMBED_DOCUMENT_TASK):
-        task = celery_app.tasks[task_name]
+        # autoretry_for and the retry knobs are runtime attributes the Celery
+        # stubs do not declare.
+        task: Any = celery_app.tasks[task_name]
         assert OperationalError in task.autoretry_for
         assert InterfaceError in task.autoretry_for
         assert task.max_retries == 5

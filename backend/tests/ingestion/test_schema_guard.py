@@ -10,27 +10,7 @@ from app.ingestion.schema_guard import (
     verify_embedding_dimension,
 )
 from app.providers import get_embedding_provider
-
-
-class _MismatchedEmbeddingProvider:
-    """Embedding provider whose dimension disagrees with the migrated chunks.embedding column."""
-
-    dimension: int
-
-    def __init__(self, *, dimension: int) -> None:
-        """Record the deliberately mismatching dimension."""
-
-        self.dimension = dimension
-
-    def embed_documents(self, *, texts: list[str]) -> list[list[float]]:
-        """Return zero vectors of the declared dimension."""
-
-        return [[0.0] * self.dimension for _ in texts]
-
-    def embed_query(self, *, text: str) -> list[float]:
-        """Return a zero vector of the declared dimension."""
-
-        return [0.0] * self.dimension
+from tests.fakes import MismatchedEmbeddingProvider
 
 
 def test_dimension_guard(*, db_session: Session) -> None:
@@ -49,6 +29,6 @@ def test_run_startup_checks(*, db_session: Session, settings: Settings) -> None:
     """Check that startup checks pass for a matching provider and fail for a mismatch."""
 
     run_startup_checks(db=db_session, embedding_provider=get_embedding_provider(settings=settings))
-    mismatched = _MismatchedEmbeddingProvider(dimension=512)
+    mismatched = MismatchedEmbeddingProvider(dimension=512)
     with pytest.raises(RuntimeError, match="512"):
         run_startup_checks(db=db_session, embedding_provider=mismatched)
