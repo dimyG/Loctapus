@@ -60,6 +60,8 @@ New deferrals from the 2026-10-14 review fixes:
 - A partial unique index allowing one in-flight run per item, together with the S7
   sweep; the sweep must also cover `queued` runs whose event was published.
 - Outbox attempts cap, dead-lettering, and published-row retention (S7).
+- A crash between the Garage PUT and the write transaction's commit orphans the stored
+  object (no delete path in S3); fold the orphan sweep into the S7 stale-run sweep.
 - S4 retrieval notes: HNSW `ef_search` and `iterative_scan`, `embedding IS NOT NULL` in
   the vector leg, pin the `pgvector/pgvector` image tag.
 - S5: record `embedding_model` per vector; prefer a side-by-side column over an
