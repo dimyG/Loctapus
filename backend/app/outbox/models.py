@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import DateTime, String, Text, func, text
+from sqlalchemy import DateTime, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,6 +16,14 @@ class OutboxEvent(Base):
     """A domain event committed inside its transaction and published at least once later."""
 
     __tablename__ = "outbox_events"
+    __table_args__ = (
+        # The poller scans unpublished rows oldest first; published rows leave the index.
+        Index(
+            "ix_outbox_events_created_at_unpublished",
+            "created_at",
+            postgresql_where=text("published_at IS NULL"),
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     event_type: Mapped[str] = mapped_column(String)

@@ -4,7 +4,16 @@ import uuid
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models import Base
@@ -14,7 +23,10 @@ class Source(Base):
     """A project's content source; this slice creates upload sources only."""
 
     __tablename__ = "sources"
-    __table_args__ = (CheckConstraint("type IN ('upload')"),)
+    __table_args__ = (
+        CheckConstraint("type IN ('upload')"),
+        Index("ix_sources_project_id", "project_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))

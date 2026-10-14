@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
     false,
@@ -26,6 +27,7 @@ class Project(Base):
     """A unit of work created by a team inside a workspace, with per-team visibility."""
 
     __tablename__ = "projects"
+    __table_args__ = (Index("ix_projects_workspace_id", "workspace_id"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id"))
@@ -44,6 +46,8 @@ class ProjectTeamRole(Base):
     __table_args__ = (
         UniqueConstraint("project_id", "team_id"),
         CheckConstraint("role IN ('admin', 'editor', 'viewer')"),
+        # The composite unique above covers only the leading project_id column.
+        Index("ix_project_team_roles_team_id", "team_id"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

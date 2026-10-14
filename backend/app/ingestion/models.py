@@ -11,6 +11,7 @@ from sqlalchemy import (
     Computed,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -43,6 +44,14 @@ class Chunk(Base):
     __table_args__ = (
         UniqueConstraint("document_id", "position"),
         CheckConstraint("chunk_type IN ('text')"),
+        Index("ix_chunks_project_id", "project_id"),
+        Index(
+            "ix_chunks_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        Index("ix_chunks_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -73,6 +82,8 @@ class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
     __table_args__ = (
         CheckConstraint("status IN ('queued', 'fetching', 'processing', 'indexing', 'ready', 'failed')"),
+        Index("ix_ingestion_runs_document_id", "document_id"),
+        Index("ix_ingestion_runs_source_item_id_created_at", "source_item_id", "created_at"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

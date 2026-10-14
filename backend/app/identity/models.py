@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +33,9 @@ class Workspace(Base):
     """A tenant that groups teams and projects, owned by a user."""
 
     __tablename__ = "workspaces"
+    # Postgres does not index foreign key columns on its own; joins and ownership
+    # lookups filter on this one.
+    __table_args__ = (Index("ix_workspaces_owner_user_id", "owner_user_id"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String)
@@ -47,6 +50,7 @@ class Team(Base):
     """A group of users inside a workspace, granted project roles as a unit."""
 
     __tablename__ = "teams"
+    __table_args__ = (Index("ix_teams_workspace_id", "workspace_id"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id"))
@@ -61,7 +65,11 @@ class TeamMembership(Base):
     """Membership of one user in one team."""
 
     __tablename__ = "team_memberships"
-    __table_args__ = (UniqueConstraint("team_id", "user_id"),)
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id"),
+        # The composite unique above covers only the leading team_id column.
+        Index("ix_team_memberships_user_id", "user_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"))

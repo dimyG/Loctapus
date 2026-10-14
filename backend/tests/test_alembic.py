@@ -5,7 +5,9 @@ import uuid
 from pathlib import Path
 
 import pytest
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
@@ -13,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from app.core.db import make_engine
+from app.core.models import Base
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
@@ -75,6 +78,14 @@ def test_citext_email_case_insensitive(*, engine: Engine, db_session: Session) -
     db_session.flush()
     found = db_session.query(User).filter(User.email == "case@example.com").one()
     assert found.email == "Case@Example.com"
+
+
+def test_models_match_migrations(*, engine: Engine) -> None:
+    """Check that autogenerate sees no difference between the ORM models and the migrated schema."""
+
+    with engine.connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
+    assert diff == []
 
 
 def test_single_head_revision() -> None:
