@@ -33,7 +33,7 @@ def _create_project(*, client: TestClient, headers: dict[str, str], name: str) -
     """Create a project through the API and return its id."""
 
     team_id = _default_team_id(client=client, headers=headers)
-    created = client.post("/projects", json={"name": name, "team_id": team_id}, headers=headers)
+    created = client.post("/api/projects", json={"name": name, "team_id": team_id}, headers=headers)
     return str(created.json()["id"])
 
 
@@ -49,7 +49,7 @@ def _upload(
     """POST one multipart upload to the uploads endpoint and return the response."""
 
     response: Response = client.post(
-        f"/projects/{project_id}/uploads",
+        f"/api/projects/{project_id}/uploads",
         files={"file": (filename, content, content_type)},
         headers=headers,
     )
@@ -314,7 +314,7 @@ def test_uploads_list_derives_the_latest_status(*, client: TestClient, db_sessio
     )
     db_session.commit()
 
-    r = client.get(f"/projects/{project_id}/uploads", headers=headers)
+    r = client.get(f"/api/projects/{project_id}/uploads", headers=headers)
     assert r.status_code == 200
     body = r.json()
     assert [row["id"] for row in body] == [uploaded_item_id, str(older.source_item_id)]
@@ -464,7 +464,7 @@ def test_upload_requires_editor_role(*, client: TestClient, db_session: Session)
     assert upload.status_code == 404
     assert upload.json() == {"detail": "project not found"}
 
-    listed = client.get(f"/projects/{project_id}/uploads", headers=viewer)
+    listed = client.get(f"/api/projects/{project_id}/uploads", headers=viewer)
     assert listed.status_code == 200
     assert listed.json() == []
 
@@ -480,9 +480,10 @@ def test_public_project_viewer_can_list_but_not_upload(*, client: TestClient) ->
     owner = _auth(client=client, email="public-owner@example.com")
     stranger = _auth(client=client, email="public-stranger@example.com")
     project_id = _create_project(client=client, headers=owner, name="public")
-    assert client.patch(f"/projects/{project_id}", json={"is_public": True}, headers=owner).status_code == 200
+    made_public = client.patch(f"/api/projects/{project_id}", json={"is_public": True}, headers=owner)
+    assert made_public.status_code == 200
 
-    listed = client.get(f"/projects/{project_id}/uploads", headers=stranger)
+    listed = client.get(f"/api/projects/{project_id}/uploads", headers=stranger)
     assert listed.status_code == 200
     assert listed.json() == []
 
@@ -528,7 +529,7 @@ def test_project_delete_cascades_fully_ingested_source(
     assert run.status == RunStatus.READY
     assert db_session.query(Chunk).count() == 1
 
-    assert client.delete(f"/projects/{project_id}", headers=headers).status_code == 204
+    assert client.delete(f"/api/projects/{project_id}", headers=headers).status_code == 204
     assert db_session.query(Source).count() == 0
     assert db_session.query(SourceItem).count() == 0
     assert db_session.query(Document).count() == 0

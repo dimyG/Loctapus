@@ -69,7 +69,7 @@ test.describe("journey", () => {
     await logoutResponse;
 
     // The old token was revoked server-side: replaying it must 401.
-    const response = await request.get("http://localhost:8001/projects", {
+    const response = await request.get("http://localhost:8001/api/projects", {
       headers: { authorization: `Bearer ${oldToken}` },
     });
     expect(response.status()).toBe(401);

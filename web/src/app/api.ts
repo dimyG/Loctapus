@@ -8,8 +8,13 @@ import type {
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { sessionExpired } from "../features/auth/sessionActions";
 
-/** Where the FastAPI backend lives; E2E points it at the port-8001 instance. */
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+/**
+ * Where the API lives. Defaults to the relative same-origin `/api` that the
+ * reverse proxy forwards to the backend; E2E overrides it with the absolute
+ * port-8001 URL and vitest pins an absolute one because Node's Request
+ * rejects relative URLs.
+ */
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 /**
  * Structural slice of the store the base query needs. Importing the real

@@ -11,10 +11,16 @@ from app.identity.router import router as identity_router
 from app.projects.router import router as projects_router
 from app.sources.router import router as sources_router
 
-app = FastAPI(title="rag-mvp")
-app.include_router(identity_router)
-app.include_router(projects_router)
-app.include_router(sources_router)
+app = FastAPI(
+    title="rag-mvp",
+    docs_url="/api/docs",
+    swagger_ui_oauth2_redirect_url="/api/docs/oauth2-redirect",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
+app.include_router(identity_router, prefix="/api")
+app.include_router(projects_router, prefix="/api")
+app.include_router(sources_router, prefix="/api")
 
 # SPA origins are explicit (no wildcard) so browsers reject cross-site reads from
 # unknown hosts; auth is a Bearer header, so cookies never cross origins.
@@ -27,7 +33,7 @@ app.add_middleware(
 )
 
 
-@app.get("/health")
+@app.get("/api/health")
 def health() -> dict[str, str]:
     """Report service liveness."""
 

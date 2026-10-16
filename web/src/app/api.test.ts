@@ -34,7 +34,7 @@ describe("getErrorMessage", () => {
 describe("session expiry", () => {
   it("clears the session when an authenticated request comes back 401", async () => {
     server.use(
-      http.get("*/projects", () =>
+      http.get("*/api/projects", () =>
         HttpResponse.json({ detail: "invalid or expired token" }, { status: 401 }),
       ),
     );

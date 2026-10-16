@@ -15,12 +15,12 @@ class SettingsForTests(Settings):
 def _auth(*, client: TestClient, email: str) -> dict[str, str]:
     """Register an account and return its bearer headers."""
 
-    response = client.post("/auth/register", json={"email": email, "password": "password123"})
+    response = client.post("/api/auth/register", json={"email": email, "password": "password123"})
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 def _default_team_id(*, client: TestClient, headers: dict[str, str]) -> str:
     """Return the account's default team id through the API."""
 
-    workspace = client.get("/workspaces", headers=headers).json()[0]
-    return str(client.get(f"/workspaces/{workspace['id']}/teams", headers=headers).json()[0]["id"])
+    workspace = client.get("/api/workspaces", headers=headers).json()[0]
+    return str(client.get(f"/api/workspaces/{workspace['id']}/teams", headers=headers).json()[0]["id"])

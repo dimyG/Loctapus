@@ -7,26 +7,27 @@ def test_register_login_project_lifecycle(*, client: TestClient) -> None:
     """Drive register, login, project create, fetch, and delete through the API."""
 
     token = client.post(
-        "/auth/register",
+        "/api/auth/register",
         json={"email": "e2e@example.com", "password": "password123"},
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    ws = client.get("/workspaces", headers=headers).json()[0]
-    team_id = client.get(f"/workspaces/{ws['id']}/teams", headers=headers).json()[0]["id"]
+    ws = client.get("/api/workspaces", headers=headers).json()[0]
+    team_id = client.get(f"/api/workspaces/{ws['id']}/teams", headers=headers).json()[0]["id"]
 
     token2 = client.post(
-        "/auth/login",
+        "/api/auth/login",
         json={"email": "e2e@example.com", "password": "password123"},
     ).json()["access_token"]
     assert token2
 
-    me = client.get("/users/me", headers=headers).json()
+    me = client.get("/api/users/me", headers=headers).json()
     assert me["email"] == "e2e@example.com"
 
-    pid = client.post("/projects", json={"name": "e2e-kb", "team_id": team_id}, headers=headers).json()["id"]
-    assert client.get(f"/projects/{pid}", headers=headers).status_code == 200
-    names = [p["name"] for p in client.get("/projects", headers=headers).json()]
+    created = client.post("/api/projects", json={"name": "e2e-kb", "team_id": team_id}, headers=headers)
+    pid = created.json()["id"]
+    assert client.get(f"/api/projects/{pid}", headers=headers).status_code == 200
+    names = [p["name"] for p in client.get("/api/projects", headers=headers).json()]
     assert sorted(names) == ["Default", "e2e-kb"]
-    assert client.delete(f"/projects/{pid}", headers=headers).status_code == 204
-    assert [p["name"] for p in client.get("/projects", headers=headers).json()] == ["Default"]
+    assert client.delete(f"/api/projects/{pid}", headers=headers).status_code == 204
+    assert [p["name"] for p in client.get("/api/projects", headers=headers).json()] == ["Default"]

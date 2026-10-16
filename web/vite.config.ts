@@ -13,5 +13,7 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "e2e/**"],
     // Generous per-test budget: under parallel load, 1s findBy polls flake.
     testTimeout: 10_000,
+    // Node's Request rejects relative URLs, so tests need an absolute base.
+    env: { VITE_API_BASE_URL: "http://localhost:3000/api" },
   },
 });

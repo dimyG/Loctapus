@@ -15,7 +15,7 @@ export default defineConfig({
         `"${PYTHON}" scripts\\e2e_db.py bootstrap && ` +
         `"${PYTHON}" -m uvicorn app.main:app --port 8001`,
       cwd: "../backend",
-      url: "http://localhost:8001/health",
+      url: "http://localhost:8001/api/health",
       env: { RAG_DATABASE_URL: "postgresql+psycopg://rag:rag@localhost:5432/rag_e2e" },
       reuseExistingServer: false,
       timeout: 120_000,
@@ -45,7 +45,7 @@ export default defineConfig({
     {
       command: "npm run dev -- --port 5173 --strictPort",
       url: "http://localhost:5173",
-      env: { VITE_API_BASE_URL: "http://localhost:8001" },
+      env: { VITE_API_BASE_URL: "http://localhost:8001/api" },
       reuseExistingServer: false,
       timeout: 60_000,
     },
