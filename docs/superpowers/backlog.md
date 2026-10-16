@@ -6,6 +6,22 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-16 - Compose full-stack runtime (`compose-full-stack`)
+
+From the spec (`../specs/2026-10-16-docker-compose-full-stack-design.md`, its section
+12) and its plan (`../plans/2026-10-16-docker-compose-full-stack.md`, commits
+`295393c`..`e16306f`):
+
+- `ec55c32` - containerized e2e as a CI packaging test: run the existing Playwright
+  journey against a composed stack in CI, where databases are disposable. The manual
+  compose smoke run (the plan's Task 7) covers the packaging gap locally meanwhile.
+- `ec55c32` - the other web test files' MSW handlers still use unprefixed paths
+  (`*/auth/register` style); they pass because `*` absorbs the `/api` prefix, and
+  `src/test/handlers.ts` (the shared baseline) carries the real paths.
+- `e16306f` - the README intro ("backend ... for a RAG MVP") predates the full-stack
+  round and undersells the repo (SPA + compose system); cosmetic rewording opportunity.
+
+
 ## 2026-10-14 - S3 review fixes (`s3-upload-ingestion`)
 
 The pre-merge review-fix round (`../plans/2026-10-14-s3-review-fixes.md`) resolved the
