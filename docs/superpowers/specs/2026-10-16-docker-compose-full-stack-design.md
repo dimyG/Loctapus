@@ -225,7 +225,10 @@ The nginx conf invariants:
 - `location / { try_files $uri $uri/ /index.html; }` - SPA history-routing fallback.
 - No CORS headers anywhere: the compose path is same-origin (decision 6).
 
-`web/.dockerignore`: `node_modules`, `dist`, `test-results`, `e2e`, logs.
+`web/.dockerignore`: `node_modules`, `dist`, `test-results`, `e2e`, logs, `.env`, `.env.*`.
+Vite reads `.env*` at build time and bakes `VITE_*` values into the bundle, so a local
+`web/.env.local` must not ride into the build context (same rationale as the backend's
+`.env` exclusion).
 
 ## 5. API surface change (`/api` prefix)
 
