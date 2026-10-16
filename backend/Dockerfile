@@ -1,7 +1,7 @@
 FROM python:3.14-slim
 WORKDIR /app
 
-# Dependencies in their own layer: a code-only rebuild reinstalls nothing. The
+# Dependencies in their own layer: a code-only rebuild reinstalls no dependencies. The
 # manifest-only dummy build installs the declared dependencies and no packages.
 COPY pyproject.toml ./
 RUN pip install --no-cache-dir .
