@@ -8,6 +8,7 @@ slices.
 ## Prerequisites
 
 - Python 3.14
+- Node.js (for the web toolchain and e2e)
 - Docker (runs the whole system: Postgres/pgvector, RabbitMQ, Garage, and the app tier)
 
 ## Setup
@@ -15,8 +16,7 @@ slices.
 ```powershell
 python -m venv .venv
 .venv\Scripts\pip install -e "backend[dev]"
-cd web
-npm install
+npm install --prefix web
 ```
 
 The venv serves the test suites and migrations authoring, not the running system.
@@ -75,6 +75,7 @@ RabbitMQ state lives on the named `rabbitmqdata` volume, so queues and vhosts su
 `docker compose up -d --force-recreate rabbitmq`. This volume was introduced after the
 broker had run without one: recreating the container discards that old anonymous volume
 once, and the `rag_test` and `rag_e2e` vhosts are recreated by their suites' bootstraps.
+
 ## Test
 
 Tests need the compose services up: the real Postgres for every suite (never SQLite),
