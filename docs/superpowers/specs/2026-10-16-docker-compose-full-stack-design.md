@@ -1,7 +1,8 @@
 # Docker Compose full-stack runtime - Design
 
 Date: 2026-10-16
-Status: Design round complete (2026-10-16); implementation pending.
+Status: Design round complete (2026-10-16); review round fixes folded in (2026-10-16);
+implementation pending.
 Source of truth: the README runbook as it stands and the S3 spec
 (`2026-10-12-s3-upload-ingestion-design.md`). Where those disagree with this document on
 runtime and packaging topics, this document wins; where it is silent, they govern.
@@ -17,7 +18,8 @@ never runs natively again.
 
 What deliberately does not change is the development loop. pytest drives the app
 in-process against the compose infra exactly as today (its disposable `rag_test` database
-and broker vhost); vitest is unaffected; and the Playwright journey keeps its isolated
+and broker vhost); vitest is unaffected except for one pinned env value in
+`vite.config.ts` (decision 8); and the Playwright journey keeps its isolated
 fixture environment (`rag_e2e` database and vhost, uvicorn on 8001, vite on 5173) - the same
 isolation philosophy pytest already follows. Only the *system's runtime* moves into
 containers.
@@ -43,9 +45,12 @@ at `.venv`; Node 24.14.1.
    no rewriting, because the backend genuinely serves these paths. All API-path references
    in tests and e2e update mechanically (section 5).
 3. **One backend image, four services.** `backend/Dockerfile` builds a single image
-   (`python:3.14-slim`, `pip install .`, non-root user); the compose services
+   (`python:3.14-slim`, pip install in two layers - section 4.1 - non-root user); the
+   compose services
    `one-off-initialization`, `api`, `worker`, and `dispatcher` share it through per-service
-   `command:` overrides. No per-role images to keep in sync.
+   `command:` overrides. No per-role images to keep in sync. The compose file defines the
+   image exactly once - an `x-backend` anchor carries the `build`/`image` mapping and each
+   service merges it (section 3) - so `up --build` cannot produce four divergent builds.
 4. **The compose migration step is named `one-off-initialization`** (design-round naming
    decision): the name communicates the container's lifecycle role - it runs once per `up`,
    exits, and gates the app services - rather than one implementation detail, and leaves a
@@ -62,15 +67,21 @@ at `.venv`; Node 24.14.1.
    SPA from `http://localhost:8080` and every API call resolves to the same origin (the baked
    base URL is the relative `/api`), so the compose path never makes a cross-origin request:
    no CORS involvement, and no hostname baked into the bundle. nginx forwards `/api/...`
-   to `api:8000` server-side. Port 8080 avoids privileged/conflicting port 80 on Windows
+   to `api:8000` server-side (the api runs uvicorn with `--forwarded-allow-ips=*` so the
+   forwarded headers are honored - by default uvicorn trusts `X-Forwarded-*` from
+   loopback clients only). Port 8080 avoids privileged/conflicting port 80 on Windows
    hosts and leaves 5173 (the e2e fixture port) free to run concurrently with the system.
    nginx's `client_max_body_size` must cover `max_upload_mb` (25) - its 1 MB default would
    reject every real upload.
-7. **Broker credentials stay `guest`, explicitly permitted off-loopback.** A mounted
-   `deploy/rabbitmq.conf` sets `loopback_users.guest = false`, making guest auth from the
-   compose network deterministic instead of dependent on image defaults. Dev-grade by
-   design; `config.py` already refuses the development JWT and S3 secrets whenever
-   `environment=production`, so production-grade broker auth is future work (section 10).
+7. **Broker credentials stay `guest`, with the off-loopback posture pinned explicitly.**
+   The official image already disables the guest loopback restriction itself - its
+   bundled `/etc/rabbitmq/conf.d/10-defaults.conf` sets `loopback_users.guest = false`
+   (verified in the running container) - so guest auth from the compose network works
+   without our config. The mounted `deploy/rabbitmq.conf` sets the same value so the
+   posture is an explicit property of this stack's tree rather than an inherited image
+   default that an image update could change. Dev-grade by design; `config.py` already
+   refuses the development JWT and S3 secrets whenever `environment=production`, so
+   production-grade broker auth is future work (section 10).
    The `CORSMiddleware` stays in the app for the other paths: the e2e setup (page on 5173,
    API on 8001) is still cross-origin and depends on it, and `test_cors.py` keeps guarding
    it. In the compose path it is simply never triggered.
@@ -78,8 +89,19 @@ at `.venv`; Node 24.14.1.
    Verified against the installed RTK: `fetchBaseQuery` string-joins via `joinUrls`
    (`/api` + `/projects` -> `/api/projects`), and `fetch` resolves the relative URL against
    the page origin - so the app's natural mode is same-origin, exactly how the system is
-   served. e2e overrides it with `http://localhost:8001/api`; the MSW handlers mirror the
-   `/api` paths (they match full paths). No origin or port is baked into the bundle.
+   served. e2e overrides it with `http://localhost:8001/api`; the MSW handlers carry the
+   `/api` paths too, keeping the fixtures in step with the real surface (`*/auth/register`
+   would still match an `/api/auth/register` request, because `*` matches any prefix -
+   mirroring the real paths is fixture honesty, not a matching requirement). No origin or
+   port is baked into the bundle.
+
+   The relative default cannot serve the vitest environment: RTK Query builds a `Request`
+   before `fetch` runs, and Node's `Request` rejects relative URLs (`Failed to parse URL
+   from /api/projects`, verified under the project's vitest). `vite.config.ts` therefore
+   pins `VITE_API_BASE_URL` for tests through `test.env` - `http://localhost:3000/api`,
+   the jsdom page origin with the same prefix - so the suite keeps working against an
+   absolute URL there. Verified: `test.env` values reach `import.meta.env`, and the
+   resulting `Request` parses.
 9. **Test isolation is preserved end to end.** pytest keeps `rag_test`; the Playwright
    journey keeps `rag_e2e` (own database, own broker vhost, own ports 8001/5173) because
    running it against the system's real database would mutate real data and make the suite
@@ -95,8 +117,8 @@ at `.venv`; Node 24.14.1.
 | rabbitmq | rabbitmq:3.13-management, mounts `rabbitmq.conf` | - | 5672, 15672 | - |
 | garage | dxflrs/garage:v2.3.0 (unchanged) | - | 3900, 3903 | - |
 | one-off-initialization | backend image | `python scripts/migrate.py` | - | db healthy |
-| api | backend image | `uvicorn app.main:app --host 0.0.0.0 --port 8000` | 8000 | db healthy; one-off-initialization completed |
-| worker | backend image | `celery -A app.workers.celery_app worker -Q ingestion,embed` | - | db healthy; one-off-initialization completed; rabbitmq healthy |
+| api | backend image | `uvicorn app.main:app --host 0.0.0.0 --port 8000 --forwarded-allow-ips=*` | 8000 | db healthy; one-off-initialization completed |
+| worker | backend image | `celery -A app.workers.celery_app worker -Q ingestion,embed --concurrency 2` | - | db healthy; one-off-initialization completed; rabbitmq healthy |
 | dispatcher | backend image | `python -m app.workers.dispatcher` | - | db healthy; one-off-initialization completed; rabbitmq healthy |
 | web | web image (nginx) | - | 8080 | api healthy |
 
@@ -106,6 +128,21 @@ Celery's Linux default prefork pool - the Windows-only `--pool=solo` exists for 
 Windows, and the worker's own startup handler already disposes its boot connection
 before the pool forks (`app/workers/signals.py`: "safe under prefork, where children
 re-connect through their own pool"), so the pool is designed for this.
+
+The worker pins `--concurrency 2`: Celery's default is one child per CPU in the Docker
+VM, and each child holds its own SQLAlchemy pool, so the default could crowd the
+100-connection Postgres maximum this stack shares with the test suites. Two children keep
+dev-grade parallelism with a bounded connection count.
+
+The long-running app services (`api`, `worker`, `dispatcher`) run with `init: true`.
+Otherwise the dispatcher is PID 1 with no SIGTERM handler, and PID 1 ignores unhandled
+signals - every `down` would wait out Docker's stop timeout and SIGKILL it. uvicorn and
+celery handle SIGTERM themselves; the init process is harmless for them and reaps
+zombies besides.
+
+The image behind the four backend services is defined exactly once: an `x-backend`
+anchor carries `build: {context: ../backend}` and `image: rag-backend`, and each service
+merges the anchor with its own `command:` (decision 3), so one build serves all four.
 
 App-tier environment (compose `environment:`), pointing at the in-network service names:
 
@@ -119,32 +156,53 @@ compose service). Build contexts are `../backend` and `../web` relative to `depl
 
 Healthchecks: the api container gets
 `python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"`
-(curl is absent from the slim image). worker and dispatcher deliberately get none: the
-broker's connect-on-startup retry keeps them alive, and neither exposes a cheap probe
-surface. Garage gets no boot-order dependency from the app tier - the storage client is
-created lazily per process, so an upload immediately after `up` can race Garage's startup;
-the failure is a user-visible error, not a crash, and the runbook's "wait for healthy"
-covers it (section 11).
+(curl is absent from the slim image), with `interval: 5s`, `timeout: 5s`, `retries: 10`,
+`start_period: 10s`, `start_interval: 1s` - Docker's default 30-second interval would
+otherwise hold `web` back for half a minute on every `up`. worker and dispatcher
+deliberately get none: the broker's connect-on-startup retry keeps them alive, and
+neither exposes a cheap probe surface. Garage gets a healthcheck of
+`["CMD", "/garage", "status"]` - the CLI control command, which talks to the local node
+over RPC and exits 0 only when the node answers (verified against the image: a scratch
+container reports its node under "HEALTHY NODES") - so the runbook's "wait for healthy"
+names something observable. The app tier still takes no boot-order dependency on Garage:
+the storage client is created lazily per process, so an upload immediately after `up` can
+race Garage's readiness; the failure is a user-visible error, not a crash (section 11).
 
 Volumes, the project name (`rag`), and the db/rabbitmq/garage definitions are unchanged;
 rabbitmq additionally mounts `./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf`.
+
+The project name and the published host ports are machine-global: exactly one system
+runs at a time, owned by whichever checkout last ran `up -d` (its bind-mounted config
+files serve that stack), and another checkout - or worktree - that wants the system must
+`down` it first. The test suites are unaffected: they target the infra's host ports and
+do not care which checkout started them. Observed in the wild: the running stack's
+`garage.toml` mount points into a since-removed worktree, and `docker exec ... /garage
+status` fails on the dangling mount while the server keeps serving from startup state.
 
 ## 4. Images
 
 ### 4.1 `backend/Dockerfile`
 
-`FROM python:3.14-slim`; `WORKDIR /app`; copy `pyproject.toml`, `app/`, `alembic/`,
-`alembic.ini`, `scripts/`; `RUN pip install --no-cache-dir .`; a dedicated non-root user;
-`EXPOSE 8000`; default `CMD` the uvicorn command from section 3. `backend/.dockerignore`
-keeps local state out of the image: `.venv`, `.env`, `__pycache__`, `.mypy_cache`,
-`.pytest_cache`, `.ruff_cache`, `tests/`, logs. The `.env` exclusion matters twice over:
-compose is the single config source for containers, and no local settings ride into images.
+`FROM python:3.14-slim`; `WORKDIR /app`; a dedicated non-root user; `EXPOSE 8000`;
+default `CMD` the uvicorn command from section 3. The install is split into two layers
+so code-only rebuilds stay fast: first copy `pyproject.toml` alone and install the
+dependency set it declares into a cached layer (the mechanism is the implementation's
+choice - building the project from the manifest alone, or parsing the dependency list
+out of it); then copy `app/`, `alembic/`, `alembic.ini`, `scripts/` and
+`RUN pip install --no-deps --no-cache-dir .`. A single `pip install .` placed after the
+full source copy would resolve and reinstall every dependency on every code change, and
+the runbook's "rebuilds in seconds" claim depends on the split; the packaging smoke
+verifies it (section 8). `backend/.dockerignore` keeps local state out of the image:
+`.venv`, `.env`, `__pycache__`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `tests/`,
+logs. The `.env` exclusion matters twice over: compose is the single config source for
+containers, and no local settings ride into images.
 
 ### 4.2 `web/Dockerfile` and `web/nginx.conf`
 
 Two stages. Build: `FROM node:24-alpine` (matches the verified Node 24 toolchain),
-`npm ci`, copy sources, `npm run build` with `VITE_API_BASE_URL=/api` supplied as a build
-argument. Serve: `FROM nginx:1-alpine`, copy `dist/` into the nginx root plus the conf.
+`npm ci`, copy sources, `npm run build` - no build argument is supplied, because the
+relative `/api` default already lives in `src/app/api.ts` and one source of truth beats
+two. Serve: `FROM nginx:1-alpine`, copy `dist/` into the nginx root plus the conf.
 The build context cannot reach outside `web/`, which is why `nginx.conf` lives in `web/`
 rather than `deploy/`.
 
@@ -153,11 +211,17 @@ The nginx conf invariants:
 - `client_max_body_size 26m;` - covers `max_upload_mb` (25) with headroom.
 - `location /api/` proxies to the api service with the request URI passed through
   unchanged (the backend serves the `/api` prefix itself), the standard forwarded headers
-  (`Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`), and Docker's embedded DNS
+  (`Host $http_host` - not `$host`, which drops the `:8080` port - plus `X-Real-IP`,
+  `X-Forwarded-For`, `X-Forwarded-Proto`), and Docker's embedded DNS
   resolver (`resolver 127.0.0.11 valid=10s;` with the upstream name in a variable) so a
   recreated api container does not leave nginx pinned to a dead IP - with a static
   `proxy_pass http://api:8000`, nginx resolves once at config load and 502s after api is
   rebuilt via `up -d --build`.
+- The forwarded headers are actually honored: the api command runs
+  `--forwarded-allow-ips=*` (section 3) because uvicorn trusts `X-Forwarded-*` only from
+  loopback clients by default. Trusting the compose network is the same dev posture as
+  the guest broker credentials (decision 7), and it matters only the day the app reads
+  scheme or client IP.
 - `location / { try_files $uri $uri/ /index.html; }` - SPA history-routing fallback.
 - No CORS headers anywhere: the compose path is same-origin (decision 6).
 
@@ -186,10 +250,17 @@ Affected call sites - mechanical path updates only, no assertion changes:
 
 - Backend tests: `tests/identity/` (auth API, users/me, workspaces), `tests/projects/`,
   `tests/sources/test_uploads_api.py`, `tests/test_cors.py`, `tests/test_health.py`,
-  `tests/test_smoke_e2e.py`.
-- Web: `src/app/api.ts` default becomes `"/api"`; `src/test/handlers.ts` MSW paths gain the
-  prefix (`*/auth/register` becomes `*/api/auth/register`, and so on - msw matches full
-  paths).
+  `tests/test_smoke_e2e.py`, and `tests/helpers.py` (the shared register-and-team
+  helper calls the API directly).
+- New backend test `tests/test_api_prefix.py`: every route in `app.routes` must start with
+  `/api`, so a future router included without the prefix fails the suite instead of
+  hiding behind nginx.
+- Web: `src/app/api.ts` default becomes `"/api"`, and its doc comment plus
+  `src/env.d.ts` are reworded to describe the relative default (both currently document
+  `http://localhost:8000`); `vite.config.ts` gains the pinned vitest env (decision 8);
+  `src/test/handlers.ts` MSW paths gain the prefix (`*/auth/register` becomes
+  `*/api/auth/register`, and so on - fixture honesty, not a matching requirement, since
+  `*` matches any prefix).
 - E2e: `playwright.config.ts` readiness URL becomes `http://localhost:8001/api/health` and
   its web entry sets `VITE_API_BASE_URL="http://localhost:8001/api"`;
   `e2e/journey.spec.ts`'s direct API call gains the prefix. The page-URL assertions on
@@ -205,38 +276,54 @@ from the app settings (compose's `RAG_DATABASE_URL`) through explicit code, so
 `RAG_DATABASE_URL` cannot redirect a configured migration run" (`tests/test_alembic.py`) -
 stays intact and green.
 
+Like `scripts/e2e_db.py`, the script resolves `alembic.ini` and the `alembic/` directory
+relative to its own file rather than the working directory, so it runs from anywhere; in
+the container that is `/app` (the image `WORKDIR`), and the compose `command:` needs no
+`working_dir:` override. The script's exit status is what compose gates the app services
+on, so the failure path - a failing migration exits non-zero - is part of the contract.
+
 Compose properties: `restart: "no"`; depends on db healthy; the app services wait on
 `service_completed_successfully`. Idempotent by construction - alembic at head is a no-op,
 so every subsequent `up` re-runs the container cheaply and harmlessly. Failure is loud:
 compose reports the exited-with-error container and starts nothing downstream.
 
-New test: `backend/tests/test_migrate_script.py` - run the script's migration path against a
-scratch database derived from the configured test URL (the `tests/test_alembic.py`
-pattern) and assert the schema reaches head (the `alembic_version` table reports the head
-revision).
+New test: `backend/tests/test_migrate_script.py` - create a scratch database from the
+configured test URL (the `tests/test_alembic.py` pattern), run the script as a real
+subprocess (`python scripts/migrate.py`) with `RAG_DATABASE_URL` pointed at it, from a
+working directory outside `backend/`, and assert the schema reaches head (the
+`alembic_version` table reports the head revision). The subprocess covers the actual
+entry path - settings lookup, `alembic.ini` resolution, exit status - where an in-process
+call would test a function the container never runs.
 
 ## 7. Broker access from the compose network
 
 `deploy/rabbitmq.conf`:
 
 ```ini
-# The app services connect as guest from other containers; the broker's default
-# loopback restriction refuses that, so guest is explicitly allowed off-loopback.
+# The app services connect as guest from other containers. The image's bundled
+# 10-defaults.conf already allows guest off-loopback; this file pins that posture in
+# our tree so an image update cannot silently withdraw it.
 loopback_users.guest = false
 ```
 
-Mounted at `/etc/rabbitmq/rabbitmq.conf`, which the official image reads by default. This
-is a dev-stack credential posture, accepted deliberately (decision 7): one credential set
-serves the host suites and the containers alike, there is no user-provisioning step, and
-the production-secret discipline already lives in `config.py`'s validators.
+Mounted at `/etc/rabbitmq/rabbitmq.conf`, which the official image reads by default
+(merged with its bundled `/etc/rabbitmq/conf.d/`). The mount is not what unlocks
+container-to-broker guest auth - the image's own `10-defaults.conf` already sets
+`loopback_users.guest = false`, verified in the running container - it makes the posture
+an explicit property of this stack's tree instead of an inherited default (decision 7).
+This is a dev-stack credential posture, accepted deliberately: one credential set serves
+the host suites and the containers alike, there is no user-provisioning step, and the
+production-secret discipline already lives in `config.py`'s validators.
 
 ## 8. Testing strategy
 
 - **Backend**: all gates per AGENTS.md - `ruff check .`, `ruff format --check .`,
   `mypy app tests`, `pytest` - plus the new migrate-script test. The API-path updates are
   the only changes to existing tests.
-- **Web**: `npm run test` (vitest; the handlers carry the new paths), `npm run lint`,
-  `npm run format:check` (prettier pins LF through `.gitattributes`).
+- **Web**: `npm run test` (vitest; the handlers carry the new paths, and `vite.config.ts`
+  pins `VITE_API_BASE_URL` because Node's `Request` rejects the relative default -
+  decision 8), `npm run lint`, `npm run format:check` (prettier pins LF through
+  `.gitattributes`).
 - **E2e**: `npm run e2e`, unchanged in mechanism - it starts its own fixtures. It may now
   run while the compose system is up, because its ports (8001, 5173) no longer collide
   with anything the system uses (8000, 8080).
@@ -245,8 +332,11 @@ the production-secret discipline already lives in `config.py`'s validators.
   `http://localhost:8000/api/docs` directly; register and log in through the UI at
   `http://localhost:8080`; upload a real file and watch the run reach `ready` - exercising
   one-off-initialization, api, dispatcher, broker, worker, and Garage in one pass; then a
-  fresh-volume variant under a scratch project name proving the system boots from nothing
-  with zero manual steps; `docker compose down`.
+  second `up -d --build` after a one-line source change, which must skip the dependency
+  layer (section 4.1); then a fresh-volume variant under a scratch project name
+  (`docker compose -p rag-smoke up -d --build`), run with the main project `down`ed
+  because both publish the same host ports, proving the system boots from nothing with
+  zero manual steps; `docker compose down` of whichever stack is up at the end.
 - **Compose config sanity**: `docker compose -f deploy/docker-compose.yml config` parses
   and shows the expected service graph.
 
@@ -255,8 +345,11 @@ the production-secret discipline already lives in `config.py`'s validators.
 - New **"Run the whole system"** section: `docker compose -f deploy/docker-compose.yml
   up -d` starts everything; the UI is at `http://localhost:8080`, the API docs at
   `http://localhost:8000/api/docs`; `docker compose -f deploy/docker-compose.yml down`
-  stops it. After changing code, `up -d --build` recreates the affected services (layer
-  caching keeps rebuilds to seconds).
+  stops it. After changing code, `up -d --build` recreates the affected services (the
+  dependency layer is cached; the rebuild reinstalls only the project itself - section
+  4.1). The section also notes that the system is machine-global: one running system at
+  a time, owned by the checkout that started it - `down` before starting it from another
+  checkout or worktree, whose bind-mounted configs would otherwise dangle.
 - Removed: "Migrate the development database" (the one-off-initialization service owns
   schema setup), "Run the API", and "Run the ingestion workers" - the app tier never runs
   natively.
@@ -290,18 +383,24 @@ The compose file built here doubles as the deployment blueprint.
 ## 11. Risks and accepted costs
 
 - **Seeing a backend change in the running system requires an image rebuild**
-  (`up -d --build`, seconds with layer caching). Accepted by the compose-only decision;
-  pytest remains the fast feedback loop, and the system run is for whole-system behavior.
+  (`up -d --build`, seconds: the dependency layer is cached and only the project
+  reinstall reruns - section 4.1). Accepted by the compose-only decision; pytest remains
+  the fast feedback loop, and the system run is for whole-system behavior.
 - **Dev-mode containers (bind mounts, polling hot-reload) are deliberately absent.** They
   exist in the industry but cost complexity, and file watching does not propagate across
   Windows bind mounts anyway; the design round chose tests plus rebuild instead.
 - **guest-off-loopback is a dev posture.** Accepted for the local stack; production broker
   auth is future work (section 10).
-- **No Garage boot ordering.** The first upload right after `up` can race Garage's startup;
-  the lazy storage client turns it into a user-visible error, not a crash. Covered by
-  "wait for containers to be healthy" in the runbook.
+- **No Garage boot ordering.** The first upload right after `up` can race Garage's
+  readiness; the lazy storage client turns it into a user-visible error, not a crash.
+  The `/garage status` healthcheck (section 3) makes the runbook's "wait for healthy"
+  an observable wait, but the race itself stays accepted.
 - **Hub-pinned base images** (`python:3.14-slim`, `node:24-alpine`, `nginx:1-alpine`) mean
   image builds depend on Docker Hub availability. Accepted for a local stack.
+- **Image dependencies are resolved at build time, not locked.** There is no pip lock
+  file, so `pip install` in the image resolves the freshest versions within
+  `pyproject.toml`'s floors and can drift from the venv the suites run on. Accepted for a
+  local stack; both environments sit behind the same floors.
 - **The e2e fixtures still run the app tier natively** (uvicorn, a solo-pool worker, the
   dispatcher as Playwright `webServer`s). That is test tooling, not the system; moving it
   into containers is the CI-idea below.
