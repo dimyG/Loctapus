@@ -1,5 +1,10 @@
 name: rag
 
+# The single backend image behind the four app services (spec decision 3).
+x-backend: &backend
+  build: ../backend
+  image: rag-backend
+
 services:
   db:
     image: pgvector/pgvector:pg17
@@ -28,6 +33,7 @@ services:
       - "15672:15672"
     volumes:
       - rabbitmqdata:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -48,6 +54,91 @@ services:
       - garagemeta:/var/lib/garage/meta
       - garagedata:/var/lib/garage/data
       - ./garage.toml:/etc/garage.toml
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  one-off-initialization:
+    <<: *backend
+    command: ["python", "scripts/migrate.py"]
+    # Python registers no SIGTERM handler, and PID 1 ignores unhandled signals:
+    # a migration in flight during down would otherwise wait out the stop timeout.
+    init: true
+    restart: "no"
+    environment:
+      RAG_DATABASE_URL: postgresql+psycopg://rag:rag@db:5432/rag
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--forwarded-allow-ips=*"]
+    init: true
+    ports:
+      - "8000:8000"
+    environment:
+      RAG_DATABASE_URL: postgresql+psycopg://rag:rag@db:5432/rag
+      RAG_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      RAG_S3_ENDPOINT: http://garage:3900
+    depends_on:
+      db:
+        condition: service_healthy
+      one-off-initialization:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+      start_interval: 1s
+
+  worker:
+    <<: *backend
+    # --concurrency 2: each prefork child holds its own SQLAlchemy pool, and the
+    # default (one per CPU in the Docker VM) could crowd the 100-connection
+    # Postgres maximum this stack shares with the test suites.
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "ingestion,embed", "--concurrency", "2"]
+    init: true
+    environment:
+      RAG_DATABASE_URL: postgresql+psycopg://rag:rag@db:5432/rag
+      RAG_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      RAG_S3_ENDPOINT: http://garage:3900
+    depends_on:
+      db:
+        condition: service_healthy
+      one-off-initialization:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  dispatcher:
+    <<: *backend
+    command: ["python", "-m", "app.workers.dispatcher"]
+    init: true
+    environment:
+      RAG_DATABASE_URL: postgresql+psycopg://rag:rag@db:5432/rag
+      RAG_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      RAG_S3_ENDPOINT: http://garage:3900
+    depends_on:
+      db:
+        condition: service_healthy
+      one-off-initialization:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  web:
+    build: ../web
+    image: rag-web
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:
