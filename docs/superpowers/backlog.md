@@ -35,6 +35,24 @@ From the spec (`../specs/2026-10-16-docker-compose-full-stack-design.md`, its se
 - `e9c748c` - nginx carries no `proxy_read_timeout`/`proxy_send_timeout` overrides (60s
   defaults); fine while API requests are short, a watch item for slow synchronous endpoints.
 
+From the 2026-10-16 whole-branch review:
+
+- `ec55c32` - the route-prefix test's docs check misses `include_in_schema=False` routes,
+  `Mount`s, and WebSocket routes (none exist today); a note in its docstring, or walking the
+  included routers, would pin the blind spot.
+- `91c616c` - api/worker/dispatcher repeat the same three-variable environment block; an
+  `x-backend-env` anchor would keep new settings from drifting between them.
+- `91c616c` - the long-running app services carry no `restart:` policy (the infra services
+  predate this round without one too): a crashed worker or dispatcher leaves uploads queued
+  with no signal (neither has a healthcheck); `restart: unless-stopped` is the cheap fix.
+- `e16306f` - the README has no "wait for healthy" pointer (`docker compose ... ps`) before
+  the first upload, and no `logs one-off-initialization` pointer for diagnosing a failed
+  migration; both are one-liners.
+- `e9c748c` - a missing hashed asset answers `index.html` with 200 (the SPA-fallback trap);
+  `location /assets/ { try_files $uri =404; }` if it ever matters. The `rag-backend`/`rag-web`
+  image tags are project-global (two compose projects overwrite each other's tags) - covered
+  by the machine-global runbook note, recorded here for completeness.
+
 
 ## 2026-10-14 - S3 review fixes (`s3-upload-ingestion`)
 
