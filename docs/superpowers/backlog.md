@@ -20,6 +20,20 @@ From the spec (`../specs/2026-10-16-docker-compose-full-stack-design.md`, its se
   `src/test/handlers.ts` (the shared baseline) carries the real paths.
 - `e16306f` - the README intro ("backend ... for a RAG MVP") predates the full-stack
   round and undersells the repo (SPA + compose system); cosmetic rewording opportunity.
+- `ece6266` - a rendered database URL containing `%` (an escaped password) trips
+  ConfigParser interpolation in `set_main_option`; the same edge already exists in
+  `scripts/e2e_db.py` and `tests/test_alembic.py` (escape with
+  `database_url.replace("%", "%%")` when a real password needs it).
+- `ece6266` - the migrate script's unreachable-database test asserts only a non-zero exit;
+  asserting the connection-failure line in `stderr` would pin the actual failure mode (it
+  would also pass on an import-time crash today).
+- `e9c748c` - a bare `/api` (no trailing slash) falls through nginx's `location /api/` to
+  the SPA fallback; harmless while no route exists at exactly `/api`, revisit if one appears.
+- `e9c748c` - `index.html` is served with no `Cache-Control: no-cache`; nginx's
+  ETag/Last-Modified validators mostly cover it, but a redeploy can leave a browser on a
+  stale bundle.
+- `e9c748c` - nginx carries no `proxy_read_timeout`/`proxy_send_timeout` overrides (60s
+  defaults); fine while API requests are short, a watch item for slow synchronous endpoints.
 
 
 ## 2026-10-14 - S3 review fixes (`s3-upload-ingestion`)
@@ -30,9 +44,9 @@ keep their introducing commit links.
 
 Carried from the 2026-10-13 whole-branch review:
 
-- `70cc8f3` - garage compose service has no healthcheck (db has one); a fixed dev-only
-  `rpc_secret` is committed in `deploy/garage.toml` (required for boot, same fixed-dev
-  credential pattern as compose, must never reach a real deployment).
+- `70cc8f3` - a fixed dev-only `rpc_secret` is committed in `deploy/garage.toml` (required
+  for boot, same fixed-dev credential pattern as compose, must never reach a real
+  deployment). The garage healthcheck this note originally flagged was added by `91c616c`.
 - `4359933` - the pytest suite's warnings (Starlette/httpx deprecation, short test JWT
   HMAC keys) grew from 56 to 73 instances with the new test modules; a pristine-output
   cleanup pass (filterwarnings or test-secret length) is legitimate backlog work.
