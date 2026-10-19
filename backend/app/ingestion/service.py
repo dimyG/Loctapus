@@ -261,8 +261,8 @@ def _commit_document_set(
 ) -> None:
     """Commit the document, its chunks, the outbox event, and the indexing transition atomically.
 
-    Transient database errors propagate to the task; every other failure ends on the
-    run row.
+    Transient database errors propagate to the task (so that they can be retried).
+    Every other failure ends on the run row.
     """
 
     document = Document(
