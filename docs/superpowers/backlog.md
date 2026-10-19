@@ -71,11 +71,11 @@ Carried from the 2026-10-13 whole-branch review:
 - `785c59b` - stub parser: the unsupported-suffix `ParseError` branch and multi-page /
   blank-page PDF behavior are untested; factories live in `providers/__init__.py` so any
   `app.providers` import eagerly loads pypdf/python-docx (revisit when real providers
-  arrive in S5).
+  arrive in S6).
 - `0ae199e` - chunker: the hard-split windows' heading context and flush ordering are
   untested; the `stride < 1` ValueError guard is untested; negative `overlap_tokens`
   silently drops words; a heading `level <= 0` would corrupt the heading-stack slice
-  (unreachable with the stub parser; note for the S5 Unstructured swap).
+  (unreachable with the stub parser; note for the S6 Unstructured swap).
 - `02cf513` - storage: the key-format test mirrors the implementation's f-string shape;
   a mid-stream protocol drop can surface as a raw urllib3 exception past the
   `StorageUnavailableError` boundary in some botocore versions.
@@ -92,14 +92,14 @@ Carried from the 2026-10-13 whole-branch review:
   arriving between paragraphs would leave a stray `\n\n` separator in the joined chunk
   text, and one arriving alone would be emitted as an empty chunk. Unreachable today -
   the stub parser strips and skips empty text before elements reach the chunker - but
-  worth hardening when real Unstructured replaces the stub at S5.
+  worth hardening when real Unstructured replaces the stub at S6.
 
 New deferrals from the 2026-10-14 review fixes:
 
 - Upload body size is enforced only after Starlette spools the body; a Content-Length
   guard or a proxy limit is needed before any exposed deployment.
 - Prefork readiness: `task_reject_on_worker_lost` with a delivery limit for embed.
-- `worker_prefetch_multiplier=1` and separate worker processes per queue before S5's
+- `worker_prefetch_multiplier=1` and separate worker processes per queue before S6's
   network providers.
 - Embed re-delivery re-embeds every chunk (filter `embedding IS NULL` or skip
   non-`indexing` runs before paid providers).
@@ -112,13 +112,13 @@ New deferrals from the 2026-10-14 review fixes:
   object (no delete path in S3); fold the orphan sweep into the S7 stale-run sweep.
 - S4 retrieval notes: HNSW `ef_search` and `iterative_scan`, `embedding IS NOT NULL` in
   the vector leg, pin the `pgvector/pgvector` image tag.
-- S5: record `embedding_model` per vector; prefer a side-by-side column over an
+- S6: record `embedding_model` per vector; prefer a side-by-side column over an
   in-place dimension change.
 - S9: the listing must aggregate multi-item sources, and source-level sync failures
   need a home.
 - Same-name uploads differing only in case are distinct files.
 - The parser, service, and chunker all guard empty documents with different messages
-  (consolidate at S5).
+  (consolidate at S6).
 - Viewer upload 404 copy, a live region for status changes, and the stale-data snackbar
   parity with `ProjectsPage`.
 - The UI says "documents" for uploads while the backend's `documents` are parsed
@@ -126,7 +126,7 @@ New deferrals from the 2026-10-14 review fixes:
 - A two-session `SKIP LOCKED` dispatcher test, and closing each test's Celery app.
 - Time-ordered `uuid7` primary keys (house-wide).
 - Optional cheap checks: `jsonb_typeof(heading_path) = 'array'`; `NormalizedElement.type`
-  as a `Literal` before S5's Unstructured swap.
+  as a `Literal` before S6's Unstructured swap.
 - Compose ports bind every interface; the production validator ignores the `guest`
   broker URL.
 
@@ -158,7 +158,7 @@ New deferrals from the 2026-10-14 review fixes:
   and never seen on single runs. The root-redirect test additionally starved React transitions
   until it got a real 5s wait budget (`fd71039`); a 4-arg `findByRole` call had silently dropped
   the timeout option. Candidate fix: vitest `pool: "vmThreads"` per its environment hint.
-- 2026-10-12 - Changing the embedding model or dimension (S5 swaps the stub constant
+- 2026-10-12 - Changing the embedding model or dimension (S6 swaps the stub constant
   `STUB_EMBEDDING_DIM` for Voyage) invalidates every stored vector, so it needs
   re-embedding, not just a dimension migration: clear `chunks.embedding`, re-enqueue a
   `document_ready_for_embedding` outbox event per existing document, and let uploads
