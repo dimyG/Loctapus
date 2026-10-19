@@ -122,6 +122,18 @@ def test_ingestion_settings_defaults() -> None:
     assert s.max_upload_mb == 25
 
 
+def test_retrieval_settings_reject_nonpositive() -> None:
+    """The retrieval tuning knobs must stay positive and default to the spec values."""
+
+    with pytest.raises(ValidationError):
+        SettingsForTests(retrieval_candidates_per_retriever=0)
+    with pytest.raises(ValidationError):
+        SettingsForTests(rrf_k=0)
+    s = SettingsForTests()
+    assert s.retrieval_candidates_per_retriever == 50
+    assert s.rrf_k == 60
+
+
 def test_broker_url_env_override(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """RAG_BROKER_URL selects the pytest vhost."""
 

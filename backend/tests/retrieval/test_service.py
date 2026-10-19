@@ -1,0 +1,245 @@
+"""Tests for the retrieval service, against the real Postgres."""
+
+from uuid import uuid4
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.config import Settings
+from app.identity.models import User
+from app.providers.stub_embeddings import StubEmbeddingProvider
+from app.retrieval.models import QueryLog
+from app.retrieval.schemas import RetrieveIn
+from app.retrieval.service import RetrievedChunk, _search_fts_leg, _search_vector_leg, retrieve
+from tests.factories import seed_document_with_chunks, seed_project
+
+
+def _seed_user(*, db: Session) -> User:
+    """Seed one bare user row so the query log's foreign key resolves."""
+
+    user = User(email=f"{uuid4()}@example.com", password_hash="x")
+    db.add(user)
+    db.flush()
+    return user
+
+
+def test_vector_leg_orders_by_cosine_distance(*, db_session: Session) -> None:
+    """Check the vector leg returns chunks by ascending cosine distance."""
+
+    project_id = seed_project(db=db_session, email="vector@example.com")
+    seeded = seed_document_with_chunks(
+        db=db_session,
+        project_id=project_id,
+        chunk_texts=["alpha alpha bravo", "alpha", "charlie"],
+    )
+    query_vector = StubEmbeddingProvider().embed_query(text="alpha bravo")
+    rows = _search_vector_leg(db=db_session, project_id=project_id, query_vector=query_vector, limit=50)
+    assert [row.chunk_id for row in rows] == seeded.chunk_ids
+
+
+def test_fts_leg_orders_by_ts_rank(*, db_session: Session) -> None:
+    """Check the fts leg ranks a repeated lexeme above a single one."""
+
+    project_id = seed_project(db=db_session, email="fts@example.com")
+    seeded = seed_document_with_chunks(
+        db=db_session,
+        project_id=project_id,
+        chunk_texts=["quick quick quick", "quick brown"],
+    )
+    rows = _search_fts_leg(db=db_session, project_id=project_id, query="quick", limit=50)
+    # websearch_to_tsquery ANDs its terms, and ts_rank weighs lexeme frequency, not length.
+    assert [row.chunk_id for row in rows] == [seeded.chunk_ids[0], seeded.chunk_ids[1]]
+    assert rows[0].score > rows[1].score
+    assert rows[0].score > 0
+
+
+def test_fts_leg_excludes_null_embeddings(*, db_session: Session) -> None:
+    """Check a document still being embedded surfaces through neither leg."""
+
+    project_id = seed_project(db=db_session, email="null-embed@example.com")
+    seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["quick fox"], embed=False)
+    fts = _search_fts_leg(db=db_session, project_id=project_id, query="quick fox", limit=50)
+    vector = _search_vector_leg(
+        db=db_session,
+        project_id=project_id,
+        query_vector=StubEmbeddingProvider().embed_query(text="quick fox"),
+        limit=50,
+    )
+    assert fts == []
+    assert vector == []
+
+
+def test_stopword_only_query_uses_vector_leg_only(*, db_session: Session, settings: Settings) -> None:
+    """Check an all-stopword query degrades to the vector leg and still answers."""
+
+    project_id = seed_project(db=db_session, email="stopword@example.com")
+    seeded = seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["the the"])
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="the"),
+        settings=settings,
+    )
+    assert [chunk.id for chunk in result] == seeded.chunk_ids
+    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    assert log.stages["fts"] == []
+
+
+def test_malformed_websearch_syntax_is_tolerated(*, db_session: Session, settings: Settings) -> None:
+    """Check stray quotes and operators parse instead of raising."""
+
+    project_id = seed_project(db=db_session, email="malformed@example.com")
+    seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query='alpha " or OR'),
+        settings=settings,
+    )
+    assert isinstance(result, list)
+
+
+def test_legs_are_scoped_to_the_project(*, db_session: Session, settings: Settings) -> None:
+    """Check another project's chunks never surface in either leg."""
+
+    project_a = seed_project(db=db_session, email="scope-a@example.com")
+    project_b = seed_project(db=db_session, email="scope-b@example.com")
+    seed_document_with_chunks(db=db_session, project_id=project_b, chunk_texts=["alpha"])
+    user = _seed_user(db=db_session)
+    fts = _search_fts_leg(db=db_session, project_id=project_a, query="alpha", limit=50)
+    vector = _search_vector_leg(
+        db=db_session,
+        project_id=project_a,
+        query_vector=StubEmbeddingProvider().embed_query(text="alpha"),
+        limit=50,
+    )
+    result = retrieve(
+        db=db_session,
+        project_id=project_a,
+        user_id=user.id,
+        params=RetrieveIn(query="alpha"),
+        settings=settings,
+    )
+    assert fts == []
+    assert vector == []
+    assert result == []
+
+
+def test_retrieve_applies_max_chunks_per_document(*, db_session: Session, settings: Settings) -> None:
+    """Check the walk skips same-document chunks past the cap and resumes others."""
+
+    project_id = seed_project(db=db_session, email="cap@example.com")
+    doc_a = seed_document_with_chunks(
+        db=db_session,
+        project_id=project_id,
+        chunk_texts=["alpha", "alpha alpha", "alpha alpha alpha"],
+        filename="a.pdf",
+    )
+    doc_b = seed_document_with_chunks(
+        db=db_session, project_id=project_id, chunk_texts=["alpha bravo"], filename="b.pdf"
+    )
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="alpha", top_k=2, max_chunks_per_document=1),
+        settings=settings,
+    )
+    assert [chunk.document_id for chunk in result] == [doc_a.document_id, doc_b.document_id]
+
+
+def test_retrieve_writes_one_query_log_row(*, db_session: Session, settings: Settings) -> None:
+    """Check one retrieve writes exactly one log row echoing the request and stages."""
+
+    project_id = seed_project(db=db_session, email="log@example.com")
+    seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="  alpha  "),
+        settings=settings,
+    )
+    logs = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).all()
+    assert len(logs) == 1
+    log = logs[0]
+    assert log.query == "alpha"
+    assert log.user_id == user.id
+    assert log.params["top_k"] == 10
+    assert log.params["rerank"] is False
+    assert log.params["max_chunks_per_document"] is None
+    assert log.params["settings"]["rrf_k"] == 60
+    assert log.params["settings"]["candidates_per_retriever"] == 50
+    assert log.params["settings"]["embedding_provider"] == "stub"
+    assert set(log.stages) == {"vector", "fts", "fused", "final"}
+    assert log.stages["final"] == [str(chunk.id) for chunk in result]
+    assert log.latency_ms >= 0
+
+
+def test_retrieve_enriches_filename_and_source_item(*, db_session: Session, settings: Settings) -> None:
+    """Check the final rows carry their document's item id and filename."""
+
+    project_id = seed_project(db=db_session, email="enrich@example.com")
+    seeded = seed_document_with_chunks(
+        db=db_session,
+        project_id=project_id,
+        chunk_texts=["alpha alpha"],
+        filename="report.pdf",
+    )
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="alpha"),
+        settings=settings,
+    )
+    assert len(result) == 1
+    chunk = result[0]
+    assert chunk.source_item_id == seeded.source_item_id
+    assert chunk.filename == "report.pdf"
+    assert chunk.position == 0
+    assert chunk.text == "alpha alpha"
+    assert chunk.chunk_type == "text"
+    assert chunk.heading_path == []
+
+
+def test_retrieve_empty_project_returns_empty_and_logs(*, db_session: Session, settings: Settings) -> None:
+    """Check a project with no indexed chunks answers empty and still logs."""
+
+    project_id = seed_project(db=db_session, email="empty@example.com")
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="alpha"),
+        settings=settings,
+    )
+    assert result == []
+    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    assert log.stages["final"] == []
+
+
+def test_retrieve_result_rows_are_retrieved_chunks(*, db_session: Session, settings: Settings) -> None:
+    """Check the service returns domain rows, not response schemas."""
+
+    project_id = seed_project(db=db_session, email="rows@example.com")
+    seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="alpha"),
+        settings=settings,
+    )
+    assert result
+    assert isinstance(result[0], RetrievedChunk)
+    assert isinstance(result[0].score, float)
