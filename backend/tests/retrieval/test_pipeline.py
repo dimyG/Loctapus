@@ -65,6 +65,25 @@ def test_fuse_orders_by_score_then_best_rank_then_id() -> None:
     assert [row.chunk_id for row in fused] == [low, high]
 
 
+def test_fuse_orders_equal_scores_by_best_rank() -> None:
+    """Check equal fused scores fall back to the best single-leg rank before the id."""
+
+    # Ranks (3, 24) and (12, 12) fuse to bit-identical 1/36, so only best_rank
+    # separates the two chunks; the larger id must not win the tie.
+    x_id = UUID(int=20)
+    y_id = UUID(int=10)
+    doc = uuid4()
+    vector = [StageCandidate(chunk_id=uuid4(), document_id=doc, score=0.0) for _ in range(24)]
+    fts = [StageCandidate(chunk_id=uuid4(), document_id=doc, score=0.0) for _ in range(24)]
+    vector[2] = StageCandidate(chunk_id=x_id, document_id=doc, score=0.0)
+    vector[11] = StageCandidate(chunk_id=y_id, document_id=doc, score=0.0)
+    fts[11] = StageCandidate(chunk_id=y_id, document_id=doc, score=0.0)
+    fts[23] = StageCandidate(chunk_id=x_id, document_id=doc, score=0.0)
+    fused = fuse_rrf(vector=vector, fts=fts, rrf_k=RRF_K)
+    assert fused[0].score == fused[1].score
+    assert [row.chunk_id for row in fused[:2]] == [x_id, y_id]
+
+
 def test_fuse_handles_empty_leg() -> None:
     """Check one empty leg still fuses the other leg's candidates in rank order."""
 

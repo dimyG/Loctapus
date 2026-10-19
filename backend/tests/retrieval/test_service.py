@@ -47,7 +47,7 @@ def test_fts_leg_orders_by_ts_rank(*, db_session: Session) -> None:
         chunk_texts=["quick quick quick", "quick brown"],
     )
     rows = _search_fts_leg(db=db_session, project_id=project_id, query="quick", limit=50)
-    # websearch_to_tsquery ANDs its terms, and ts_rank weighs lexeme frequency, not length.
+    # Default ts_rank weighs lexeme frequency, not document length or coverage.
     assert [row.chunk_id for row in rows] == [seeded.chunk_ids[0], seeded.chunk_ids[1]]
     assert rows[0].score > rows[1].score
     assert rows[0].score > 0
@@ -157,7 +157,9 @@ def test_retrieve_writes_one_query_log_row(*, db_session: Session, settings: Set
     """Check one retrieve writes exactly one log row echoing the request and stages."""
 
     project_id = seed_project(db=db_session, email="log@example.com")
-    seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
+    seed_document_with_chunks(
+        db=db_session, project_id=project_id, chunk_texts=["alpha alpha", "alpha bravo"]
+    )
     user = _seed_user(db=db_session)
     result = retrieve(
         db=db_session,
@@ -178,6 +180,16 @@ def test_retrieve_writes_one_query_log_row(*, db_session: Session, settings: Set
     assert log.params["settings"]["candidates_per_retriever"] == 50
     assert log.params["settings"]["embedding_provider"] == "stub"
     assert set(log.stages) == {"vector", "fts", "fused", "final"}
+    # The stages keep their leg orderings: ascending cosine distance, descending rank.
+    vector_scores = [entry["score"] for entry in log.stages["vector"]]
+    assert vector_scores == sorted(vector_scores)
+    fts_scores = [entry["score"] for entry in log.stages["fts"]]
+    assert fts_scores == sorted(fts_scores, reverse=True)
+    fused_scores = [entry["score"] for entry in log.stages["fused"]]
+    assert fused_scores == sorted(fused_scores, reverse=True)
+    # The walk is a prefix of the fused order, so the final ids are its head.
+    fused_ids = [entry["chunk_id"] for entry in log.stages["fused"]]
+    assert log.stages["final"] == fused_ids[:10]
     assert log.stages["final"] == [str(chunk.id) for chunk in result]
     assert log.latency_ms >= 0
 

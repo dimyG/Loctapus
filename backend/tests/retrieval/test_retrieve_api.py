@@ -119,6 +119,17 @@ def test_retrieve_empty_project_returns_empty_list(*, client: TestClient, db_ses
     assert log.stages["final"] == []
 
 
+def test_error_paths_log_nothing(*, client: TestClient, db_session: Session) -> None:
+    """Check the 401, 404, and 422 paths never write a query log row."""
+
+    alice_headers, project_id = _create_project(client=client, email="alice-logs@example.com")
+    stranger_headers = _auth(client=client, email="stranger-logs@example.com")
+    client.post(f"/api/projects/{project_id}/retrieve", json={"query": "alpha"})
+    client.post(f"/api/projects/{project_id}/retrieve", json={"query": "alpha"}, headers=stranger_headers)
+    client.post(f"/api/projects/{project_id}/retrieve", json={"query": "   "}, headers=alice_headers)
+    assert db_session.scalars(select(QueryLog)).all() == []
+
+
 def test_retrieve_response_shape(*, client: TestClient, db_session: Session) -> None:
     """Check the response items carry exactly the served fields."""
 
