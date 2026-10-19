@@ -110,10 +110,16 @@ New deferrals from the 2026-10-14 review fixes:
 - Outbox attempts cap, dead-lettering, and published-row retention (S7).
 - A crash between the Garage PUT and the write transaction's commit orphans the stored
   object (no delete path in S3); fold the orphan sweep into the S7 stale-run sweep.
-- S4 retrieval notes: HNSW `ef_search` and `iterative_scan` tuning stays deferred. The
-  other two notes landed with S4: `embedding IS NOT NULL` filters both retrieval legs
-  (`f13e0c2`), and the `pgvector/pgvector` image tag is pinned to `0.8.7-pg17`
-  (`5190196`).
+- S4 retrieval notes: HNSW `ef_search` and `iterative_scan` tuning stays deferred (ruled
+  again at the 2026-10-19 S4 review). The ceiling is structural, not just tuning: the HNSW
+  scan returns at most `hnsw.ef_search` rows (default 40) *before* the `project_id` filter,
+  so the vector leg can never fill its `retrieval_candidates_per_retriever=50` budget at
+  scale, and a small tenant whose chunks miss the global top 40 gets an empty vector leg
+  with no error - an isolation-sensitive cap. Fix with `SET LOCAL hnsw.ef_search =
+  <candidates>` plus `SET LOCAL hnsw.iterative_scan = strict_order` in the leg (about two
+  lines, now possible since the image is pinned). The other two notes landed with S4:
+  `embedding IS NOT NULL` filters both retrieval legs (`f13e0c2`), and the
+  `pgvector/pgvector` image tag is pinned to `0.8.7-pg17` (`5190196`).
 - S6: record `embedding_model` per vector; prefer a side-by-side column over an
   in-place dimension change.
 - S9: the listing must aggregate multi-item sources, and source-level sync failures
