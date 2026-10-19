@@ -64,6 +64,7 @@ def test_retrieve_works_for_public_project_non_member(*, client: TestClient, db_
     [
         {"query": "   "},
         {"query": "x" * 2001},
+        {"query": "\u0000x"},
         {"query": "x", "top_k": 0},
         {"query": "x", "top_k": 51},
         {"query": "x", "max_chunks_per_document": 0},
@@ -157,6 +158,18 @@ def test_retrieve_response_shape(*, client: TestClient, db_session: Session) -> 
     assert item["chunk_type"] == "text"
     assert item["text"] == "alpha alpha"
     assert isinstance(item["score"], float)
+
+
+def test_length_limit_applies_after_strip(*, client: TestClient) -> None:
+    """Check the character cap counts the stripped query, not the padded one."""
+
+    headers, project_id = _create_project(client=client, email="strip-len@example.com")
+    response = client.post(
+        f"/api/projects/{project_id}/retrieve",
+        json={"query": "x" * 1999 + "  "},
+        headers=headers,
+    )
+    assert response.status_code == 200
 
 
 def test_top_k_defaults_and_limits(*, client: TestClient, db_session: Session) -> None:

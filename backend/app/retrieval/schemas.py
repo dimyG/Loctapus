@@ -1,9 +1,9 @@
 """Request and response schemas for retrieval."""
 
-from typing import Final
+from typing import Annotated, Final
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 MAX_QUERY_CHARS: Final = 2000
 
@@ -11,7 +11,9 @@ MAX_QUERY_CHARS: Final = 2000
 class RetrieveIn(BaseModel):
     """One retrieval request body."""
 
-    query: str = Field(min_length=1, max_length=MAX_QUERY_CHARS)
+    # Stripping runs in the core schema before the length bounds, so the cap counts
+    # the stripped query and whitespace-only queries fail on min_length directly.
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_QUERY_CHARS)]
     top_k: int = Field(default=10, ge=1, le=50)
     # Accepted and ignored until the S6 reranker lands; logged so history stays honest.
     rerank: bool = False
@@ -21,13 +23,12 @@ class RetrieveIn(BaseModel):
     # Pydantic calls validators with a positional value; keyword-only would be rejected.
     @field_validator("query")
     @classmethod
-    def _strip_query(cls, value: str) -> str:  # noqa: PLR0917
-        """Strip surrounding whitespace and reject queries that strip to empty."""
+    def _reject_nul(cls, value: str) -> str:  # noqa: PLR0917
+        """Reject NUL bytes, which Postgres text parameters cannot carry."""
 
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("query must not be empty")
-        return stripped
+        if "\x00" in value:
+            raise ValueError("query must not contain NUL bytes")
+        return value
 
 
 class RetrievedChunkOut(BaseModel):
