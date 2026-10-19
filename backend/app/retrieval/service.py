@@ -5,6 +5,7 @@ SQL query and the per-query log row. ``latency_ms`` measures embed through selec
 excluding the log row's own insert.
 """
 
+import math
 import time
 from dataclasses import dataclass
 from uuid import UUID
@@ -39,7 +40,11 @@ class RetrievedChunk:
 def _search_vector_leg(
     *, db: Session, project_id: UUID, query_vector: list[float], limit: int
 ) -> list[StageCandidate]:
-    """Return the project's indexed chunks nearest to the query vector by cosine."""
+    """Return the project's indexed chunks nearest to the query vector by cosine.
+
+    NaN distances come from zero-norm chunk embeddings: cosine distance is
+    undefined there, so those rows drop instead of ranking or logging as NaN.
+    """
 
     distance = Chunk.embedding.cosine_distance(query_vector)
     rows = (
@@ -52,6 +57,7 @@ def _search_vector_leg(
     return [
         StageCandidate(chunk_id=id_, document_id=document_id, score=float(score))
         for id_, document_id, score in rows
+        if not math.isnan(float(score))
     ]
 
 
@@ -148,6 +154,12 @@ def _log_query(
     db.commit()
 
 
+def _is_zero_vector(*, vector: list[float]) -> bool:
+    """Return True when every component is zero, so cosine distance is undefined."""
+
+    return not any(vector)
+
+
 def retrieve(
     *,
     db: Session,
@@ -166,7 +178,12 @@ def retrieve(
     provider = get_embedding_provider(settings=settings)
     query_vector = provider.embed_query(text=params.query)
     candidates = settings.retrieval_candidates_per_retriever
-    vector = _search_vector_leg(db=db, project_id=project_id, query_vector=query_vector, limit=candidates)
+    # A zero-norm query vector ranks nothing (every distance is NaN); fts still serves.
+    vector = (
+        []
+        if _is_zero_vector(vector=query_vector)
+        else _search_vector_leg(db=db, project_id=project_id, query_vector=query_vector, limit=candidates)
+    )
     fts = _search_fts_leg(db=db, project_id=project_id, query=params.query, limit=candidates)
     fused = fuse_rrf(vector=vector, fts=fts, rrf_k=settings.rrf_k)
     final = select_final(

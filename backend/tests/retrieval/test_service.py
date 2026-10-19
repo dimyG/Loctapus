@@ -227,6 +227,45 @@ def test_retrieve_empty_project_returns_empty_and_logs(*, db_session: Session, s
     assert log.stages["final"] == []
 
 
+def test_zero_norm_query_degrades_to_fts_only(*, db_session: Session, settings: Settings) -> None:
+    """Check a zero-norm query vector skips the vector leg and still serves via fts."""
+
+    project_id = seed_project(db=db_session, email="zero-query@example.com")
+    seeded = seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["w25 w35 note"])
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        # The stub hash-bag cancels "w25 w35" to the zero vector (verified).
+        params=RetrieveIn(query="w25 w35"),
+        settings=settings,
+    )
+    assert [chunk.id for chunk in result] == seeded.chunk_ids
+    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    assert log.stages["vector"] == []
+    assert log.stages["fts"]
+
+
+def test_zero_norm_embedding_chunk_is_excluded(*, db_session: Session, settings: Settings) -> None:
+    """Check a stored zero-norm chunk embedding never surfaces as a NaN score."""
+
+    project_id = seed_project(db=db_session, email="zero-chunk@example.com")
+    seeded = seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["w25 w35"])
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="w25"),
+        settings=settings,
+    )
+    # The vector leg drops the NaN distance row; fts still serves the chunk.
+    assert [chunk.id for chunk in result] == seeded.chunk_ids
+    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    assert log.stages["vector"] == []
+
+
 def test_retrieve_result_rows_are_retrieved_chunks(*, db_session: Session, settings: Settings) -> None:
     """Check the service returns domain rows, not response schemas."""
 
