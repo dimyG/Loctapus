@@ -15,6 +15,7 @@ from app.identity.router import router as identity_router
 from app.ingestion.schema_guard import run_startup_checks
 from app.projects.router import router as projects_router
 from app.providers import get_embedding_provider
+from app.retrieval.router import router as retrieval_router
 from app.sources.router import router as sources_router
 
 
@@ -43,6 +44,7 @@ app = FastAPI(
 app.include_router(identity_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
 app.include_router(sources_router, prefix="/api")
+app.include_router(retrieval_router, prefix="/api")
 
 # SPA origins are explicit (no wildcard) so browsers reject cross-site reads from
 # unknown hosts; auth is a Bearer header, so cookies never cross origins.
