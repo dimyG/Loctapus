@@ -3,7 +3,7 @@
 Date: 2026-10-12
 Status: Implemented on master (S3); amended by the 2026-10-14 review fixes.
 Source of truth: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD") and
-`2026-10-06-rag-mvp-slices-design.md` (the "slices spec"). Where those disagree with this
+`2026-10-06-roadmap.md` (the "slices spec"). Where those disagree with this
 document on S3 topics, this document wins; where this document is silent, they govern.
 
 ## 1. Context
@@ -727,7 +727,7 @@ separate gate, never in the default run.
   remains a separate docs task; S3 adds only what it introduces.
 - Slices-spec sync (second round): the S3 roadmap row and the preview section flipped
   to Garage with the first review round (`8f6ad96`), so this slice touches no other
-  `2026-10-06-rag-mvp-slices-design.md` text. The slices spec's one remaining MinIO
+  `2026-10-06-roadmap.md` text. The slices spec's one remaining MinIO
   mention (its section 7 next-step line) flips with the slice-completion status update
   below, and its S7 row keeps "Celery Beat sync polling" as an open option, because
   decision 3 no longer decides S7's scheduler (S7's round picks between extending the

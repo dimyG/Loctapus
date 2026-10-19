@@ -820,7 +820,7 @@ git commit -m "test(e2e): prove the full pipeline through the browser"
 ### Task 13: Runbook, spec statuses, and final verification
 
 **Files:**
-- Modify: `README.md`, `docs/superpowers/specs/2026-10-06-rag-mvp-slices-design.md`, `docs/superpowers/specs/2026-10-12-s3-upload-ingestion-design.md`, `docs/superpowers/backlog.md`
+- Modify: `README.md`, `../specs/2026-10-06-roadmap.md`, `docs/superpowers/specs/2026-10-12-s3-upload-ingestion-design.md`, `docs/superpowers/backlog.md`
 
 **Interfaces:**
 - Consumes: a green Task 12.

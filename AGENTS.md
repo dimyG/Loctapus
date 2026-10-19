@@ -21,6 +21,7 @@ Use Claude Opus 5.5 only for fresh context reviews. Use Kimi K3 as an alternativ
 
 ## Generic 
 - In every detailed plan you create, add a DAG of the tasks so that unrelated tasks could be done in parallel if necessary
+- When a specification has been implemented it should freeze. The source of truth is the roadmap specification
 
 ## Comments
 

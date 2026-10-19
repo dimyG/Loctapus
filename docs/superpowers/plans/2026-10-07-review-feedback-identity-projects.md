@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI, sync SQLAlchemy 2.0, Alembic, PyJWT, pwdlib[argon2], pytest against real Postgres (docker-compose `rag_test`).
 
-**Spec:** `docs/superpowers/specs/2026-10-06-rag-mvp-slices-design.md` (updated by Task 7 to match this plan).
+**Spec:** `../specs/2026-10-06-roadmap.md` (updated by Task 7 to match this plan).
 
 ## Global Constraints
 
@@ -495,7 +495,7 @@ git commit -m "feat(projects): Project.is_public visibility, GET /projects/publi
 ### Task 7: Sync the design spec with the revised model
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-10-06-rag-mvp-slices-design.md`
+- Modify: `../specs/2026-10-06-roadmap.md`
 
 **Interfaces:**
 - Consumes: all code decisions from Tasks 1-6.
@@ -523,6 +523,6 @@ Expected: only the three sections above changed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-10-06-rag-mvp-slices-design.md
+git add docs/superpowers/specs/2026-10-06-roadmap.md
 git commit -m "docs: sync S1 design spec with revised identity/projects model"
 ```

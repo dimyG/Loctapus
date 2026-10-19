@@ -102,5 +102,5 @@ committed content with CRLF working copies.
 
 ## Further reading
 
-- Slice design: `docs/superpowers/specs/2026-10-06-rag-mvp-slices-design.md`
+- Slice design: `docs/superpowers/specs/2026-10-06-roadmap.md`
 - Follow-ups and deferred findings: `docs/superpowers/backlog.md`
