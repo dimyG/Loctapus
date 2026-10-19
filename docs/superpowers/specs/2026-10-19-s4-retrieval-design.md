@@ -49,11 +49,13 @@ notes: pin the `pgvector/pgvector` image tag (resolved here, decision 11), and H
    would fill the result with useless rows whenever a project has fewer indexed chunks than the
    limit (embeddings still in flight) - and it lets the planner use the HNSW index scan.
 5. **FTS leg.** `search_vector @@ websearch_to_tsquery('english', :q)`, `ORDER BY
-   ts_rank(search_vector, websearch_to_tsquery('english', :q)) DESC, id`, same project filter,
-   `LIMIT :candidates`. `websearch_to_tsquery` matches the computed
-   `to_tsvector('english', text)` config, tolerates arbitrary user input (quoted phrases, `OR`,
-   `-negation`), and an all-stopword query yields an empty tsquery and zero candidates - the
-   vector leg still works, so the endpoint degrades gracefully.
+   ts_rank(search_vector, websearch_to_tsquery('english', :q)) DESC, id`, same project filter **plus
+   `embedding IS NOT NULL`** - both legs see the same fully-indexed candidate universe, so a
+   half-embedded document never surfaces through only one leg - `LIMIT :candidates`.
+   `websearch_to_tsquery` matches the computed `to_tsvector('english', text)` config, tolerates
+   arbitrary user input (quoted phrases, `OR`, `-negation`), and an all-stopword query yields an
+   empty tsquery and zero candidates - the vector leg still works, so the endpoint degrades
+   gracefully.
 6. **RRF fusion.** `score(chunk) = sum(1 / (rrf_k + rank_leg))` over the legs that returned it,
    1-based ranks, `rrf_k = 60` (setting, decision 9). Fused order: score desc, then the chunk's
    best (lowest) single-leg rank, then `id` - fully deterministic.
@@ -241,7 +243,7 @@ backend/
   capped documents, under-fills short, `null` cap never skips.
 - **Service, real Postgres, rollback fixture** (`test_service.py`): seeded chunks with stub
   embeddings; known-token query returns the expected chunk via the vector leg, keyword query
-  via FTS; `embedding IS NULL` rows excluded from the vector leg; another project's chunks never
+  via FTS; `embedding IS NULL` rows excluded from both legs; another project's chunks never
   return; `max_chunks_per_document` respected; `query_logs` row written once per query with
   params, ordered stages, and a positive `latency_ms`.
 - **API** (`test_retrieve_api.py`): 401; 404 for an invisible project; public project queryable
