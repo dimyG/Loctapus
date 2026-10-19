@@ -110,8 +110,10 @@ New deferrals from the 2026-10-14 review fixes:
 - Outbox attempts cap, dead-lettering, and published-row retention (S7).
 - A crash between the Garage PUT and the write transaction's commit orphans the stored
   object (no delete path in S3); fold the orphan sweep into the S7 stale-run sweep.
-- S4 retrieval notes: HNSW `ef_search` and `iterative_scan`, `embedding IS NOT NULL` in
-  the vector leg, pin the `pgvector/pgvector` image tag.
+- S4 retrieval notes: HNSW `ef_search` and `iterative_scan` tuning stays deferred. The
+  other two notes landed with S4: `embedding IS NOT NULL` filters both retrieval legs
+  (`f13e0c2`), and the `pgvector/pgvector` image tag is pinned to `0.8.7-pg17`
+  (`5190196`).
 - S6: record `embedding_model` per vector; prefer a side-by-side column over an
   in-place dimension change.
 - S9: the listing must aggregate multi-item sources, and source-level sync failures
