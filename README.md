@@ -1,9 +1,9 @@
 # RAG MVP
 
 FastAPI + SQLAlchemy 2.0 + pgvector backend for a RAG MVP, sliced into incremental
-deliverables. Identity (users, workspaces, teams), projects, and the upload+ingestion
-pipeline (upload -> parse -> chunk -> embed) are done; retrieval builds on top in later
-slices.
+deliverables. Identity (users, workspaces, teams), projects, the upload+ingestion
+pipeline (upload -> parse -> chunk -> embed), and retrieval (vector + full-text search
+fused with RRF) are done; asking grounded questions over them lands with the chat slice.
 
 ## Prerequisites
 
@@ -44,7 +44,9 @@ default key and bucket on first start.
 The UI is at `http://localhost:8080` and the API docs at
 `http://localhost:8000/api/docs`. Uploads POST to `/api/projects/{project_id}/uploads`
 and land as a queued ingestion run; the `GET` listing on the same path derives each
-row's status from its latest run.
+row's status from its latest run. Retrieval POSTs to
+`/api/projects/{project_id}/retrieve` with `{"query": "...", "top_k": 10}` and answers
+with fused, diversity-selected chunks from the project's indexed documents.
 
 ```powershell
 docker compose -f deploy/docker-compose.yml down

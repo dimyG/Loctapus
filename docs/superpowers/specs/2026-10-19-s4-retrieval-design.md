@@ -1,7 +1,8 @@
 # S4 - Retrieval (stub providers) - Design
 
 Date: 2026-10-19
-Status: Approved design (2026-10-19 round); implementation pending.
+Status: Approved design (2026-10-19 round); implemented on the `feat/s4-retrieval` branch
+(`../plans/2026-10-19-s4-retrieval.md`, merge pending). Frozen: decisions below are as built.
 Source of truth: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD") and
 `2026-10-06-roadmap.md` (the "slices spec"). Where those disagree with this document on S4
 topics, this document wins; where this document is silent, they govern.
