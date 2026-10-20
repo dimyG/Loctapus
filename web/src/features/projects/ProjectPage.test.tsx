@@ -84,6 +84,22 @@ async function advance(ms: number) {
 }
 
 /**
+ * Waits for the uploads flip, then clicks Documents so the pin sticks.
+ *
+ * At first render the uploads are still loading, so Documents is already the
+ * active tab; MUI fires a Tab's onChange only when the clicked tab is not
+ * already selected, so a click landing before the response pins nothing. The
+ * Ask flip proves the ready upload arrived, mirroring the e2e journey's ruled
+ * sequence: flip first, then pin.
+ */
+async function openDocuments(user: ReturnType<typeof userEvent.setup>) {
+  await waitFor(() => {
+    expect(screen.getByRole("tab", { name: "Ask" })).toHaveAttribute("aria-selected", "true");
+  });
+  await user.click(screen.getByRole("tab", { name: "Documents" }));
+}
+
+/**
  * jsdom and Node's fetch (undici) disagree on Blob realms: undici cannot read
  * a jsdom File's bytes and its multipart parser rejects them, so file uploads
  * would never round-trip. Swapping File and FormData to the Node (undici)
@@ -123,7 +139,7 @@ describe("ProjectPage", () => {
   it("renders the header, back link, upload card, and status chips", async () => {
     renderProject();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     expect(await screen.findByRole("heading", { name: "Default" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to projects" })).toHaveAttribute(
       "href",
@@ -170,11 +186,8 @@ describe("ProjectPage", () => {
   it("pins the choice when a tab is clicked", async () => {
     renderProject();
     const user = userEvent.setup();
-    await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Ask" })).toHaveAttribute("aria-selected", "true");
-    });
+    await openDocuments(user);
     // Pinning survives hasReadyUpload staying true.
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
     expect(screen.getByRole("tab", { name: "Documents" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("cell", { name: "brief.pdf" })).toBeVisible();
   });
@@ -237,7 +250,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("report.pdf"));
     await vi.waitFor(() => {
       expect(posts).toHaveLength(1);
@@ -263,7 +276,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("pending.pdf"));
     await vi.waitFor(() => {
       expect(resolveRequest).toBeDefined();
@@ -293,7 +306,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup({ applyAccept: false });
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     await user.upload(
       await screen.findByLabelText("Upload"),
       new File(["plain text"], "notes.txt", { type: "text/plain" }),
@@ -314,7 +327,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup({ applyAccept: false });
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     await user.upload(
       await screen.findByLabelText("Upload"),
       new File([new ArrayBuffer(25 * 1024 * 1024 + 1)], "big.pdf", { type: "application/pdf" }),
@@ -335,7 +348,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     await user.upload(
       await screen.findByLabelText("Upload"),
       new File([], "empty.pdf", { type: "application/pdf" }),
@@ -347,7 +360,7 @@ describe("ProjectPage", () => {
   it("keeps the upload control a single tab stop", async () => {
     renderProject();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     screen.getByRole("link", { name: "Back to projects" }).focus();
     await user.tab();
     // The Tabs bar sits between the back link and the upload input; the
@@ -373,7 +386,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("report.pdf"));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Check the highlighted fields and try again.");
@@ -391,7 +404,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("report.pdf"));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not store the file. Please try again.",
@@ -409,7 +422,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("brief.pdf"));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "A file with this name already exists in this project.",
