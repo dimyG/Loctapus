@@ -99,6 +99,14 @@ test.describe("journey", () => {
       await expect(page.getByRole("cell", { name: "tiny.pdf" })).toBeVisible();
       await page.getByLabel("Upload").setInputFiles(docxPath);
 
+      // The first upload turning ready flips the page's default to Ask, which
+      // hides the cells the assertions below wait on, so the Documents tab is
+      // pinned back. MUI fires a Tab's onChange only when it is not already
+      // selected, so the pin must wait for the flip: Ask becomes enabled the
+      // moment the first upload is ready.
+      await expect(page.getByRole("tab", { name: "Ask" })).toBeEnabled({ timeout: 20_000 });
+      await page.getByRole("tab", { name: "Documents" }).click();
+
       // The default 5s expect timeout does not cover the full pipeline, so the
       // assertion carries an explicit one inside the 30s test budget.
       await expect(page.getByRole("cell", { name: "Ready" })).toHaveCount(2, { timeout: 20_000 });
@@ -111,6 +119,20 @@ test.describe("journey", () => {
       );
       // The header's cells are columnheaders, so rows with cells are the data rows.
       await expect(page.getByRole("row").filter({ has: page.getByRole("cell") })).toHaveCount(2);
+
+      // Ask through the browser: the stub LLM answers offline, grounded in the
+      // retrieval this slice wires under the chat panel.
+      await page.getByRole("tab", { name: "Ask" }).click();
+      await page.getByLabel("Ask a question").fill("What is this document about?");
+      await page.getByRole("button", { name: "Ask", exact: true }).click();
+      await expect(page.getByText(/This is a stub answer grounded/i)).toBeVisible();
+
+      // MUI renders AccordionSummary as a native button, so the sources and
+      // their rows match as buttons; the row-button selector avoids a strict-mode
+      // double match with the hidden Documents panel's table cells.
+      await page.getByRole("button", { name: /Sources \(\d+\)/ }).click();
+      await expect(page.getByRole("button", { name: /tiny\.pdf/ })).toBeVisible();
+      await expect(page.getByRole("button", { name: /sample\.docx/ })).toBeVisible();
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
