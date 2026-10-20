@@ -65,6 +65,12 @@ def test_unknown_provider_setting_is_rejected() -> None:
         SettingsForTests.model_validate({"embedding_provider": "nope"})
 
 
+def test_llm_provider_setting_defaults() -> None:
+    """Check that the LLM provider setting defaults to the stub."""
+
+    assert SettingsForTests().llm_provider == "stub"
+
+
 def test_chunk_budgets_must_be_ordered() -> None:
     """Check that the chunk budgets must satisfy 0 <= overlap < target <= max."""
 

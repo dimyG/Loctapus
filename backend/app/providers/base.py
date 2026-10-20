@@ -49,3 +49,16 @@ class EmbeddingProvider(Protocol):
         """Embed a single query text into a fixed-dimension vector."""
 
         ...
+
+
+class LLMError(Exception):
+    """Raised when an LLM provider cannot generate; its message is shown to users."""
+
+
+class LLMProvider(Protocol):
+    """Interface every LLM provider implements."""
+
+    def generate(self, *, system: str, user: str) -> str:
+        """Generate one completion from a system prompt and a user prompt."""
+
+        ...

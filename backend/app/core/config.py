@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     s3_bucket: str = "rag-dev"
     parser_provider: Literal["stub"] = "stub"
     embedding_provider: Literal["stub"] = "stub"
+    llm_provider: Literal["stub"] = "stub"
     chunk_target_tokens: int = 600
     chunk_max_tokens: int = 1000
     chunk_overlap_tokens: int = 80
