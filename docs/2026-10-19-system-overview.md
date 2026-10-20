@@ -35,6 +35,63 @@ flowchart TB
     worker -->|"documents, chunks, embeddings,<br/>ingestion run status"| db
 ```
 
+### Services
+
+#### db
+
+Postgres 17 with the pgvector extension. It holds every domain table - identity,
+projects, the sources and ingestion tree, and the outbox queue - and the chunks
+table carries the vector and full-text indexes that retrieval queries.
+
+#### garage
+
+S3-compatible object storage (single-node dev mode, bucket `rag-dev`) holding the
+raw uploaded bytes under `raw/{project_id}/{source_item_id}/{content_hash}/{filename}`
+keys. The api PUTs bytes on upload; the worker GETs them on ingest and verifies
+them against the pinned hash.
+
+#### rabbitmq
+
+The AMQP broker moving task messages from the dispatcher to the worker. Both
+queues are durable so a broker restart cannot drop a queued message, and there
+is no result backend - task outcomes live in Postgres on the ingestion runs.
+
+#### one-off-initialization
+
+A one-shot container that runs the Alembic migrations and exits. The api,
+worker, and dispatcher wait for its successful completion before booting, so the
+schema always exists before the app tier starts.
+
+#### api
+
+The FastAPI app under uvicorn, serving every HTTP route in this document. On
+upload it PUTs the bytes into Garage and records the domain rows plus an outbox
+event in Postgres; it never publishes to RabbitMQ itself - that is the
+dispatcher's job (transactional outbox).
+
+#### worker
+
+The Celery worker consuming the `ingestion` and `embed` queues (concurrency 2).
+Its tasks are thin wrappers over the ingestion services: fetch the pinned bytes
+from Garage, parse, chunk, and embed them (stub providers today), then write
+documents, chunks, embeddings, and run status to Postgres. Late acks re-deliver
+a task whose worker died mid-run.
+
+#### dispatcher
+
+A standalone polling process (deliberately not Celery Beat) that scans the
+outbox table for due unpublished events and publishes them to RabbitMQ through
+the routing map in `app/outbox/events.py`, waiting for broker confirms. A
+failed row is backed off one exponential interval so poison events cannot
+starve the rows behind them.
+
+#### web
+
+Nginx serving the built SPA from the `rag-web` image. It reverse-proxies `/api`
+to the api service so the browser path is same-origin (no CORS involved), falls
+back to `index.html` for SPA routes, and allows request bodies up to 26 MB so
+the 25 MB upload limit fits.
+
 Runtime flow of one upload:
 
 1. The UI POSTs the file to `/api/projects/{project_id}/uploads`. The API PUTs the
