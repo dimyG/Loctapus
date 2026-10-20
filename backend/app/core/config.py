@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # Both feed RRF fusion: the legs' candidate budget and the rank-smoothing constant.
     retrieval_candidates_per_retriever: int = Field(default=50, gt=0)
     rrf_k: int = Field(default=60, gt=0)
+    # The S5 answer round resolves a request's omitted top_k and per-document cap against these.
+    answer_context_chunks: int = Field(default=10, ge=1, le=50)
+    answer_max_chunks_per_document: int = Field(default=3, ge=1)
 
     @model_validator(mode="after")
     def _validate_chunk_budgets(self) -> Self:

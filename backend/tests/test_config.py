@@ -169,6 +169,20 @@ def test_retrieval_settings_reject_nonpositive() -> None:
     assert s.rrf_k == 60
 
 
+def test_answer_settings_defaults_and_bounds() -> None:
+    """The answer tuning knobs default to the spec values and stay within bounds."""
+
+    with pytest.raises(ValidationError):
+        SettingsForTests(answer_context_chunks=0)
+    with pytest.raises(ValidationError):
+        SettingsForTests(answer_context_chunks=51)
+    with pytest.raises(ValidationError):
+        SettingsForTests(answer_max_chunks_per_document=0)
+    s = SettingsForTests()
+    assert s.answer_context_chunks == 10
+    assert s.answer_max_chunks_per_document == 3
+
+
 def test_broker_url_env_override(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """RAG_BROKER_URL selects the pytest vhost."""
 
