@@ -223,6 +223,10 @@ describe("ProjectPage", () => {
       renderProject();
       await advance(0);
       expect(gets).toBe(1);
+      // The first fetch settles on the next flush, flipping the default to
+      // Ask; the tab is the active one while the polls keep firing.
+      await advance(500);
+      expect(screen.getByRole("tab", { name: "Ask" })).toHaveAttribute("aria-selected", "true");
       await advance(2000);
       expect(gets).toBe(2);
     } finally {
