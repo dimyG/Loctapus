@@ -116,7 +116,10 @@ Notes:
   stub parser and a stub embedding provider, and `llm_provider` defaults to the stub
   LLM, so the whole stack (including grounded answers) runs offline. Setting
   `RAG_LLM_PROVIDER=groq` and `RAG_GROQ_API_KEY` opts answers into Groq's
-  `openai/gpt-oss-20b` - the first external AI service.
+  `openai/gpt-oss-20b` - the first external AI service. Both live in the gitignored
+  `backend/.env` (see `backend/.env.example`), which the compose `api` service
+  injects as an optional env file; local overrides never beat the compose-fixed
+  service addresses.
 
 ## API routes
 
