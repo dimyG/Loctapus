@@ -6,6 +6,24 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-20 - .env secret workflow residuals (`env-file-wiring`)
+
+Residuals from the fresh-context review of the backend/.env secret workflow
+(55adde5..c1eeb4b):
+
+- `f0e10af` - the suite pin covers `RAG_LLM_PROVIDER` and `RAG_ENVIRONMENT` only;
+  every other `backend/.env` setting (`answer_context_chunks`, `rrf_k`, `jwt_secret`,
+  ...) still reaches the app under test, so a customized .env can shift test behavior.
+  Full hermeticity would serve the app `SettingsForTests` through a `get_settings`
+  dependency override in the `client` fixture.
+- `f0e10af` - the e2e webServer pin is verified by the identical pytest mechanism plus
+  config inspection; the Playwright journey itself was not executed in this task.
+- `cc73faa` - the compose stack cannot run in production mode at all: Garage ships the
+  fixed development secret, and the production validator rejects it, so a real
+  deployment story (external Garage credentials or a different object store) needs
+  its own design.
+
+
 ## 2026-10-20 - S5 answer and chat (`s5-answer-chat`)
 
 Residuals from the 2026-10-20 whole-branch review of the S5 answer slice
