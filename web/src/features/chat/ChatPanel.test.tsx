@@ -122,13 +122,17 @@ describe("ChatPanel", () => {
 
   it("shows an error card and try again re-sends", async () => {
     let calls = 0;
+    let resolveRetry!: (response: Response) => void;
     server.use(
       http.post("*/api/projects/p-1/answer", () => {
         calls += 1;
         if (calls === 1) {
           return HttpResponse.json({ detail: "boom" }, { status: 500 });
         }
-        return HttpResponse.json(answerFixture);
+        // The retry hangs until the test resolves it, to observe the in-flight state.
+        return new Promise<Response>((resolve) => {
+          resolveRetry = resolve;
+        });
       }),
     );
     renderPanel();
@@ -137,6 +141,11 @@ describe("ChatPanel", () => {
     await user.click(screen.getByRole("button", { name: "Ask" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("boom");
     await user.click(screen.getByRole("button", { name: "Try again" }));
+    // While the retry is in flight the placeholder shows and the stale alert is gone.
+    expect(await screen.findByText("Thinking...")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await waitFor(() => expect(calls).toBe(2));
+    resolveRetry(HttpResponse.json(answerFixture));
     expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
     expect(calls).toBe(2);
   });

@@ -61,6 +61,10 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
   // Sends one question into an existing turn, filling answer/chunks or error.
   async function send(question: string, turnId: number) {
     setPendingId(turnId);
+    // Drop any stale error so a retry shows the pending placeholder instead of the old alert.
+    setTurns((prev) =>
+      prev.map((turn) => (turn.id === turnId ? { ...turn, error: undefined } : turn)),
+    );
     try {
       const result = await askQuestion({ projectId, body: { query: question } }).unwrap();
       setTurns((prev) =>
