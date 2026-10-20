@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     def _require_groq_key(self) -> Self:
         """Reject an empty Groq key when the groq provider is selected."""
 
-        if self.llm_provider == "groq" and not self.groq_api_key:
+        if self.llm_provider == "groq" and not self.groq_api_key.strip():
             raise ValueError("groq_api_key must be set when llm_provider is groq")
         return self
 

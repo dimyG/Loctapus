@@ -88,6 +88,8 @@ def test_groq_provider_requires_key() -> None:
 
     with pytest.raises(ValidationError):
         SettingsForTests(llm_provider="groq")
+    with pytest.raises(ValidationError):
+        SettingsForTests(llm_provider="groq", groq_api_key="   ")
     s = SettingsForTests(llm_provider="groq", groq_api_key="k")
     assert s.llm_provider == "groq"
 
