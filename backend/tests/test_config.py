@@ -63,12 +63,41 @@ def test_unknown_provider_setting_is_rejected() -> None:
         SettingsForTests.model_validate({"parser_provider": "nope"})
     with pytest.raises(ValidationError):
         SettingsForTests.model_validate({"embedding_provider": "nope"})
+    with pytest.raises(ValidationError):
+        SettingsForTests.model_validate({"llm_provider": "nope"})
 
 
 def test_llm_provider_setting_defaults() -> None:
     """Check that the LLM provider setting defaults to the stub."""
 
     assert SettingsForTests().llm_provider == "stub"
+
+
+def test_llm_settings_defaults() -> None:
+    """Check that the Groq and LLM tuning settings default to the spec values."""
+
+    s = SettingsForTests()
+    assert s.groq_base_url == "https://api.groq.com/openai/v1"
+    assert s.groq_model == "openai/gpt-oss-20b"
+    assert s.llm_timeout_seconds == 30.0
+    assert s.llm_max_tokens == 1024
+
+
+def test_groq_provider_requires_key() -> None:
+    """Check that selecting groq without a key fails and any non-empty key constructs."""
+
+    with pytest.raises(ValidationError):
+        SettingsForTests(llm_provider="groq")
+    s = SettingsForTests(llm_provider="groq", groq_api_key="k")
+    assert s.llm_provider == "groq"
+
+
+@pytest.mark.parametrize(("field", "value"), [("llm_timeout_seconds", 0), ("llm_max_tokens", 0)])
+def test_llm_settings_reject_nonpositive(*, field: str, value: int) -> None:
+    """Check that the LLM tuning knobs must stay positive."""
+
+    with pytest.raises(ValidationError):
+        SettingsForTests.model_validate({field: value})
 
 
 def test_chunk_budgets_must_be_ordered() -> None:

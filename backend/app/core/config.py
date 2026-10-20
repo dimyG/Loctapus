@@ -28,7 +28,12 @@ class Settings(BaseSettings):
     s3_bucket: str = "rag-dev"
     parser_provider: Literal["stub"] = "stub"
     embedding_provider: Literal["stub"] = "stub"
-    llm_provider: Literal["stub"] = "stub"
+    llm_provider: Literal["stub", "groq"] = "stub"
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_model: str = "openai/gpt-oss-20b"
+    llm_timeout_seconds: float = Field(default=30.0, gt=0)
+    llm_max_tokens: int = Field(default=1024, gt=0)
     chunk_target_tokens: int = 600
     chunk_max_tokens: int = 1000
     chunk_overlap_tokens: int = 80
@@ -66,6 +71,14 @@ class Settings(BaseSettings):
             raise ValueError("jwt_secret must be set explicitly when environment is production")
         if self.environment == "production" and self.s3_secret_key == "rag-dev-secret-local":
             raise ValueError("s3_secret_key must be set explicitly when environment is production")
+        return self
+
+    @model_validator(mode="after")
+    def _require_groq_key(self) -> Self:
+        """Reject an empty Groq key when the groq provider is selected."""
+
+        if self.llm_provider == "groq" and not self.groq_api_key:
+            raise ValueError("groq_api_key must be set when llm_provider is groq")
         return self
 
 

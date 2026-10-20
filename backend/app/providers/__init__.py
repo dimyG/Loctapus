@@ -1,4 +1,4 @@
-"""Provider interfaces, stub implementations, and the string-based factories."""
+"""Provider interfaces, the stub and Groq implementations, and the string-based factories."""
 
 from typing import assert_never
 
@@ -12,12 +12,15 @@ from app.providers.base import (
     ParseError,
     Parser,
 )
+from app.providers.groq_llm import GROQ_ERROR_COPY, GroqLLMProvider
 from app.providers.stub_embeddings import STUB_EMBEDDING_DIM, StubEmbeddingProvider
 from app.providers.stub_llm import STUB_ANSWER, StubLLMProvider
 from app.providers.stub_parser import StubParser
 
 __all__ = [
     "EmbeddingProvider",
+    "GROQ_ERROR_COPY",
+    "GroqLLMProvider",
     "LLMError",
     "LLMProvider",
     "NormalizedDocument",
@@ -76,5 +79,13 @@ def get_llm_provider(*, settings: Settings) -> LLMProvider:
     match settings.llm_provider:
         case "stub":
             return StubLLMProvider()
+        case "groq":
+            return GroqLLMProvider(
+                api_key=settings.groq_api_key,
+                base_url=settings.groq_base_url,
+                model=settings.groq_model,
+                timeout_seconds=settings.llm_timeout_seconds,
+                max_tokens=settings.llm_max_tokens,
+            )
         case _ as unreachable:
             assert_never(unreachable)

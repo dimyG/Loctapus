@@ -18,6 +18,9 @@ dependencies = [
     "pwdlib[argon2]>=0.2",
     "email-validator>=2.2",
     "celery>=5.6",
+    # httpx is a runtime import (the Groq LLM client); the Docker image installs
+    # runtime deps only, so it cannot live in the dev extra.
+    "httpx>=0.28",
     # The floors pin the installed major.minor of the S3-pipeline dependencies so a
     # fresh environment cannot resolve to an older, untested line.
     "boto3>=1.43",
@@ -30,7 +33,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
-    "httpx>=0.28",
     "ruff>=0.16",
     "mypy>=2.4",
     "celery-types",
