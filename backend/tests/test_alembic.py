@@ -52,6 +52,14 @@ def test_ingestion_tables_exist(*, engine: Engine) -> None:
     } <= names
 
 
+def test_query_logs_table_exists(*, engine: Engine) -> None:
+    """Check that migrations created the S4 query log table."""
+
+    with engine.connect() as conn:
+        names = set(inspect(conn).get_table_names())
+    assert {"query_logs"} <= names
+
+
 def test_vector_and_fulltext_indexes(*, engine: Engine) -> None:
     """Check that chunks carries the HNSW and GIN indexes and the outbox its partial index."""
 
@@ -125,6 +133,7 @@ def test_foreign_key_columns_are_indexed(*, engine: Engine) -> None:
         "sources": {"project_id"},
         "chunks": {"project_id"},
         "ingestion_runs": {"document_id", "source_item_id"},
+        "query_logs": {"project_id", "user_id"},
     }
     with engine.connect() as conn:
         insp = inspect(conn)

@@ -9,7 +9,7 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
 from app.core.config import Settings
@@ -105,8 +105,12 @@ def db_session(*, engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(*, db_session: Session) -> Iterator[TestClient]:
+def client(*, db_session: Session, engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """Return a TestClient whose database dependency serves the rollback-managed session."""
+
+    # The lifespan startup guard opens its own session through the app.main indirection;
+    # point it at the migration-built test engine so no test ever touches the dev DB.
+    monkeypatch.setattr("app.main.SessionLocal", sessionmaker(bind=engine))
 
     def override_get_db() -> Iterator[Session]:
         """Serve the shared transaction-managed session instead of a fresh one."""

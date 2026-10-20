@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     outbox_retry_max_seconds: float = 300.0
     outbox_publish_timeout_seconds: float = 10.0
     max_upload_mb: int = 25
+    # Both feed RRF fusion: the legs' candidate budget and the rank-smoothing constant.
+    retrieval_candidates_per_retriever: int = Field(default=50, gt=0)
+    rrf_k: int = Field(default=60, gt=0)
 
     @model_validator(mode="after")
     def _validate_chunk_budgets(self) -> Self:
