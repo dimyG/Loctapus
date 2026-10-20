@@ -82,6 +82,25 @@ describe("ChatPanel", () => {
     expect(posts).toEqual([{ query: "first line\n" }]);
   });
 
+  it("renders no sources accordion for a canned empty answer", async () => {
+    server.use(
+      http.post("*/api/projects/p-1/answer", () =>
+        HttpResponse.json({
+          answer: "No indexed content in this project matches your question yet.",
+          chunks: [],
+        }),
+      ),
+    );
+    renderPanel();
+    const user = userEvent.setup({ applyAccept: false });
+    await user.type(screen.getByLabelText("Ask a question"), "What is this document about?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(
+      await screen.findByText("No indexed content in this project matches your question yet."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Sources \(\d+\)/)).not.toBeInTheDocument();
+  });
+
   it("keeps the input disabled while the request is pending", async () => {
     let resolveAnswer!: (response: Response) => void;
     server.use(

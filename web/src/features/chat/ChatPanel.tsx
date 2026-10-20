@@ -115,7 +115,9 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
           {turn.answer !== undefined ? (
             <Box>
               <Typography sx={{ whiteSpace: "pre-wrap" }}>{turn.answer}</Typography>
-              {turn.chunks !== undefined && <SourcesAccordion chunks={turn.chunks} />}
+              {turn.chunks !== undefined && turn.chunks.length > 0 && (
+                <SourcesAccordion chunks={turn.chunks} />
+              )}
             </Box>
           ) : turn.error !== undefined ? (
             <Stack spacing={1}>
