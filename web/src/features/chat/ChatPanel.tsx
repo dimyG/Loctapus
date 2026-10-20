@@ -90,6 +90,8 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
     const id = nextId.current + 1;
     nextId.current = id;
     setTurns((prev) => [...prev, { id, question: text }]);
+    // The turn owns the question, so the input resets for the next one.
+    setText("");
     void send(text, id);
   }
 

@@ -58,6 +58,8 @@ describe("ChatPanel", () => {
       screen.getByText("How do I rotate the garage key?", { selector: "p" }),
     ).toBeInTheDocument();
     expect(posts).toEqual([{ query: "How do I rotate the garage key?" }]);
+    // The turn owns the question, so the input resets once it is sent.
+    expect(screen.getByLabelText("Ask a question")).toHaveValue("");
   });
 
   it("enter submits and shift-enter inserts a newline", async () => {
@@ -101,8 +103,12 @@ describe("ChatPanel", () => {
     expect(textbox).toBeDisabled();
     resolveAnswer(HttpResponse.json(answerFixture));
     expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
-    await waitFor(() => expect(ask).toBeEnabled());
     await waitFor(() => expect(textbox).toBeEnabled());
+    // The input resets after submit, so Ask stays disabled until it has text.
+    expect(ask).toBeDisabled();
+    expect(textbox).toHaveValue("");
+    await user.type(textbox, "next question");
+    await waitFor(() => expect(ask).toBeEnabled());
   });
 
   it("lists and expands the answer sources", async () => {
