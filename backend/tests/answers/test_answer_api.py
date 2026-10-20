@@ -98,15 +98,15 @@ def test_rerank_true_accepted_and_ignored(*, client: TestClient, db_session: Ses
     seed_document_with_chunks(
         db=db_session, project_id=UUID(project_id), chunk_texts=["alpha", "bravo alpha"]
     )
-    without = client.post(
-        f"/api/projects/{project_id}/answer", json={"query": "alpha"}, headers=headers
-    ).json()
+    without = client.post(f"/api/projects/{project_id}/answer", json={"query": "alpha"}, headers=headers)
     with_flag = client.post(
         f"/api/projects/{project_id}/answer",
         json={"query": "alpha", "rerank": True},
         headers=headers,
-    ).json()
-    assert with_flag == without
+    )
+    assert without.status_code == 200
+    assert with_flag.status_code == 200
+    assert with_flag.json() == without.json()
 
 
 def test_answer_empty_project_returns_canned(*, client: TestClient, db_session: Session) -> None:
