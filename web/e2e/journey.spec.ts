@@ -100,11 +100,13 @@ test.describe("journey", () => {
       await page.getByLabel("Upload").setInputFiles(docxPath);
 
       // The first upload turning ready flips the page's default to Ask, which
-      // hides the cells the assertions below wait on, so the Documents tab is
-      // pinned back. MUI fires a Tab's onChange only when it is not already
-      // selected, so the pin must wait for the flip: Ask becomes enabled the
-      // moment the first upload is ready.
-      await expect(page.getByRole("tab", { name: "Ask" })).toBeEnabled({ timeout: 20_000 });
+      // hides the cells the Ready assertion waits on. MUI fires a tab's
+      // onChange only when it is not already selected, so the pin must come
+      // after the flip: wait for Ask to become the selected tab (that flip is
+      // the first-ready signal), then click Documents to pin it.
+      await expect(page.getByRole("tab", { name: "Ask" })).toHaveAttribute("aria-selected", "true", {
+        timeout: 20_000,
+      });
       await page.getByRole("tab", { name: "Documents" }).click();
 
       // The default 5s expect timeout does not cover the full pipeline, so the
