@@ -1,8 +1,11 @@
 """Tests for application settings."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
+from app.core.config import Settings
 from tests.helpers import SettingsForTests
 
 
@@ -92,6 +95,22 @@ def test_groq_provider_requires_key() -> None:
         SettingsForTests(llm_provider="groq", groq_api_key="   ")
     s = SettingsForTests(llm_provider="groq", groq_api_key="k")
     assert s.llm_provider == "groq"
+
+
+def test_suite_pin_beats_env_file_provider(*, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Check that the suite's pinned provider env var beats a local .env opt-in.
+
+    The suite's offline guarantee rests on ``tests/__init__.py`` setting
+    RAG_LLM_PROVIDER as a real environment variable, which beats .env files in
+    pydantic precedence. Construction mirrors the app's own: the .env file is
+    resolved from the current directory.
+    """
+
+    env_file = tmp_path / ".env"
+    env_file.write_text('RAG_LLM_PROVIDER="groq"\nRAG_GROQ_API_KEY="k"', encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    s = Settings()
+    assert s.llm_provider == "stub"
 
 
 @pytest.mark.parametrize(("field", "value"), [("llm_timeout_seconds", 0), ("llm_max_tokens", 0)])
