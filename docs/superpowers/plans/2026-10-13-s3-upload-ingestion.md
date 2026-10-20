@@ -144,7 +144,7 @@ Two concerns, each in its own commit: the stray `RAG_DATABASE_URL` override (the
 **Files:**
 - Modify: `backend/alembic/env.py` (remove the `os.environ["RAG_DATABASE_URL"]` override)
 - Modify: `backend/tests/test_alembic.py`
-- Modify: `docs/superpowers/backlog.md` (drop the resolved 2026-10-12 entry)
+- Modify: `docs/backlog.md` (drop the resolved 2026-10-12 entry)
 
 **Interfaces:**
 - Consumes: the existing `engine` fixture and `DEFAULT_TEST_URL`.
@@ -189,10 +189,10 @@ Expected: all green.
 
 - [ ] **Step 6: Remove the resolved backlog entry and commit**
 
-Remove the `backend/alembic/env.py` item from `docs/superpowers/backlog.md` (it is now fixed).
+Remove the `backend/alembic/env.py` item from `docs/backlog.md` (it is now fixed).
 
 ```bash
-git add alembic/env.py tests/test_alembic.py docs/superpowers/backlog.md
+git add alembic/env.py tests/test_alembic.py docs/backlog.md
 git commit -m "fix(backend): make alembic ignore a stray RAG_DATABASE_URL"
 ```
 
@@ -217,7 +217,7 @@ git commit -m "test(backend): derive alembic scratch databases from the configur
 **Files:**
 - Modify: `backend/app/core/config.py`, `backend/pyproject.toml`, `backend/tests/test_config.py`
 - Modify: `deploy/docker-compose.yml`; Create: `deploy/garage.toml`
-- Modify: `docs/superpowers/backlog.md` (drop the resolved MinIO item)
+- Modify: `docs/backlog.md` (drop the resolved MinIO item)
 
 **Interfaces:**
 - Consumes: nothing new.
@@ -295,10 +295,10 @@ git commit -m "feat(backend): add S3 pipeline settings and dependencies"
 Run: `docker compose -f deploy/docker-compose.yml up -d` then `docker compose -f deploy/docker-compose.yml ps`
 Expected: `db`, `rabbitmq`, `garage` all up (garage finishes provisioning before its S3 listener starts, so no bootstrap step).
 
-Remove the resolved MinIO item from `docs/superpowers/backlog.md`.
+Remove the resolved MinIO item from `docs/backlog.md`.
 
 ```bash
-git add deploy/docker-compose.yml deploy/garage.toml docs/superpowers/backlog.md
+git add deploy/docker-compose.yml deploy/garage.toml docs/backlog.md
 git commit -m "chore(deploy): replace MinIO with Garage"
 ```
 
@@ -820,7 +820,7 @@ git commit -m "test(e2e): prove the full pipeline through the browser"
 ### Task 13: Runbook, spec statuses, and final verification
 
 **Files:**
-- Modify: `README.md`, `../specs/2026-10-06-roadmap.md`, `docs/superpowers/specs/2026-10-12-s3-upload-ingestion-design.md`, `docs/superpowers/backlog.md`
+- Modify: `README.md`, `../specs/2026-10-06-roadmap.md`, `docs/superpowers/specs/2026-10-12-s3-upload-ingestion-design.md`, `docs/backlog.md`
 
 **Interfaces:**
 - Consumes: a green Task 12.

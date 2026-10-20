@@ -105,4 +105,4 @@ committed content with CRLF working copies.
 ## Further reading
 
 - Slice design: `docs/superpowers/specs/2026-10-06-roadmap.md`
-- Follow-ups and deferred findings: `docs/superpowers/backlog.md`
+- Follow-ups and deferred findings: `docs/backlog.md`

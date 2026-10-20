@@ -34,7 +34,7 @@ Use Claude Opus 5.5 only for fresh context reviews. Use Kimi K3 as an alternativ
 
 - All tasks should be done in a worktree so that parallel tasks can be worked on without interference
 - All tasks should undergo a fresh-context review at the end except if they have been completed through the superpowers skillset which already has a review built in
-- Any backlog items remaining after the completion of a task, should be added to `docs/superpowers/backlog.md` with a timestamped header, and a link to the relevant commit(s)
+- Any backlog items remaining after the completion of a task, should be added to `docs/backlog.md` with a timestamped header, and a link to the relevant commit(s)
 - One concern per commit
 - When a review flags untracked files, give each its own dedicated commit instead of attaching it to a fix
 

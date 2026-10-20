@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Resolve the six still-open deferred minors from the 2026-10-07 review-feedback session listed in `docs/superpowers/backlog.md`.
+**Goal:** Resolve the six still-open deferred minors from the 2026-10-07 review-feedback session listed in `docs/backlog.md`.
 
 **Architecture:** Four small fixes in the identity layer (race-free revocation insert, honest registration error mapping, shared token-decode dependency, revocation pinned on another endpoint), one projects-schema decision (reject explicit PATCH nulls), and one migration downgrade backfill, each landing as its own commit in a dedicated worktree.
 
 **Tech Stack:** FastAPI, Pydantic v2, SQLAlchemy 2 (PostgreSQL dialect), Alembic, pytest.
 
-**Spec:** `docs/superpowers/backlog.md`, section "Deferred minors" (all six bullets). Relevance of each was verified against master `efe0f29` on 2026-10-09; all six are still present in the code.
+**Spec:** `docs/backlog.md`, section "Deferred minors" (all six bullets). Relevance of each was verified against master `efe0f29` on 2026-10-09; all six are still present in the code.
 
 ## Global Constraints
 
@@ -330,7 +330,7 @@ git commit -m "fix(db): 0002 downgrade backfills is_personal for registration ro
 ### Task 7: Backlog bookkeeping, full verification, fresh-context review
 
 **Files:**
-- Modify: `docs/superpowers/backlog.md`
+- Modify: `docs/backlog.md`
 
 **Interfaces:**
 - Consumes: all six resolved tasks.
@@ -347,7 +347,7 @@ Expected: all three pass with no new findings.
 - [ ] **Step 3: Commit the docs change**
 
 ```bash
-git add docs/superpowers/backlog.md
+git add docs/backlog.md
 git commit -m "docs(backlog): record deferred minors resolved in fix-deferred-minors-2"
 ```
 

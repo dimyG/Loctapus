@@ -660,7 +660,7 @@ No product code changes; the only edit is the reverted throwaway comment and the
 
 **Files:**
 - Modify (throwaway, reverted): `backend/app/main.py`
-- Modify: `docs/superpowers/backlog.md`
+- Modify: `docs/backlog.md`
 
 **Interfaces:**
 - Consumes: the Task 5 stack, the Task 6 runbook commands, Tasks 3/4's layer split.
@@ -723,9 +723,9 @@ Expected: all green with the full system running - the suites share the infra an
 
 - [ ] **Step 9: Record the backlog entry**
 
-Add to `docs/superpowers/backlog.md`, under a new timestamped header `## 2026-10-16 - Compose full-stack runtime follow-ups`: the containerized-e2e CI idea from spec section 12 (running the existing journey against a composed stack in CI, where databases are disposable), linking this plan and the feature commits.
+Add to `docs/backlog.md`, under a new timestamped header `## 2026-10-16 - Compose full-stack runtime follow-ups`: the containerized-e2e CI idea from spec section 12 (running the existing journey against a composed stack in CI, where databases are disposable), linking this plan and the feature commits.
 
 ```bash
-git add docs/superpowers/backlog.md
+git add docs/backlog.md
 git commit -m "docs(backlog): record the containerized-e2e CI idea"
 ```

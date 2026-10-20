@@ -526,7 +526,7 @@ Expected: PASS. A failure is a real finding - debug it (`superpowers:systematic-
 
 - [ ] **Step 4: Manual visual check**
 
-Run both dev servers; check landing, login, register, projects (with rows and empty), and the create dialog at 390px, 768px, and 1280px widths. Fix anything glaring (spacing, alignment, truncation, contrast) and note remaining polish in `docs/superpowers/backlog.md`.
+Run both dev servers; check landing, login, register, projects (with rows and empty), and the create dialog at 390px, 768px, and 1280px widths. Fix anything glaring (spacing, alignment, truncation, contrast) and note remaining polish in `docs/backlog.md`.
 
 - [ ] **Step 5: Final whole-system verification**
 
@@ -538,6 +538,6 @@ Expected: all green.
 `docs/superpowers/specs/2026-10-09-s2-web-ui-foundations-design.md`: Status -> `Implemented on master (S2).` Commit:
 
 ```bash
-git add web playwright docs/superpowers/specs/2026-10-09-s2-web-ui-foundations-design.md docs/superpowers/backlog.md
+git add web playwright docs/superpowers/specs/2026-10-09-s2-web-ui-foundations-design.md docs/backlog.md
 git commit -m "test(e2e): browser journey suite against the real stack"
 ```

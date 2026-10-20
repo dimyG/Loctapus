@@ -5,7 +5,7 @@
  * XSS trade-off, recorded deliberately: a script injected via XSS can read the
  * token from localStorage. S2 renders no user-supplied HTML, so the attack
  * surface is the app's own code, and the contained upgrade path is an
- * httpOnly-cookie session plus a CSRF token (see docs/superpowers/backlog.md).
+ * httpOnly-cookie session plus a CSRF token (see docs/backlog.md).
  */
 const TOKEN_KEY = "rag.accessToken";
 

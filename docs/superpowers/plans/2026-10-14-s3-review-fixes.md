@@ -494,7 +494,7 @@ def test_request_ingestion_adds_a_queued_run_and_its_event(*, db_session: Sessio
 ### Task 14: Docs, backlog, and final verification
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-10-12-s3-upload-ingestion-design.md`, `../specs/2026-10-06-roadmap.md`, `README.md`, `backend/app/ingestion/__init__.py`, `backend/app/outbox/__init__.py`, `docs/superpowers/backlog.md`
+- Modify: `docs/superpowers/specs/2026-10-12-s3-upload-ingestion-design.md`, `../specs/2026-10-06-roadmap.md`, `README.md`, `backend/app/ingestion/__init__.py`, `backend/app/outbox/__init__.py`, `docs/backlog.md`
 
 - [ ] **Step 1: Amend the S3 spec** to describe what is built:
   - Status line: "amended by the 2026-10-14 review fixes".

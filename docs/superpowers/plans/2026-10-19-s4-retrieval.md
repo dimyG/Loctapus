@@ -394,7 +394,7 @@ git commit -m "feat(api): expose POST /projects/{id}/retrieve"
 
 **Files:**
 - Modify: `deploy/docker-compose.yml` (db image tag)
-- Modify (as needed): `docs/superpowers/backlog.md`
+- Modify (as needed): `docs/backlog.md`
 
 **Interfaces:**
 - Consumes: nothing from other tasks; runs the whole-branch gates.
@@ -423,11 +423,11 @@ Expected: all green. Any failure is a defect in an earlier task - fix it in the 
 
 - [ ] **Step 5: Backlog residuals**
 
-Append any deferrals this branch's reviews raised to `docs/superpowers/backlog.md` under a timestamped `## 2026-10-19 - S4 retrieval` header, each line linking its commit. The known carried deferrals stay put (HNSW `ef_search`/`iterative_scan`, README web sections, warnings cleanup). If nothing new was raised, skip - do not create an empty section.
+Append any deferrals this branch's reviews raised to `docs/backlog.md` under a timestamped `## 2026-10-19 - S4 retrieval` header, each line linking its commit. The known carried deferrals stay put (HNSW `ef_search`/`iterative_scan`, README web sections, warnings cleanup). If nothing new was raised, skip - do not create an empty section.
 
 - [ ] **Step 6: Commit the backlog**
 
 ```bash
-git add docs/superpowers/backlog.md
+git add docs/backlog.md
 git commit -m "docs(backlog): record the s4 residuals"
 ```
