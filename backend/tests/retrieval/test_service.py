@@ -194,6 +194,41 @@ def test_retrieve_writes_one_query_log_row(*, db_session: Session, settings: Set
     assert log.latency_ms >= 0
 
 
+def test_retrieve_logs_origin_direct_by_default(*, db_session: Session, settings: Settings) -> None:
+    """Check a plain retrieve records the default origin in the log row."""
+
+    project_id = seed_project(db=db_session, email="origin-default@example.com")
+    seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
+    user = _seed_user(db=db_session)
+    retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="alpha"),
+        settings=settings,
+    )
+    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    assert log.params["origin"] == "direct"
+
+
+def test_retrieve_records_explicit_origin(*, db_session: Session, settings: Settings) -> None:
+    """Check an explicit origin passes through to the log row."""
+
+    project_id = seed_project(db=db_session, email="origin-answer@example.com")
+    seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
+    user = _seed_user(db=db_session)
+    retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="alpha"),
+        settings=settings,
+        origin="answer",
+    )
+    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    assert log.params["origin"] == "answer"
+
+
 def test_retrieve_enriches_filename_and_source_item(*, db_session: Session, settings: Settings) -> None:
     """Check the final rows carry their document's item id and filename."""
 
