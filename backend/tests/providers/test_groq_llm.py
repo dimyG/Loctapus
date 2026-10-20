@@ -120,6 +120,20 @@ def test_missing_choices_raises_llm_error() -> None:
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
+def test_empty_choices_raises_llm_error() -> None:
+    """A 200 body with an empty choices list surfaces as the one fixed user-safe copy."""
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
+        """Serve one empty-choices body."""
+
+        return httpx.Response(200, json={"choices": []})
+
+    provider = _provider(handler=handler)
+    with pytest.raises(LLMError) as excinfo:
+        provider.generate(system="s", user="u")
+    assert str(excinfo.value) == GROQ_ERROR_COPY
+
+
 @pytest.mark.parametrize("content", ["", "   "])
 def test_empty_content_raises_llm_error(*, content: str) -> None:
     """A 200 whose message content is blank surfaces as the one fixed user-safe copy."""

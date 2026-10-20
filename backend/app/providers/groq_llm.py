@@ -49,10 +49,11 @@ class GroqLLMProvider:
             response = self._client.post("/chat/completions", json=payload)
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
-        except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+        except (httpx.HTTPError, ValueError, LookupError, TypeError) as error:
             # One user-safe copy for every transport, HTTP, and body-shape failure
-            # (TimeoutException is an HTTPError subclass); the chained cause keeps
-            # the real error visible in the server log.
+            # (TimeoutException is an HTTPError subclass, LookupError covers both a
+            # missing key and an empty list); the chained cause keeps the real
+            # error visible in the server log.
             raise LLMError(GROQ_ERROR_COPY) from error
 
         if not isinstance(content, str) or not content.strip():
