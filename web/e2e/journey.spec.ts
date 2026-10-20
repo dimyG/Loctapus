@@ -104,9 +104,13 @@ test.describe("journey", () => {
       // onChange only when it is not already selected, so the pin must come
       // after the flip: wait for Ask to become the selected tab (that flip is
       // the first-ready signal), then click Documents to pin it.
-      await expect(page.getByRole("tab", { name: "Ask" })).toHaveAttribute("aria-selected", "true", {
-        timeout: 20_000,
-      });
+      await expect(page.getByRole("tab", { name: "Ask" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+        {
+          timeout: 20_000,
+        },
+      );
       await page.getByRole("tab", { name: "Documents" }).click();
 
       // The default 5s expect timeout does not cover the full pipeline, so the
