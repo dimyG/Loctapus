@@ -79,6 +79,12 @@ services:
     init: true
     ports:
       - "8000:8000"
+    # Local secrets/overrides from backend/.env (the Groq key when answers opt
+    # in); optional so the offline default stack boots with no file. The
+    # environment block below wins over values injected from the file.
+    env_file:
+      - path: ../backend/.env
+        required: false
     environment:
       RAG_DATABASE_URL: postgresql+psycopg://rag:rag@db:5432/rag
       RAG_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
