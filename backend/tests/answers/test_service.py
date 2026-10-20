@@ -16,6 +16,7 @@ from app.retrieval.schemas import RetrieveIn
 from app.retrieval.service import retrieve
 from tests.factories import seed_document_with_chunks, seed_project
 from tests.fakes import RecordingLLMProvider
+from tests.helpers import SettingsForTests
 
 
 def _seed_user(*, db: Session) -> User:
@@ -128,7 +129,8 @@ def test_settings_defaults_apply_when_request_omits(*, db_session: Session, sett
         params=AnswerIn(query="alpha"),
         settings=settings,
     )
-    # answer_context_chunks (10) caps the context, not RetrieveIn's own default of 10.
+    # Pins the total at the default value (10); the sibling test below proves the source is
+    # the setting, not RetrieveIn's own coincidental default of 10.
     assert len(spread.chunks) == 10
     capped_project = seed_project(db=db_session, email="answer-capped@example.com")
     seed_document_with_chunks(
@@ -146,3 +148,27 @@ def test_settings_defaults_apply_when_request_omits(*, db_session: Session, sett
     )
     # answer_max_chunks_per_document (3) caps a document that top_k=10 alone would not.
     assert len(capped.chunks) == 3
+
+
+def test_settings_answer_context_chunks_caps_when_request_omits(*, db_session: Session) -> None:
+    """Check a non-default answer_context_chunks setting caps an omitted request top_k."""
+
+    project_id = seed_project(db=db_session, email="answer-setting-source@example.com")
+    for doc in range(4):
+        seed_document_with_chunks(
+            db=db_session,
+            project_id=project_id,
+            chunk_texts=[f"alpha {doc} {i}" for i in range(3)],
+            filename=f"setting-source-{doc}.pdf",
+        )
+    user = _seed_user(db=db_session)
+    result = generate_answer(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=AnswerIn(query="alpha"),
+        settings=SettingsForTests(answer_context_chunks=4),
+    )
+    # RetrieveIn's own default is 10, so only the setting can produce 4 here.
+    assert len(result.chunks) == 4
+    assert result.text == STUB_ANSWER
