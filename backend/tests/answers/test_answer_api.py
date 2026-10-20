@@ -185,7 +185,12 @@ def test_error_paths_log_nothing(*, client: TestClient, db_session: Session) -> 
 
     alice_headers, project_id = _create_project(client=client, email="alice-logs@example.com")
     stranger_headers = _auth(client=client, email="stranger-logs@example.com")
-    client.post(f"/api/projects/{project_id}/answer", json={"query": "alpha"})
-    client.post(f"/api/projects/{project_id}/answer", json={"query": "alpha"}, headers=stranger_headers)
-    client.post(f"/api/projects/{project_id}/answer", json={"query": "   "}, headers=alice_headers)
+    unauthed = client.post(f"/api/projects/{project_id}/answer", json={"query": "alpha"})
+    forbidden = client.post(
+        f"/api/projects/{project_id}/answer", json={"query": "alpha"}, headers=stranger_headers
+    )
+    invalid = client.post(f"/api/projects/{project_id}/answer", json={"query": "   "}, headers=alice_headers)
+    assert unauthed.status_code == 401
+    assert forbidden.status_code == 404
+    assert invalid.status_code == 422
     assert db_session.scalars(select(QueryLog)).all() == []
