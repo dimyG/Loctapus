@@ -1,8 +1,8 @@
 # S5 - `/answer` + chat UI (free-tier LLM) - Design
 
 Date: 2026-10-20
-Status: Approved design (2026-10-20 round). Decisions below are as approved; once
-implemented this section flips to frozen.
+Status: Approved design (2026-10-20 round); implemented on the `s5-answer-chat` branch
+(`../plans/2026-10-20-s5-answer-chat.md`, merge pending). Frozen: decisions below are as built.
 Source of truth: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD") and
 `2026-10-06-roadmap.md` (the "slices spec"). Where those disagree with this document on S5
 topics, this document wins; where this document is silent, they govern.

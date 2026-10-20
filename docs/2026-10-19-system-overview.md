@@ -1,8 +1,8 @@
 # System overview
 
-Snapshot as of 2026-10-19, covering the service topology, the HTTP API, and the
+Snapshot as of 2026-10-20, covering the service topology, the HTTP API, and the
 database schema. Sources: `deploy/docker-compose.yml`, `backend/app/main.py`
-and the three routers it mounts, `web/nginx.conf`, `web/src/app/api.ts`, the
+and the five routers it mounts, `web/nginx.conf`, `web/src/app/api.ts`, the
 RTK Query feature APIs plus `web/src/features/uploads/useProjectUploads.ts`,
 and the ORM models in `backend/app`.
 
@@ -112,8 +112,11 @@ Notes:
 - The compose path is same-origin: nginx proxies `/api` to the api service, so no CORS
   is involved. The CORS middleware in `app/main.py` only matters for the ad-hoc Vite
   dev server (`VITE_API_BASE_URL`), which is not the runbook path.
-- There is no external AI service yet: `app/providers` ships a stub parser and a stub
-  embedding provider.
+- The AI provider layer lives behind replaceable interfaces: `app/providers` ships a
+  stub parser and a stub embedding provider, and `llm_provider` defaults to the stub
+  LLM, so the whole stack (including grounded answers) runs offline. Setting
+  `RAG_LLM_PROVIDER=groq` and `RAG_GROQ_API_KEY` opts answers into Groq's
+  `openai/gpt-oss-20b` - the first external AI service.
 
 ## API routes
 
@@ -160,6 +163,16 @@ is still queued, fetching, processing, or indexing, and `pollingInterval: 0` onc
 every row is ready or failed. No other endpoint is polled - the other list endpoints
 are fetched on mount and on RTK cache invalidation only, and no refetch-on-focus or
 refetch-on-reconnect is configured.
+
+### Answers (backend/app/answers/router.py)
+
+| Method | Route | Purpose | UI usage |
+| --- | --- | --- | --- |
+| POST | `/api/projects/{project_id}/answer` | Ask one question: run the retrieval internally, then answer grounded in the final chunks (LLM provider layer: stub by default, Groq opt-in) | ProjectPage Ask tab (`ChatPanel`) |
+
+Every retrieval call writes a `query_logs` row; its `params.origin` records the
+calling surface - `direct` for the retrieval endpoint, `answer` for the answer
+endpoint's internal call.
 
 ### Framework endpoints
 
