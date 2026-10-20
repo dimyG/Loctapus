@@ -204,8 +204,9 @@ describe("ProjectPage", () => {
     expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Documents" }));
     await user.click(screen.getByRole("tab", { name: "Ask" }));
-    // Both panels stay mounted, so the answer was never unmounted.
-    expect(screen.getByText(answerFixture.answer)).toBeInTheDocument();
+    // Both panels stay mounted, so the answer was never unmounted; the round
+    // trip ends on Ask, so the answer must also be visible again.
+    expect(screen.getByText(answerFixture.answer)).toBeVisible();
   });
 
   it("keeps polling uploads while the ask tab is active", async () => {
