@@ -16,7 +16,12 @@ export default defineConfig({
         `"${PYTHON}" -m uvicorn app.main:app --port 8001`,
       cwd: "../backend",
       url: "http://localhost:8001/api/health",
-      env: { RAG_DATABASE_URL: "postgresql+psycopg://rag:rag@localhost:5432/rag_e2e" },
+      env: {
+        RAG_DATABASE_URL: "postgresql+psycopg://rag:rag@localhost:5432/rag_e2e",
+        // E2E stays on the offline stub stack whatever the local backend/.env opts into.
+        RAG_LLM_PROVIDER: "stub",
+        RAG_ENVIRONMENT: "dev",
+      },
       reuseExistingServer: false,
       timeout: 120_000,
     },
@@ -28,6 +33,8 @@ export default defineConfig({
       env: {
         RAG_DATABASE_URL: "postgresql+psycopg://rag:rag@localhost:5432/rag_e2e",
         RAG_BROKER_URL: "amqp://guest:guest@localhost:5672/rag_e2e",
+        RAG_LLM_PROVIDER: "stub",
+        RAG_ENVIRONMENT: "dev",
       },
       wait: { stderr: /celery worker ready/ },
       timeout: 120_000,
@@ -38,6 +45,8 @@ export default defineConfig({
       env: {
         RAG_DATABASE_URL: "postgresql+psycopg://rag:rag@localhost:5432/rag_e2e",
         RAG_BROKER_URL: "amqp://guest:guest@localhost:5672/rag_e2e",
+        RAG_LLM_PROVIDER: "stub",
+        RAG_ENVIRONMENT: "dev",
       },
       wait: { stderr: /dispatcher ready/ },
       timeout: 60_000,

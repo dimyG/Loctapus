@@ -5,5 +5,8 @@ __pycache__/
 .idea/
 *.egg-info/
 
+# Local secrets (backend/.env holds the Groq key when the provider is opted in).
+.env
+
 .superpowers/
 .worktrees/

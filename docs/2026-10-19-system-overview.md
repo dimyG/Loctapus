@@ -116,7 +116,13 @@ Notes:
   stub parser and a stub embedding provider, and `llm_provider` defaults to the stub
   LLM, so the whole stack (including grounded answers) runs offline. Setting
   `RAG_LLM_PROVIDER=groq` and `RAG_GROQ_API_KEY` opts answers into Groq's
-  `openai/gpt-oss-20b` - the first external AI service.
+  `openai/gpt-oss-20b` - the first external AI service. Both live in the gitignored
+  `backend/.env` (see `backend/.env.example`), which the compose `api` service
+  injects as an optional env file (its explicit environment still wins) and which
+  local runs from `backend/` read directly. The pytest suite and the e2e webServers
+  pin `RAG_LLM_PROVIDER=stub` and `RAG_ENVIRONMENT=dev` as real environment
+  variables - which beat the file in pydantic precedence - so the suites stay
+  offline whatever it contains.
 
 ## API routes
 

@@ -23,7 +23,8 @@ The venv serves the test suites and migrations authoring, not the running system
 `npm install` serves the web toolchain (tests, lint, format) and the e2e suite.
 
 Configuration comes from `RAG_`-prefixed environment variables (see
-`backend/app/core/config.py`), with a `.env` file supported in `backend/`.
+`backend/app/core/config.py`), with a `.env` file supported in `backend/`
+(`backend/.env.example` lists the commonly set ones; the copy is gitignored).
 The defaults target the compose services below, as seen from the host (the test
 suites); the containers get their own addresses from the compose file.
 
@@ -84,9 +85,14 @@ once, and the `rag_test` and `rag_e2e` vhosts are recreated by their suites' boo
 ### Opting in to Groq
 
 The default stack stays offline: `llm_provider` defaults to `stub`, so `/answer` returns
-a fixed stub sentence grounded in the retrieved chunks. Setting `RAG_LLM_PROVIDER=groq`
-and `RAG_GROQ_API_KEY` on the `api` service (compose `environment:` or an override file)
-routes answers through `openai/gpt-oss-20b` on Groq; a provider failure answers 502.
+a fixed stub sentence grounded in the retrieved chunks. Copy `backend/.env.example` to
+`backend/.env`, uncomment `RAG_LLM_PROVIDER=groq`, and paste your key into
+`RAG_GROQ_API_KEY`. The compose `api` service reads that file when it starts (recreate
+it with `docker compose up -d` to pick up changes; the optional env-file syntax needs
+Docker Compose 2.24+), as do local runs started from `backend/`; the compose-fixed
+service addresses are unaffected. Answers then route through `openai/gpt-oss-20b` on
+Groq; a provider failure answers 502. The pytest and e2e suites pin the stub provider,
+so this file never makes them call Groq.
 
 ## Test
 
