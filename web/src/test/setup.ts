@@ -5,6 +5,10 @@ import "@testing-library/jest-dom/vitest";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { server } from "./server";
 
+// jsdom does not implement scrollIntoView; the chat thread's auto-scroll effect
+// needs this no-op so components can call it under test.
+window.HTMLElement.prototype.scrollIntoView = () => {};
+
 beforeAll(() => server.listen({ onUnhandledRequest: "warn" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());

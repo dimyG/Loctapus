@@ -6,6 +6,48 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-20 - S5 answer and chat (`s5-answer-chat`)
+
+Residuals from the 2026-10-20 whole-branch review of the S5 answer slice
+(`../specs/2026-10-20-s5-answer-chat-design.md`, its plan
+`../superpowers/plans/2026-10-20-s5-answer-chat.md`), plus this review-fix wave:
+
+- `c935e14` - whitespace-only `groq_api_key` values passed the validator until this fix
+  wave; the check now strips the key before rejecting it.
+- `79335bc` - the Groq `LLMError` tests never assert the chained `__cause__` keeps the
+  real transport or body error visible in the server log.
+- `79335bc` - the `get_llm_provider` factory's groq arm has no direct factory test; a
+  focused test would pin the settings-to-provider wiring.
+- `79335bc` - `groq_api_key` is a plain `str`; a `SecretStr` would match the
+  `jwt_secret`/`s3_secret_key` precedent for credential settings.
+- `79335bc` - `get_llm_provider` builds a fresh `httpx.Client` per answer request and
+  never closes it; S6 (real providers + API keys) should own the provider lifecycle.
+- `dd76d6b` - `test_rerank_true_accepted_and_ignored` compares omitted-vs-`true` instead
+  of `false`-vs-`true`; the status codes are asserted as of this fix wave, but the
+  full-body equality caveat stays.
+- `48df074` - the ChatPanel sources tests assert collapsed accordion details with
+  `toBeInTheDocument`, which stays green because MUI keeps collapsed details mounted;
+  assert `aria-expanded`, or not-then-visible, instead.
+- `48df074` - Enter submits during IME composition; guard the keydown handler with
+  `!event.nativeEvent.isComposing`.
+- `48df074` - focus is lost while the input is disabled during a request; consider
+  refocusing the input when the request settles.
+- `26670c9` - a pinned Ask tab could end up disabled if `hasReadyUpload` later flips
+  false (no current flow does that; revisit with delete/reprocess).
+- `26670c9` - the panels lack `role="tabpanel"`/`aria-labelledby` wiring and the Tabs
+  lack `aria-controls`.
+- `84ae13d` - `origin` is a plain `str`; a `Literal["direct", "answer"]` alias would
+  catch typos in the query-log marker.
+- `ce8b5aa` - the `Sources (0)` accordion used to render on a canned empty answer;
+  fixed this wave: the Sources accordion renders only when `chunks.length > 0`.
+- `79335bc` - `llm_timeout_seconds` is a per-phase httpx timeout, not a total deadline
+  (a connect+read worst case can approach nginx's 60s `proxy_read_timeout`); revisit
+  if Groq latency grows.
+- `cd80537` - the e2e journey's `/tiny\.pdf/` and `/sample\.docx/` source-row selectors
+  assume one chunk per file surfaces in Sources; if fixtures ever yield multiple rows
+  per file, Playwright strict mode fails - switch to `.first()` or a count assertion.
+
+
 ## 2026-10-16 - Compose full-stack runtime (`compose-full-stack`)
 
 From the spec (`../specs/2026-10-16-docker-compose-full-stack-design.md`, its section
@@ -33,7 +75,9 @@ From the spec (`../specs/2026-10-16-docker-compose-full-stack-design.md`, its se
   ETag/Last-Modified validators mostly cover it, but a redeploy can leave a browser on a
   stale bundle.
 - `e9c748c` - nginx carries no `proxy_read_timeout`/`proxy_send_timeout` overrides (60s
-  defaults); fine while API requests are short, a watch item for slow synchronous endpoints.
+  defaults); fine while API requests are short, a watch item for slow synchronous
+  endpoints. Resolved for `/answer` on 2026-10-20 in `s5-answer-chat` (spec decision 12):
+  `llm_timeout_seconds=30` keeps the provider call inside the 60s proxy budget.
 
 From the 2026-10-16 whole-branch review:
 

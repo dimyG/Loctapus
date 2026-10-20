@@ -1,7 +1,10 @@
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -10,8 +13,11 @@ import Typography from "@mui/material/Typography";
 import { skipToken } from "@reduxjs/toolkit/query";
 import type { SerializedError } from "@reduxjs/toolkit";
 import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
+import { useState } from "react";
+import type { SyntheticEvent } from "react";
 import { Link as RouterLink, useParams } from "react-router";
 import DashboardLayout from "../../layouts/DashboardLayout";
+import ChatPanel from "../chat/ChatPanel";
 import UploadCard from "../uploads/UploadCard";
 import UploadsTable from "../uploads/UploadsTable";
 import { useProjectUploads } from "../uploads/useProjectUploads";
@@ -34,9 +40,13 @@ function BackLink() {
   );
 }
 
+/** One of the two project page tabs. */
+type ProjectTab = "ask" | "documents";
+
 /** A single project: upload documents and follow their processing statuses. */
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const [pinnedTab, setPinnedTab] = useState<ProjectTab | null>(null);
   const {
     data: project,
     error: projectError,
@@ -50,6 +60,15 @@ export default function ProjectPage() {
     error: uploadsError,
     refetch: refetchUploads,
   } = useProjectUploads(projectId, { skip: projectMissing });
+  // Ask only makes sense once something is indexed; a manual click pins the
+  // choice so a poll flipping hasReadyUpload never yanks the active tab.
+  const hasReadyUpload = (uploads ?? []).some((upload) => upload.status === "ready");
+  const activeTab = pinnedTab ?? (hasReadyUpload ? "ask" : "documents");
+
+  /** Pins the clicked tab, overriding the hasReadyUpload default. */
+  function handleTabChange(_event: SyntheticEvent, value: string | number) {
+    setPinnedTab(value as ProjectTab);
+  }
 
   if (projectMissing) {
     return (
@@ -88,35 +107,46 @@ export default function ProjectPage() {
           </Typography>
         )}
       </Stack>
-      {projectId !== undefined && <UploadCard projectId={projectId} />}
-      {uploadsLoading ? (
-        <Table sx={{ mt: 3 }}>
-          <TableBody>
-            {[0, 1, 2].map((row) => (
-              <TableRow key={row}>
-                {[0, 1, 2].map((cell) => (
-                  <TableCell key={cell}>
-                    <Skeleton />
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ) : uploadsError !== undefined && uploads === undefined ? (
-        // Nothing cached and the fetch failed: a retryable message, never a
-        // bare table that looks identical to an empty project.
-        <Stack spacing={2} sx={{ mt: 3, py: 8, alignItems: "center" }}>
-          <Typography color="text.secondary">
-            Could not load the document list. Please try again.
-          </Typography>
-          <Button variant="outlined" onClick={() => refetchUploads()}>
-            Try again
-          </Button>
-        </Stack>
-      ) : (
-        <UploadsTable uploads={uploads ?? []} />
-      )}
+      <Tabs value={activeTab} onChange={handleTabChange} sx={{ mt: 2 }}>
+        <Tab label="Ask" value="ask" disabled={!hasReadyUpload} />
+        <Tab label="Documents" value="documents" />
+      </Tabs>
+      {/* Both panels stay mounted so the chat thread and the uploads polling
+          survive tab switches; `hidden` removes the inactive one from the tree. */}
+      <Box hidden={activeTab !== "ask"}>
+        {projectId !== undefined && <ChatPanel projectId={projectId} />}
+      </Box>
+      <Box hidden={activeTab !== "documents"}>
+        {projectId !== undefined && <UploadCard projectId={projectId} />}
+        {uploadsLoading ? (
+          <Table sx={{ mt: 3 }}>
+            <TableBody>
+              {[0, 1, 2].map((row) => (
+                <TableRow key={row}>
+                  {[0, 1, 2].map((cell) => (
+                    <TableCell key={cell}>
+                      <Skeleton />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : uploadsError !== undefined && uploads === undefined ? (
+          // Nothing cached and the fetch failed: a retryable message, never a
+          // bare table that looks identical to an empty project.
+          <Stack spacing={2} sx={{ mt: 3, py: 8, alignItems: "center" }}>
+            <Typography color="text.secondary">
+              Could not load the document list. Please try again.
+            </Typography>
+            <Button variant="outlined" onClick={() => refetchUploads()}>
+              Try again
+            </Button>
+          </Stack>
+        ) : (
+          <UploadsTable uploads={uploads ?? []} />
+        )}
+      </Box>
     </DashboardLayout>
   );
 }

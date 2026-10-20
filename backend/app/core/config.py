@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     s3_bucket: str = "rag-dev"
     parser_provider: Literal["stub"] = "stub"
     embedding_provider: Literal["stub"] = "stub"
+    llm_provider: Literal["stub", "groq"] = "stub"
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_model: str = "openai/gpt-oss-20b"
+    llm_timeout_seconds: float = Field(default=30.0, gt=0)
+    llm_max_tokens: int = Field(default=1024, gt=0)
     chunk_target_tokens: int = 600
     chunk_max_tokens: int = 1000
     chunk_overlap_tokens: int = 80
@@ -41,6 +47,9 @@ class Settings(BaseSettings):
     # Both feed RRF fusion: the legs' candidate budget and the rank-smoothing constant.
     retrieval_candidates_per_retriever: int = Field(default=50, gt=0)
     rrf_k: int = Field(default=60, gt=0)
+    # The S5 answer round resolves a request's omitted top_k and per-document cap against these.
+    answer_context_chunks: int = Field(default=10, ge=1, le=50)
+    answer_max_chunks_per_document: int = Field(default=3, ge=1)
 
     @model_validator(mode="after")
     def _validate_chunk_budgets(self) -> Self:
@@ -65,6 +74,14 @@ class Settings(BaseSettings):
             raise ValueError("jwt_secret must be set explicitly when environment is production")
         if self.environment == "production" and self.s3_secret_key == "rag-dev-secret-local":
             raise ValueError("s3_secret_key must be set explicitly when environment is production")
+        return self
+
+    @model_validator(mode="after")
+    def _require_groq_key(self) -> Self:
+        """Reject an empty Groq key when the groq provider is selected."""
+
+        if self.llm_provider == "groq" and not self.groq_api_key.strip():
+            raise ValueError("groq_api_key must be set when llm_provider is groq")
         return self
 
 

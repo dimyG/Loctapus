@@ -118,6 +118,7 @@ def _log_query(
     user_id: UUID,
     params: RetrieveIn,
     settings: Settings,
+    origin: str,
     latency_ms: int,
     vector: list[StageCandidate],
     fts: list[StageCandidate],
@@ -134,6 +135,7 @@ def _log_query(
             "top_k": params.top_k,
             "rerank": params.rerank,
             "max_chunks_per_document": params.max_chunks_per_document,
+            "origin": origin,
             "settings": {
                 "rrf_k": settings.rrf_k,
                 "candidates_per_retriever": settings.retrieval_candidates_per_retriever,
@@ -167,11 +169,13 @@ def retrieve(
     user_id: UUID,
     params: RetrieveIn,
     settings: Settings,
+    origin: str = "direct",
 ) -> list[RetrievedChunk]:
     """Embed, search both legs, fuse, select, enrich, and log one query.
 
-    An all-stopword query degrades to the vector leg alone; a project with no
-    indexed chunks returns an empty list and still writes its log row.
+    ``origin`` labels the caller surface in the log row. An all-stopword query
+    degrades to the vector leg alone; a project with no indexed chunks returns
+    an empty list and still writes its log row.
     """
 
     started = time.perf_counter()
@@ -197,6 +201,7 @@ def retrieve(
         user_id=user_id,
         params=params,
         settings=settings,
+        origin=origin,
         latency_ms=latency_ms,
         vector=vector,
         fts=fts,

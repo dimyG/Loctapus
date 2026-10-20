@@ -2,8 +2,8 @@
 
 FastAPI + SQLAlchemy 2.0 + pgvector backend for a RAG MVP, sliced into incremental
 deliverables. Identity (users, workspaces, teams), projects, the upload+ingestion
-pipeline (upload -> parse -> chunk -> embed), and retrieval (vector + full-text search
-fused with RRF) are done; asking grounded questions over them lands with the chat slice.
+pipeline (upload -> parse -> chunk -> embed), retrieval (vector + full-text search
+fused with RRF), and grounded question answering (the chat UI) are done.
 
 ## Prerequisites
 
@@ -46,7 +46,10 @@ The UI is at `http://localhost:8080` and the API docs at
 and land as a queued ingestion run; the `GET` listing on the same path derives each
 row's status from its latest run. Retrieval POSTs to
 `/api/projects/{project_id}/retrieve` with `{"query": "...", "top_k": 10}` and answers
-with fused, diversity-selected chunks from the project's indexed documents.
+with fused, diversity-selected chunks from the project's indexed documents. The chat
+(Ask tab on a project page) POSTs to `/api/projects/{project_id}/answer` with
+`{"query": "..."}` and returns the grounded answer plus its cited chunks - the
+question -> answer path runs fully from the browser.
 
 ```powershell
 docker compose -f deploy/docker-compose.yml down
@@ -77,6 +80,13 @@ RabbitMQ state lives on the named `rabbitmqdata` volume, so queues and vhosts su
 `docker compose up -d --force-recreate rabbitmq`. This volume was introduced after the
 broker had run without one: recreating the container discards that old anonymous volume
 once, and the `rag_test` and `rag_e2e` vhosts are recreated by their suites' bootstraps.
+
+### Opting in to Groq
+
+The default stack stays offline: `llm_provider` defaults to `stub`, so `/answer` returns
+a fixed stub sentence grounded in the retrieved chunks. Setting `RAG_LLM_PROVIDER=groq`
+and `RAG_GROQ_API_KEY` on the `api` service (compose `environment:` or an override file)
+routes answers through `openai/gpt-oss-20b` on Groq; a provider failure answers 502.
 
 ## Test
 

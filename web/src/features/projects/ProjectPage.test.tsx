@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { Route, Routes } from "react-router";
@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { initialRootState } from "../../app/store";
 import { server } from "../../test/server";
 import { renderWithProviders } from "../../test/test-utils";
+import type { Answer } from "../chat/answersApi";
 import type { Upload } from "../uploads/uploadsApi";
 import ProjectPage from "./ProjectPage";
 
@@ -51,6 +52,24 @@ const failedUpload: Upload = {
 };
 const uploadRows: Upload[] = [queuedUpload, readyUpload, failedUpload];
 
+/** Stable fixture the answer endpoint returns unless a test overrides it. */
+const answerFixture: Answer = {
+  answer: "Rotate the garage key from the admin UI. [1]",
+  chunks: [
+    {
+      id: "c-1",
+      document_id: "d-1",
+      source_item_id: "s-1",
+      filename: "handbook.pdf",
+      position: 0,
+      heading_path: ["Keys", "Rotation"],
+      chunk_type: "text",
+      text: "To rotate the key, open the admin UI and click Rotate.",
+      score: 0.75,
+    },
+  ],
+};
+
 const PDF_BYTES = "%PDF-1.4 test bytes";
 
 function pdfFile(name: string): File {
@@ -62,6 +81,22 @@ async function advance(ms: number) {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
   });
+}
+
+/**
+ * Waits for the uploads flip, then clicks Documents so the pin sticks.
+ *
+ * At first render the uploads are still loading, so Documents is already the
+ * active tab; MUI fires a Tab's onChange only when the clicked tab is not
+ * already selected, so a click landing before the response pins nothing. The
+ * Ask flip proves the ready upload arrived, mirroring the e2e journey's ruled
+ * sequence: flip first, then pin.
+ */
+async function openDocuments(user: ReturnType<typeof userEvent.setup>) {
+  await waitFor(() => {
+    expect(screen.getByRole("tab", { name: "Ask" })).toHaveAttribute("aria-selected", "true");
+  });
+  await user.click(screen.getByRole("tab", { name: "Documents" }));
 }
 
 /**
@@ -103,6 +138,8 @@ describe("ProjectPage", () => {
 
   it("renders the header, back link, upload card, and status chips", async () => {
     renderProject();
+    const user = userEvent.setup();
+    await openDocuments(user);
     expect(await screen.findByRole("heading", { name: "Default" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to projects" })).toHaveAttribute(
       "href",
@@ -120,6 +157,81 @@ describe("ProjectPage", () => {
     expect(
       screen.getByText(new Date("2026-10-12T10:00:00Z").toLocaleDateString()),
     ).toBeInTheDocument();
+  });
+
+  it("makes ask the default tab when a ready upload exists", async () => {
+    renderProject();
+    await waitFor(() => {
+      // The baseline uploads include a ready row, so Ask wins the default.
+      expect(screen.getByRole("tab", { name: "Ask" })).toHaveAttribute("aria-selected", "true");
+    });
+    // The Documents panel stays mounted but is hidden from the a11y tree.
+    expect(screen.queryByRole("cell", { name: "brief.pdf" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Ask a question")).toBeVisible();
+  });
+
+  it("disables ask and activates documents without a ready upload", async () => {
+    server.use(
+      http.get("*/projects/p-1/uploads", () => HttpResponse.json([queuedUpload, failedUpload])),
+    );
+    renderProject();
+    // Ask is disabled while no upload is ready, including during the loading
+    // phase, so wait on the table before asserting the tab states.
+    await screen.findByRole("cell", { name: "brief.pdf" });
+    expect(screen.getByRole("tab", { name: "Ask" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "Documents" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("cell", { name: "brief.pdf" })).toBeVisible();
+  });
+
+  it("pins the choice when a tab is clicked", async () => {
+    renderProject();
+    const user = userEvent.setup();
+    await openDocuments(user);
+    // Pinning survives hasReadyUpload staying true.
+    expect(screen.getByRole("tab", { name: "Documents" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("cell", { name: "brief.pdf" })).toBeVisible();
+  });
+
+  it("keeps the thread across a tab round trip", async () => {
+    server.use(http.post("*/api/projects/p-1/answer", () => HttpResponse.json(answerFixture)));
+    renderProject();
+    const user = userEvent.setup();
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Ask" })).toHaveAttribute("aria-selected", "true");
+    });
+    await user.type(screen.getByLabelText("Ask a question"), "How do I rotate keys?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    await user.click(screen.getByRole("tab", { name: "Ask" }));
+    // Both panels stay mounted, so the answer was never unmounted; the round
+    // trip ends on Ask, so the answer must also be visible again.
+    expect(screen.getByText(answerFixture.answer)).toBeVisible();
+  });
+
+  it("keeps polling uploads while the ask tab is active", async () => {
+    let gets = 0;
+    server.use(
+      http.get("*/projects/p-1/uploads", () => {
+        gets += 1;
+        // Ask is active by default, but one row is still moving.
+        return HttpResponse.json([readyUpload, queuedUpload]);
+      }),
+    );
+    vi.useFakeTimers();
+    try {
+      renderProject();
+      await advance(0);
+      expect(gets).toBe(1);
+      // The first fetch settles on the next flush, flipping the default to
+      // Ask; the tab is the active one while the polls keep firing.
+      await advance(500);
+      expect(screen.getByRole("tab", { name: "Ask" })).toHaveAttribute("aria-selected", "true");
+      await advance(2000);
+      expect(gets).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("uploads the chosen file as multipart form data with a file part", async () => {
@@ -143,6 +255,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("report.pdf"));
     await vi.waitFor(() => {
       expect(posts).toHaveLength(1);
@@ -168,6 +281,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("pending.pdf"));
     await vi.waitFor(() => {
       expect(resolveRequest).toBeDefined();
@@ -197,6 +311,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup({ applyAccept: false });
+    await openDocuments(user);
     await user.upload(
       await screen.findByLabelText("Upload"),
       new File(["plain text"], "notes.txt", { type: "text/plain" }),
@@ -217,6 +332,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup({ applyAccept: false });
+    await openDocuments(user);
     await user.upload(
       await screen.findByLabelText("Upload"),
       new File([new ArrayBuffer(25 * 1024 * 1024 + 1)], "big.pdf", { type: "application/pdf" }),
@@ -237,6 +353,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
+    await openDocuments(user);
     await user.upload(
       await screen.findByLabelText("Upload"),
       new File([], "empty.pdf", { type: "application/pdf" }),
@@ -248,7 +365,12 @@ describe("ProjectPage", () => {
   it("keeps the upload control a single tab stop", async () => {
     renderProject();
     const user = userEvent.setup();
+    await openDocuments(user);
     screen.getByRole("link", { name: "Back to projects" }).focus();
+    await user.tab();
+    // The Tabs bar sits between the back link and the upload input; the
+    // selected Documents tab is its only tab stop (MUI roving tabindex).
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Documents" }));
     await user.tab();
     // The label Button is removed from the tab order, so the hidden file
     // input is the upload control's only stop before the table.
@@ -269,6 +391,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("report.pdf"));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Check the highlighted fields and try again.");
@@ -286,6 +409,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("report.pdf"));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not store the file. Please try again.",
@@ -303,6 +427,7 @@ describe("ProjectPage", () => {
     );
     renderProject();
     const user = userEvent.setup();
+    await openDocuments(user);
     await user.upload(await screen.findByLabelText("Upload"), pdfFile("brief.pdf"));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "A file with this name already exists in this project.",

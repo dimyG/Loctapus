@@ -13,6 +13,11 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "e2e/**"],
     // Generous per-test budget: under parallel load, 1s findBy polls flake.
     testTimeout: 10_000,
+    // The default forks pool spawns one worker per CPU core, and each worker
+    // builds its own jsdom environments; that saturates the machine and flakes
+    // the timeouts above. Four workers keep the suite fast without starving
+    // everything else running alongside it.
+    maxWorkers: 4,
     // Node's Request rejects relative URLs, so tests need an absolute base.
     env: { VITE_API_BASE_URL: "http://localhost:3000/api" },
   },
