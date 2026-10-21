@@ -1,5 +1,5 @@
-import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
@@ -10,14 +10,16 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { Link as RouterLink } from "react-router";
+import { sectionPath } from "../../app/sectionPaths";
 import CreateProjectDialog from "./CreateProjectDialog";
 import EmptyProjects from "./EmptyProjects";
 import { useGetProjectsQuery } from "./projectsApi";
 
-/** The projects home: list with loading, empty, and error states. */
+/** The projects home: searchable list with loading, empty, and error states. */
 export default function ProjectsPage() {
   const { data: projects, isLoading, error, refetch } = useGetProjectsQuery();
   // The snackbar stays hidden once dismissed for the current error object;
@@ -26,6 +28,12 @@ export default function ProjectsPage() {
   const [dismissedError, setDismissedError] = useState<unknown>(null);
   const showError = error !== undefined && error !== dismissedError && (projects?.length ?? 0) > 0;
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  // The search is a client-side name filter; the endpoint has no query support.
+  const needle = search.trim().toLowerCase();
+  const visibleProjects = (projects ?? []).filter((project) =>
+    project.name.toLowerCase().includes(needle),
+  );
 
   return (
     <>
@@ -37,12 +45,20 @@ export default function ProjectsPage() {
         <Typography component="h1" variant="h4" sx={{ fontWeight: 600 }}>
           Projects
         </Typography>
-        <Button variant="contained" onClick={() => setDialogOpen(true)}>
-          Create project
-        </Button>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <TextField
+            size="small"
+            label="Search projects"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <Button variant="contained" onClick={() => setDialogOpen(true)}>
+            Create project
+          </Button>
+        </Stack>
       </Stack>
       {isLoading ? (
-        <Table>
+        <Table sx={{ mt: 3 }}>
           <TableBody>
             {[0, 1, 2, 3, 4].map((row) => (
               <TableRow key={row} data-testid="skeleton-row">
@@ -67,7 +83,7 @@ export default function ProjectsPage() {
       ) : projects !== undefined && projects.length === 0 ? (
         <EmptyProjects onCreate={() => setDialogOpen(true)} />
       ) : (
-        <Box sx={{ overflowX: "auto" }}>
+        <Card variant="outlined" sx={{ mt: 3, overflowX: "auto" }}>
           <Table>
             <TableHead>
               <TableRow>
@@ -77,10 +93,10 @@ export default function ProjectsPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(projects ?? []).map((project) => (
+              {visibleProjects.map((project) => (
                 <TableRow key={project.id}>
                   <TableCell>
-                    <Link component={RouterLink} to={`/projects/${project.id}`}>
+                    <Link component={RouterLink} to={sectionPath("sources", project.id)}>
                       {project.name}
                     </Link>
                   </TableCell>
@@ -96,7 +112,7 @@ export default function ProjectsPage() {
               ))}
             </TableBody>
           </Table>
-        </Box>
+        </Card>
       )}
       <Snackbar
         open={showError}

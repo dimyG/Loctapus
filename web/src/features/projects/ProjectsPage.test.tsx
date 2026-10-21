@@ -25,6 +25,11 @@ const projectRows = [
   { id: "p-2", name: "Research notes", is_public: true, created_at: "2026-10-08T10:00:00Z" },
 ];
 
+const searchRows = [
+  { id: "p-1", name: "Alpha", is_public: false, created_at: "2026-10-09T10:00:00Z" },
+  { id: "p-2", name: "Beta", is_public: true, created_at: "2026-10-08T10:00:00Z" },
+];
+
 describe("ProjectsPage", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -46,8 +51,26 @@ describe("ProjectsPage", () => {
     server.use(http.get("*/projects", () => HttpResponse.json(projectRows)));
     renderProjects();
     const link = await screen.findByRole("link", { name: "Research notes" });
-    expect(link).toHaveAttribute("href", "/projects/p-2");
-    expect(screen.getByRole("link", { name: "Default" })).toHaveAttribute("href", "/projects/p-1");
+    expect(link).toHaveAttribute("href", "/projects/p-2/sources");
+    expect(screen.getByRole("link", { name: "Default" })).toHaveAttribute(
+      "href",
+      "/projects/p-1/sources",
+    );
+  });
+
+  it("filters rows by the search field", async () => {
+    server.use(http.get("*/projects", () => HttpResponse.json(searchRows)));
+    const user = userEvent.setup();
+    renderProjects();
+    expect(await screen.findByText("Alpha")).toBeInTheDocument();
+    expect(screen.getByText("Beta")).toBeInTheDocument();
+    const search = screen.getByRole("textbox", { name: "Search projects" });
+    await user.type(search, "alp");
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
+    await user.clear(search);
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.getByText("Beta")).toBeInTheDocument();
   });
 
   it("shows skeletons while loading", async () => {
