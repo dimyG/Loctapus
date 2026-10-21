@@ -5,6 +5,8 @@ import LoginPage from "../features/auth/LoginPage";
 import ProjectPage from "../features/projects/ProjectPage";
 import ProjectsPage from "../features/projects/ProjectsPage";
 import RegisterPage from "../features/auth/RegisterPage";
+import FileUploadPage from "../features/sources/FileUploadPage";
+import SourcesPage from "../features/sources/SourcesPage";
 import AppShell from "../layouts/AppShell";
 import RequireAuth from "./RequireAuth";
 
@@ -26,6 +28,8 @@ export default function AppRoutes() {
       >
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/:projectId" element={<ProjectPage />} />
+        <Route path="/projects/:projectId/sources" element={<SourcesPage />} />
+        <Route path="/projects/:projectId/sources/upload" element={<FileUploadPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
