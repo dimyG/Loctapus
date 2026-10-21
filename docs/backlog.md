@@ -6,6 +6,30 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-21 - UI overhaul final review residuals (`ui-mui-templates`)
+
+Residuals recorded by the fix wave of the whole-branch final review of the UI
+overhaul (`f7dee71`..`e577c3a`); every other finding was fixed in place.
+
+- `bed7396` - `web/e2e/venv.ts` cannot locate the backend venv when e2e runs
+  from a worktree outside the main checkout: it walks up from `web/` expecting
+  the venv at some ancestor's `.venv`, and this worktree lives on another tree
+  than the main checkout at `D:\Projects\RAG`, so the walk never finds it.
+  Working workaround (no tracked changes): a git-ignored NTFS junction
+  `<worktree>\.venv -> D:\Projects\RAG\.venv`. Follow-up: teach
+  `web/e2e/venv.ts` an env-var override for the venv location.
+- `e577c3a` - stale marketing copy, kept for the owner's copy review (the spec
+  froze the current copy): the About page still says "Documents, semantic
+  search, and answers are rolling out next. This release covers the foundation:
+  accounts, sessions, teams, and projects."
+  (`web/src/features/about/AboutPage.tsx:22-23`), false since S3-S5, and the
+  landing page says "Add PDFs and text files" while only PDF/DOCX are accepted
+  (`web/src/features/landing/LandingPage.tsx:24`). The About page also retains
+  "documents" marketing copy, so it belongs on the "documents"-naming
+  resolution's exception list alongside the landing hero and the `EmptyProjects`
+  CTA.
+
+
 ## 2026-10-21 - UI overhaul on the official MUI templates (`ui-mui-templates`)
 
 Residuals from the post-S5 UI restructure on the official MUI templates
