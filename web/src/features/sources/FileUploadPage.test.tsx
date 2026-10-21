@@ -1,7 +1,8 @@
 import { act, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialRootState } from "../../app/store";
 import { server } from "../../test/server";
 import { renderWithProviders } from "../../test/test-utils";
@@ -48,6 +49,44 @@ const failedUpload: Upload = {
   filename: "broken.pdf",
   created_at: "2026-10-10T10:00:00Z",
 };
+
+const PDF_BYTES = "%PDF-1.4 test bytes";
+
+function pdfFile(name: string): File {
+  return new File([PDF_BYTES], name, { type: "application/pdf" });
+}
+
+/**
+ * jsdom and Node's fetch (undici) disagree on Blob realms: undici cannot read
+ * a jsdom File's bytes and its multipart parser rejects them, so file uploads
+ * would never round-trip. Swapping File and FormData to the Node (undici)
+ * classes for this file puts the page, the fetch call, and request.formData()
+ * in the same realm, which is how they always are in a real browser.
+ */
+let realFile: typeof File | undefined;
+let realFormData: typeof FormData | undefined;
+
+beforeAll(async () => {
+  const { File: NodeFile } = await import("node:buffer");
+  // An urlencoded Request body parses into the bundled undici FormData class.
+  const probe = await new Request("http://localhost/", {
+    method: "POST",
+    body: "a=b",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+  }).formData();
+  realFile = globalThis.File;
+  realFormData = globalThis.FormData;
+  globalThis.File = NodeFile as unknown as typeof File;
+  globalThis.FormData = probe.constructor as unknown as typeof FormData;
+});
+afterAll(() => {
+  if (realFile !== undefined) {
+    globalThis.File = realFile;
+  }
+  if (realFormData !== undefined) {
+    globalThis.FormData = realFormData;
+  }
+});
 
 /** Advances fake timers inside act so store updates and effects flush. */
 async function advance(ms: number) {
@@ -144,5 +183,29 @@ describe("FileUploadPage", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("invalidates the list on upload, so the new row appears without a reload", async () => {
+    let gets = 0;
+    const uploadedRow: Upload = {
+      ...queuedUpload,
+      id: "s-new",
+      filename: "report.pdf",
+      created_at: "2026-10-13T09:00:00Z",
+    };
+    const terminalRows = [readyUpload, failedUpload];
+    server.use(
+      http.get("*/projects/p-1/uploads", () => {
+        gets += 1;
+        return HttpResponse.json(gets === 1 ? terminalRows : [...terminalRows, uploadedRow]);
+      }),
+      http.post("*/projects/p-1/uploads", () => HttpResponse.json(uploadedRow, { status: 201 })),
+    );
+    renderUploadPage();
+    await userEvent.setup().upload(screen.getByLabelText("Upload"), pdfFile("report.pdf"));
+    // The mutation invalidates the list, so the table refetches and the
+    // freshly created row lands without any manual reload.
+    expect(await screen.findByText("report.pdf")).toBeInTheDocument();
+    expect(gets).toBe(2);
   });
 });
