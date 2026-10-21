@@ -16,7 +16,6 @@ import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { Link as RouterLink, useParams } from "react-router";
-import DashboardLayout from "../../layouts/DashboardLayout";
 import ChatPanel from "../chat/ChatPanel";
 import UploadCard from "../uploads/UploadCard";
 import UploadsTable from "../uploads/UploadsTable";
@@ -72,19 +71,19 @@ export default function ProjectPage() {
 
   if (projectMissing) {
     return (
-      <DashboardLayout>
+      <>
         <Stack spacing={2} sx={{ py: 8, alignItems: "center" }}>
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
             Project not found.
           </Typography>
           <BackLink />
         </Stack>
-      </DashboardLayout>
+      </>
     );
   }
   if (projectError !== undefined && project === undefined) {
     return (
-      <DashboardLayout>
+      <>
         <Stack spacing={2} sx={{ py: 8, alignItems: "center" }}>
           <Typography color="text.secondary">Could not load project.</Typography>
           <Button variant="outlined" onClick={() => refetchProject()}>
@@ -92,11 +91,11 @@ export default function ProjectPage() {
           </Button>
           <BackLink />
         </Stack>
-      </DashboardLayout>
+      </>
     );
   }
   return (
-    <DashboardLayout>
+    <>
       <Stack spacing={0.5} sx={{ alignItems: "flex-start" }}>
         <BackLink />
         {project === undefined || projectLoading ? (
@@ -147,6 +146,6 @@ export default function ProjectPage() {
           <UploadsTable uploads={uploads ?? []} />
         )}
       </Box>
-    </DashboardLayout>
+    </>
   );
 }

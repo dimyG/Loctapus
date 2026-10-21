@@ -1,6 +1,8 @@
 import Avatar from "@mui/material/Avatar";
+import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
+import ListItemText from "@mui/material/ListItemText";
 import ListSubheader from "@mui/material/ListSubheader";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -9,7 +11,7 @@ import { useNavigate } from "react-router";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { logoutUser, selectUser } from "./authSlice";
 
-/** The account dropdown: identity subheader plus sign-out. */
+/** The account dropdown: identity subheader, a future settings entry, and sign-out. */
 export default function UserMenu() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -45,6 +47,11 @@ export default function UserMenu() {
       <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
         <ListSubheader>{user.email}</ListSubheader>
         <Divider />
+        {/* Settings is not built yet: disabled with a chip, never a dead link. */}
+        <MenuItem disabled>
+          <ListItemText primary="Settings" />
+          <Chip label="Coming soon" size="small" />
+        </MenuItem>
         <MenuItem onClick={handleSignOut}>Sign out</MenuItem>
       </Menu>
     </>

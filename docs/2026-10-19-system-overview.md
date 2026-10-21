@@ -166,7 +166,7 @@ All routes are served under the `/api` prefix (`app.include_router(..., prefix="
 | Method | Route | Purpose | UI usage |
 | --- | --- | --- | --- |
 | POST | `/api/projects` | Create a project for a team | CreateProjectDialog |
-| GET | `/api/projects` | Projects shared with any of the user's teams | ProjectsPage |
+| GET | `/api/projects` | Projects shared with any of the user's teams | ProjectsPage, and the app shell (ProjectSelect, sidebar Sources/Chat links) |
 | GET | `/api/projects/public` | Every public project | Not called by the UI |
 | GET | `/api/projects/{project_id}` | One project visible to the user | ProjectPage |
 | PATCH | `/api/projects/{project_id}` | Update a project (team admin) | Not called by the UI |

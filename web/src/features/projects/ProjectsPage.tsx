@@ -13,7 +13,6 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { Link as RouterLink } from "react-router";
-import DashboardLayout from "../../layouts/DashboardLayout";
 import CreateProjectDialog from "./CreateProjectDialog";
 import EmptyProjects from "./EmptyProjects";
 import { useGetProjectsQuery } from "./projectsApi";
@@ -29,7 +28,7 @@ export default function ProjectsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
-    <DashboardLayout>
+    <>
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -118,6 +117,6 @@ export default function ProjectsPage() {
         }
       />
       {dialogOpen && <CreateProjectDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />}
-    </DashboardLayout>
+    </>
   );
 }

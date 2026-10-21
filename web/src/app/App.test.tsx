@@ -48,8 +48,9 @@ describe("App", () => {
   it("renders the guarded projects page for an authenticated visitor", async () => {
     saveToken("t-boot");
     renderApp("/projects");
-    // The heading proves the real projects list rendered, not a scaffold.
-    expect(await screen.findByText("Projects")).toBeInTheDocument();
+    // The heading proves the real projects list rendered, not a scaffold. A
+    // text query would now also hit the sidebar's "Projects" nav item.
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/projects");
   });
 

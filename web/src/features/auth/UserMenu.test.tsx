@@ -58,6 +58,19 @@ describe("UserMenu", () => {
     expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
   });
 
+  it("shows a disabled Settings entry above sign out", async () => {
+    renderMenu();
+    await openMenu(userEvent.setup());
+    // MUI exposes disabled menu items via aria-disabled, not the native attribute.
+    const settings = screen.getByRole("menuitem", { name: /settings/i });
+    expect(settings).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("Coming soon")).toBeInTheDocument();
+    const signOut = screen.getByRole("menuitem", { name: "Sign out" });
+    expect(
+      settings.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("signs out: posts /auth/logout, clears storage, and returns to the landing", async () => {
     const logoutCalls: unknown[] = [];
     server.use(
