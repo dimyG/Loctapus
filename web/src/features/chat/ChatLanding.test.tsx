@@ -170,6 +170,25 @@ describe("ChatLanding", () => {
     });
   });
 
+  it("shows a retryable card when the projects fetch fails, and a retry lands", async () => {
+    server.use(
+      http.get("*/api/projects", () => HttpResponse.json({ detail: "boom" }, { status: 500 })),
+    );
+    renderLanding();
+    // Nothing is cached, so the failure must land on the card, not a spinner.
+    expect(await screen.findByText("Could not load projects.")).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    // The endpoint recovers, so Try again must rerun the resolver and land.
+    server.use(
+      http.get("*/api/projects", () => HttpResponse.json([projectP1])),
+      http.get("*/api/projects/p-1/uploads", () => HttpResponse.json([queuedP1, readyP1])),
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("location")).toHaveTextContent("/projects/p-1/chat");
+    });
+  });
+
   it("refetches stale cached statuses", async () => {
     // p-2 must be non-chattable here: the walk stops at the first chattable
     // project, so a chattable p-2 would never reach the stale p-1 entry.
