@@ -6,7 +6,8 @@ import IconButton from "@mui/material/IconButton";
 import Toolbar from "@mui/material/Toolbar";
 import { alpha } from "@mui/material/styles";
 import { useState } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useLocation } from "react-router";
+import { projectIdFromPath } from "../app/sectionPaths";
 import UserMenu from "../features/auth/UserMenu";
 import ColorModeIconDropdown from "../theme/ColorModeIconDropdown";
 import ProjectSelect from "./ProjectSelect";
@@ -16,6 +17,7 @@ import SideNavMobile from "./SideNavMobile";
 /** The signed-in frame: topbar, permanent sidebar on md+, and the routed page. */
 export default function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { pathname } = useLocation();
 
   return (
     <Box sx={{ display: "flex" }}>
@@ -61,7 +63,11 @@ export default function AppShell() {
         {/* Spacer that keeps the content below the fixed topbar. */}
         <Toolbar />
         <Container maxWidth="lg" sx={{ pb: 6 }}>
-          <Outlet />
+          {/* Keyed by the URL's project so a project switch remounts the page:
+              React Router reuses the element when only :projectId changes, and
+              a reused element would carry the old project's state and RTK
+              Query's previous-argument data into the new project's URL. */}
+          <Outlet key={projectIdFromPath(pathname) ?? "none"} />
         </Container>
       </Box>
     </Box>

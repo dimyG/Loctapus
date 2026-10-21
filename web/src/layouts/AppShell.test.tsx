@@ -1,9 +1,13 @@
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
 import { initialRootState } from "../app/store";
+import type { Answer } from "../features/chat/answersApi";
+import ChatPage from "../features/chat/ChatPage";
+import SourcesPage from "../features/sources/SourcesPage";
+import type { Upload } from "../features/uploads/uploadsApi";
 import { server } from "../test/server";
 import { renderWithProviders } from "../test/test-utils";
 import AppShell from "./AppShell";
@@ -35,6 +39,44 @@ function renderShell() {
     </Routes>,
     { route: "/projects/p-1/sources", preloadedState: authed() },
   );
+}
+
+/** A canned answer the chat panel renders once its POST resolves. */
+const answerFixture: Answer = {
+  answer: "Rotate the garage key from the admin UI. [1]",
+  chunks: [],
+};
+
+/** A ready source item on p-2, so the switched-to project is chattable. */
+const readyUploadP2: Upload = {
+  id: "s-9",
+  project_id: "p-2",
+  status: "ready",
+  filename: "paper.pdf",
+  created_at: "2026-10-12T10:00:00Z",
+};
+
+/**
+ * Renders the shell around the real chat and sources routes, so a project
+ * switch exercises the same remount wiring the app's layout route uses.
+ */
+function renderProjectShell(route: string) {
+  server.use(http.get("*/projects", () => HttpResponse.json(projectRows)));
+  return renderWithProviders(
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route path="/projects/:projectId/chat" element={<ChatPage />} />
+        <Route path="/projects/:projectId/sources" element={<SourcesPage />} />
+      </Route>
+    </Routes>,
+    { route, preloadedState: authed() },
+  );
+}
+
+/** Opens the topbar project select and picks the named project. */
+async function switchProject(name: string) {
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Project" }));
+  fireEvent.click(await screen.findByRole("option", { name }));
 }
 
 describe("AppShell", () => {
@@ -74,5 +116,46 @@ describe("AppShell", () => {
       },
       { timeout: 3000 },
     );
+  });
+
+  it("drops the old project's chat thread when the topbar switches projects", async () => {
+    server.use(
+      http.get("*/api/projects/p-2", () => HttpResponse.json(projectRows[1])),
+      http.get("*/api/projects/p-2/uploads", () => HttpResponse.json([readyUploadP2])),
+      http.post("*/api/projects/p-1/answer", () => HttpResponse.json(answerFixture)),
+    );
+    renderProjectShell("/projects/p-1/chat");
+    const user = userEvent.setup({ applyAccept: false });
+    await user.type(
+      await screen.findByLabelText("Ask a question"),
+      "How do I rotate the garage key?",
+    );
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
+    await switchProject("Research");
+    // The new project gets a fresh panel: p-2 is chattable, but its thread
+    // must hold no trace of p-1's question or answer.
+    expect(await screen.findByLabelText("Ask a question")).toHaveValue("");
+    expect(screen.queryByText("How do I rotate the garage key?")).not.toBeInTheDocument();
+    expect(screen.queryByText(answerFixture.answer)).not.toBeInTheDocument();
+  });
+
+  it("drops the old project's source rows when the topbar switches projects", async () => {
+    server.use(
+      http.get("*/api/projects/p-2", () => HttpResponse.json(projectRows[1])),
+      http.get("*/api/projects/p-2/uploads", () =>
+        HttpResponse.json({ detail: "boom" }, { status: 500 }),
+      ),
+    );
+    renderProjectShell("/projects/p-1/sources");
+    expect(await screen.findByText("brief.pdf")).toBeInTheDocument();
+    expect(screen.getByText("report.docx")).toBeInTheDocument();
+    await switchProject("Research");
+    // p-2's uploads fetch fails with nothing cached: the error card must
+    // show, and p-1's rows must not survive the switch.
+    expect(await screen.findByText("Could not load the source items.")).toBeInTheDocument();
+    expect(screen.queryByText("brief.pdf")).not.toBeInTheDocument();
+    expect(screen.queryByText("report.docx")).not.toBeInTheDocument();
+    expect(screen.queryByText("broken.pdf")).not.toBeInTheDocument();
   });
 });
