@@ -130,8 +130,10 @@ against the port (renders, both schemes, a customization applied).
     `/projects/:id/chat`. Prefix rules never let two sections light up at once.
 - **Topbar** (template's `AppNavbar` shape): left - the project selector, a `Select`
   styled after the template's `SelectContent`, always in sync with the URL (decision 4);
-  right - `ColorModeIconDropdown`, then the avatar menu: email subheader, "Settings"
-  disabled with a "Coming soon" chip, "Sign out".
+  the placeholder also shows while the URL's project id is not in the loaded list (a
+  loading or stale id), which avoids an out-of-range selection; right -
+  `ColorModeIconDropdown`, then the avatar menu: email subheader, "Settings" disabled
+  with a "Coming soon" chip, "Sign out".
 - The sign-out race semantics documented in `UserMenu` and `RequireAuth` are preserved
   unchanged; only presentation moves.
 
@@ -168,7 +170,8 @@ Definitions:
 
 One resolver, mounted at `/app` and reached from the signed-in funnel (`LandingPage`,
 `LoginPage`, and `RegisterPage` navigate to `/app` instead of `/projects` when a session
-exists or just started):
+exists or just started). Every resolver and redirect navigation replaces history
+(`replace`), so the Back button never lands on `/app`:
 
 1. Fetch `GET /api/projects`, sort newest-first; walk the list in order, fetching each
    project's `GET /api/projects/:id/uploads` with a forced refetch (cached statuses can
@@ -234,11 +237,13 @@ exceptions and stay.
 
 - The existing `ChatPanel` thread (question, grounded answer, cited-sources accordions)
   fills the page, restyled to the template look.
-- Readiness derives from the uploads hook: with no `ready` item the page shows the empty
-  state ("Upload sources to start asking questions" plus a button to that project's
-  sources page - an absolute project-scoped link); live polling flips the panel on the
-  moment a file reaches `ready`. There is no separate disabled-input state: the panel
-  exists exactly when something is ready.
+- Readiness derives from the uploads hook: while the list loads the page shows a loading
+  placeholder (never the empty state - it must not flash for a chattable project), an
+  uncached fetch error shows the retryable "Could not load the source items." card, and
+  with no `ready` item the page shows the empty state ("Upload sources to start asking
+  questions" plus a button to that project's sources page - an absolute project-scoped
+  link); live polling flips the panel on the moment a file reaches `ready`. There is no
+  separate disabled-input state: the panel exists exactly when something is ready.
 
 ## 10. Outer pages (official template adoption)
 
@@ -269,9 +274,9 @@ exceptions and stay.
 Kept untouched (logic): `app/api.ts`, store, `authSlice` + `sessionActions`, all RTK Query
 APIs, `useProjectUploads`, `uploadRules`, `uploadStatus`, `tokenStorage`, `RequireAuth`,
 `BootSplash`, `CreateProjectDialog` (the global theme restyles it), `EmptyProjects`,
-ChatPanel thread logic, and the test infrastructure (`server.ts`, `handlers.ts`,
-`test-utils.tsx`). Restyled in place: the four outer pages, `UserMenu`, `App.tsx`,
-`AppRoutes.tsx`, `global.css`.
+ChatPanel thread logic, and the test infrastructure (`server.ts`, `handlers.ts`; only
+`test-utils.tsx`'s theme wrapper changes - its logic is untouched). Restyled in place:
+the four outer pages, `UserMenu`, `App.tsx`, `AppRoutes.tsx`, `global.css`.
 
 ## 12. Testing
 
@@ -306,8 +311,12 @@ task, not only at the end.
 
 - **Template-port fidelity under our lint/TS rules** - named imports per file, `import
   type` for type-only imports: mechanical, sources exist for every port.
-- **`useColorScheme`/`useMediaQuery` in jsdom** - mockable; existing suites already
-  handle MUI media queries.
+- **`useColorScheme`/responsive styles in jsdom** - jsdom never matches media-feature
+  queries, so responsive `sx` values resolve to their xs value and md+-only elements are
+  CSS-hidden from role queries in tests. The plan's tests therefore target the inner
+  components (`NavMenuContent`, `ProjectSelect`) directly, use `{ hidden: true }`
+  queries for md+-only shell pieces, and keep single CTA/mode-switcher sets in the
+  outer frames.
 - **Large diff** - mitigated by the ordered build below and one-concern-per-commit.
 - **E2e rewrite touches the CI-critical journey** - the rewrite is a first-class task in
   the plan, not an afterthought.
