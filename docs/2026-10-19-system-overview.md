@@ -112,9 +112,9 @@ Runtime flow of one question:
    it (stub embedding provider today) and runs the two search legs over the
    project's indexed chunks - pgvector cosine and Postgres FTS - then fuses the
    candidates by reciprocal rank and diversity-selects the final chunks.
-2. Every retrieval call writes one `query_logs` row - `origin=answer` here,
-   `direct` when the retrieval endpoint is called directly - recording the
-   request, the per-stage candidates, and the latency.
+2. Every retrieval call writes one `query_logs` row - `params.origin=answer`
+   here, `direct` when the retrieval endpoint is called directly - recording
+   the request, the per-stage candidates, and the latency.
 3. The api builds the numbered context prompt from the final chunks and calls
    the selected LLM provider (`llm_provider`: stub by default, Groq opt-in). An
    empty index answers from a canned sentence; a provider failure answers 502.
@@ -190,7 +190,7 @@ refetch-on-reconnect is configured.
 
 | Method | Route | Purpose | UI usage |
 | --- | --- | --- | --- |
-| POST | `/api/projects/{project_id}/retrieve` | Hybrid search over the project's indexed chunks: embed the query, run the pgvector cosine and Postgres FTS legs, fuse by reciprocal rank, diversity-select per document, return the grounded chunks | Not called by the UI (the answer endpoint runs the same pipeline in-process) |
+| POST | `/api/projects/{project_id}/retrieve` | Hybrid search over the project's indexed chunks: embed the query, run the pgvector cosine and Postgres FTS legs, fuse by reciprocal rank, diversity-select (per-document cap when requested), return the grounded chunks | Not called by the UI (the answer endpoint runs the same pipeline in-process) |
 
 ### Answers (backend/app/answers/router.py)
 
@@ -343,7 +343,7 @@ erDiagram
         uuid project_id FK "cascade delete"
         uuid user_id FK "no ON DELETE: deleting a user keeps the project's query past"
         text query
-        jsonb params "resolved request plus fusion settings snapshot"
+        jsonb params "resolved request plus retrieval settings snapshot"
         int latency_ms "embed through selection, excluding the log insert"
         jsonb stages "vector / fts / fused candidates and the final ids"
         timestamptz created_at "server now()"
@@ -402,7 +402,7 @@ verification treats a listed `jti` as invalid.
 The unit of work: created by a team inside a workspace. `is_public` opens the
 project to every signed-in user; otherwise only teams with a role row on it can
 see it. Deleting a project cascades through sources, items, documents, and
-chunks.
+chunks, and drops its `query_logs` rows.
 
 #### project_team_roles
 
@@ -472,7 +472,7 @@ ones; `published_at` marks rows the poller no longer scans.
 One row per retrieval call, written by the pipeline itself: the request echo
 (`query` plus the resolved `params` - top_k, rerank, the per-document cap,
 `origin`: `direct` for the retrieval endpoint and `answer` for the answer
-endpoint's internal call - and a snapshot of the fusion settings), the
+endpoint's internal call - and a snapshot of the retrieval settings), the
 per-stage candidates (`stages`: the vector leg, the FTS leg, the fused list,
 and the final selection), and `latency_ms` (embed through selection, excluding
 the log row's own insert). `project_id` cascades with the project, while
