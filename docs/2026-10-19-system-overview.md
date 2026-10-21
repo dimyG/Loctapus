@@ -1,10 +1,13 @@
 # System overview
 
-Snapshot as of 2026-10-21, covering the service topology, the HTTP API, and the
-database schema. Sources: `deploy/docker-compose.yml`, `backend/app/main.py`
-and the five routers it mounts, `web/nginx.conf`, `web/src/app/api.ts`, the
-RTK Query feature APIs plus `web/src/features/uploads/useProjectUploads.ts`,
-and the ORM models in `backend/app`.
+Snapshot as of 2026-10-21, covering the service topology, the HTTP API, the
+web UI shell, and the database schema. Sources: `deploy/docker-compose.yml`,
+`backend/app/main.py` and the five routers it mounts, `web/nginx.conf`,
+`web/src/app/api.ts`, the RTK Query feature APIs plus
+`web/src/features/uploads/useProjectUploads.ts`, the app shell and its
+project-scoped pages (`web/src/layouts/AppShell.tsx`,
+`web/src/app/sectionPaths.ts`, `web/src/features/chat/ChatLanding.tsx`), and
+the ORM models in `backend/app`.
 
 ## Service topology
 
@@ -93,6 +96,20 @@ to the api service so the browser path is same-origin (no CORS involved), falls
 back to `index.html` for SPA routes, and allows request bodies up to 26 MB so
 the 25 MB upload limit fits.
 
+The SPA itself is the official-MUI-template UI rebuilt on 2026-10-21 (branch
+`ui-mui-templates`): every signed-in route renders inside one dashboard shell,
+whose permanent sidebar (Projects, Sources, Chat active; Users and Analytics
+disabled with "Coming soon" chips) and topbar project selector stay in sync with
+the URL. The pages are project-scoped section routes: the projects list at
+`/projects`, the source items at `/projects/:id/sources` with the "Add source"
+menu (file upload active; Website and Google Drive "Coming soon"), the
+file-upload dropzone at `/projects/:id/sources/upload`, and the chat page at
+`/projects/:id/chat`; the bare `/projects/:id` redirects to its sources page.
+The internal `/app` resolver funnels every signed-in entry (register, login,
+and the signed-in landing redirect): it walks the user's projects newest-first
+and lands on the first chattable one's chat, else the newest project's sources,
+else `/projects`.
+
 Runtime flow of one upload:
 
 1. The UI POSTs the file to `/api/projects/{project_id}/uploads`. The API PUTs the
@@ -177,14 +194,17 @@ All routes are served under the `/api` prefix (`app.include_router(..., prefix="
 | Method | Route | Purpose | UI usage |
 | --- | --- | --- | --- |
 | POST | `/api/projects/{project_id}/uploads` | Store one uploaded file (PDF/DOCX, size-gated), queues an ingestion run | UploadDropzone (file-upload page) |
-| GET | `/api/projects/{project_id}/uploads` (polled by the UI: every 2s while any upload row is non-terminal; stops when all rows are terminal or an uncached fetch fails) | List a project's uploads newest first, status derived from the latest run | The sources and file-upload pages' tables, the chat page's readiness, and the `/app` resolver's chattable walk (`useProjectUploads`) |
+| GET | `/api/projects/{project_id}/uploads` (polled by the UI: every 2s while any upload row is non-terminal; stops when all rows are terminal or an uncached fetch fails) | List a project's uploads newest first, status derived from the latest run | The sources and file-upload pages' tables and the chat page's readiness (`useProjectUploads`); the `/app` resolver's chattable walk (direct `uploadsApi.endpoints.getUploads.initiate` dispatches, not the hook) |
 
 The polling lives in `web/src/features/uploads/useProjectUploads.ts`: the
 `getUploads` RTK Query hook runs with `pollingInterval: 2000` while any cached row
 is still queued, fetching, processing, or indexing, and `pollingInterval: 0` once
-every row is ready or failed. No other endpoint is polled - the other list endpoints
-are fetched on mount and on RTK cache invalidation only, and no refetch-on-focus or
-refetch-on-reconnect is configured.
+every row is ready or failed. The hook powers the pages; the `/app` resolver's
+chattable walk instead dispatches `uploadsApi.endpoints.getUploads.initiate`
+directly - one forced refetch per project, newest-first - so it borrows the
+uploads cache without ever starting a poll. No other endpoint is polled - the
+other list endpoints are fetched on mount and on RTK cache invalidation only,
+and no refetch-on-focus or refetch-on-reconnect is configured.
 
 ### Retrieval (backend/app/retrieval/router.py)
 

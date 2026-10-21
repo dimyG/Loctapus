@@ -6,6 +6,34 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-21 - UI overhaul on the official MUI templates (`ui-mui-templates`)
+
+Residuals from the post-S5 UI restructure on the official MUI templates
+(`superpowers/specs/2026-10-21-ui-mui-templates-design.md`; branch commits
+`f7dee71`..`53a1037` plus this slice's e2e-rewrite and docs commits). The
+restructure also resolved, in place in their original sections below: the S3
+"documents" naming note, the two S5 tab notes, and both stale S2 visual-pass
+notes.
+
+- `f7dee71` - no `InitColorSchemeScript`: the stored color scheme applies after
+  first paint, so a dark-mode user sees a light flash on load.
+- `ad5cbdc` - on this stack jsdom shows md+-only shell pieces to role queries
+  (MUI v9.5 wraps even xs values in media queries; jsdom drops media-wrapped
+  rules), so future slices should use hidden-inclusive queries for shell pieces.
+- `ad5cbdc` - Users and Analytics stay disabled "Coming soon" entries; each
+  content slice arrives with its own `@mui/x-*` dependency.
+- `ad5cbdc` - the user TODO for a future cross-project sources page: a bare
+  `/sources` route listing all source items across the signed-in user's own
+  visible projects, plus an "all-projects" option in the project dropdown.
+- `a2dfa2c` - one items endpoint serves every source type today; a
+  per-source-type items endpoint arrives once a second source type exists.
+- `545d2cf` - the chat thread lives in ChatPanel state and does not survive
+  leaving the chat page (consistent with S5's thread-lost-on-reload philosophy).
+- `2a04b9a` - project edit/delete stays API-only; the UI arrives in a later slice.
+- `f7dee71`..`53a1037` - a fresh human visual pass on the new UI is still
+  pending; it replaces the superseded S2-era visual-pass notes below.
+
+
 ## 2026-10-21 - System overview query_logs sync residuals (`overview-query-logs`)
 
 Residuals from the fresh-context review of the system overview query_logs/retrieval
@@ -61,9 +89,12 @@ Residuals from the 2026-10-20 whole-branch review of the S5 answer slice
 - `48df074` - focus is lost while the input is disabled during a request; consider
   refocusing the input when the request settles.
 - `26670c9` - a pinned Ask tab could end up disabled if `hasReadyUpload` later flips
-  false (no current flow does that; revisit with delete/reprocess).
+  false (no current flow does that; revisit with delete/reprocess). Resolved on
+  2026-10-21 in `ui-mui-templates` (`545d2cf`, `4193c67`): the tab UI is gone - the
+  chat page renders the panel exactly when a ready source item exists.
 - `26670c9` - the panels lack `role="tabpanel"`/`aria-labelledby` wiring and the Tabs
-  lack `aria-controls`.
+  lack `aria-controls`. Resolved on 2026-10-21 in `ui-mui-templates` (`4193c67`):
+  there are no tabs anymore; the section pages are plain routed pages.
 - `84ae13d` - `origin` is a plain `str`; a `Literal["direct", "answer"]` alias would
   catch typos in the query-log marker.
 - `ce8b5aa` - the `Sources (0)` accordion used to render on a canned empty answer;
@@ -202,7 +233,9 @@ New deferrals from the 2026-10-14 review fixes:
 - Viewer upload 404 copy, a live region for status changes, and the stale-data snackbar
   parity with `ProjectsPage`.
 - The UI says "documents" for uploads while the backend's `documents` are parsed
-  versions.
+  versions. Resolved on 2026-10-21 in `ui-mui-templates` (`a2dfa2c`, `4193c67`):
+  the sources section names them "sources"/"files" everywhere; the landing hero
+  and the `EmptyProjects` CTA keep the marketing voice as deliberate exceptions.
 - A two-session `SKIP LOCKED` dispatcher test, and closing each test's Celery app.
 - Time-ordered `uuid7` primary keys (house-wide).
 - Optional cheap checks: `jsonb_typeof(heading_path) = 'array'`; `NormalizedElement.type`
@@ -253,7 +286,9 @@ New deferrals from the 2026-10-14 review fixes:
   the S7 robustness work. Flagged by the 2026-10-12 S3 spec review (branch
   `s3-spec-review-fixes`).
 - The 2026-10-09 pending human visual pass should now also cover the shared site footer on all
-  layouts and the /about page (commits `4d6b83f`, `af03aa2`, `52d3b58`).
+  layouts and the /about page (commits `4d6b83f`, `af03aa2`, `52d3b58`). Superseded on 2026-10-21
+  in `ui-mui-templates` (`e86c644`): those layouts are gone with the official-template rebuild;
+  the fresh visual-pass residual above replaces this note.
 - Frontend JWT lives in localStorage (chosen at the S2 design round, 2026-10-09): a script
   injected via XSS can read it. S2 renders no user-supplied HTML so the surface is our own
   code. Possible later upgrade to httpOnly cookies (needs Set-Cookie + CSRF handling in the
@@ -265,7 +300,9 @@ New deferrals from the 2026-10-14 review fixes:
   390/768/1280, body-text contrast at or above 4.5, no text under 14px) plus saved
   screenshots in the S2 worktree (`.superpowers/sdd/2026-10-09-s2-web-ui-foundations/visual/`,
   git-ignored) - a human eyeball pass of those pages is still pending; note any
-  polish here. (S2 e2e slice, commit `14b3f6d`.)
+  polish here. (S2 e2e slice, commit `14b3f6d`.) Superseded on 2026-10-21 in
+  `ui-mui-templates` (`f7dee71`..`53a1037`): the audited pages are gone with the
+  rebuild; the fresh visual-pass residual above replaces this note.
 
 
 ## 2026-10-09 - deferred minors in `fix-deferred-minors-2`, kept open by its final review
