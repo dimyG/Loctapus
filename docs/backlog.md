@@ -6,6 +6,16 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-21 - System overview query_logs sync residuals (`overview-query-logs`)
+
+Residuals from the fresh-context review of the system overview query_logs/retrieval
+sync (`da5114a` plus the review-fix wave `0c51557`):
+
+- `da5114a` - the growing mermaid ERD and flowcharts have no mechanical validation;
+  a docs lint or render check in CI would catch syntax drift before it reaches the
+  frozen overview.
+
+
 ## 2026-10-20 - .env secret workflow residuals (`env-file-wiring`)
 
 Residuals from the fresh-context review of the backend/.env secret workflow
