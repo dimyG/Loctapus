@@ -1,6 +1,6 @@
 # System overview
 
-Snapshot as of 2026-10-20, covering the service topology, the HTTP API, and the
+Snapshot as of 2026-10-21, covering the service topology, the HTTP API, and the
 database schema. Sources: `deploy/docker-compose.yml`, `backend/app/main.py`
 and the five routers it mounts, `web/nginx.conf`, `web/src/app/api.ts`, the
 RTK Query feature APIs plus `web/src/features/uploads/useProjectUploads.ts`,
@@ -26,7 +26,7 @@ flowchart TB
     browser -->|"HTTP :8080 (SPA assets, API calls, uploads polling)"| web
     web -->|"/api reverse proxy"| api
     init -->|"migrate schema before the app services start"| db
-    api -->|"SQLAlchemy: users, workspaces, teams, projects,<br/>uploads, ingestion runs, outbox rows"| db
+    api -->|"SQLAlchemy: users, workspaces, teams, projects,<br/>uploads, ingestion runs, outbox rows, query logs"| db
     api -->|"S3 PUT: uploaded file bytes"| garage
     dispatcher -->|"poll due outbox events"| db
     dispatcher -->|"publish ingest_source_item / embed_document"| rabbitmq
@@ -40,8 +40,9 @@ flowchart TB
 #### db
 
 Postgres 17 with the pgvector extension. It holds every domain table - identity,
-projects, the sources and ingestion tree, and the outbox queue - and the chunks
-table carries the vector and full-text indexes that retrieval queries.
+projects, the sources and ingestion tree, the outbox queue, and the per-query
+retrieval logs - and the chunks table carries the vector and full-text indexes
+that retrieval queries.
 
 #### garage
 
@@ -104,6 +105,21 @@ Runtime flow of one upload:
    chunks, embeddings, and the run status to Postgres.
 4. The UI polls the uploads list every 2s until every row is terminal, which is how
    pipeline progress reaches the page.
+
+Runtime flow of one question:
+
+1. The UI POSTs the query to `/api/projects/{project_id}/answer`. The api embeds
+   it (stub embedding provider today) and runs the two search legs over the
+   project's indexed chunks - pgvector cosine and Postgres FTS - then fuses the
+   candidates by reciprocal rank and diversity-selects the final chunks.
+2. Every retrieval call writes one `query_logs` row - `origin=answer` here,
+   `direct` when the retrieval endpoint is called directly - recording the
+   request, the per-stage candidates, and the latency.
+3. The api builds the numbered context prompt from the final chunks and calls
+   the selected LLM provider (`llm_provider`: stub by default, Groq opt-in). An
+   empty index answers from a canned sentence; a provider failure answers 502.
+4. The response carries the answer text plus the grounded chunks with their
+   fused scores; the ChatPanel renders the answer and the collapsible sources.
 
 Notes:
 
@@ -170,6 +186,12 @@ every row is ready or failed. No other endpoint is polled - the other list endpo
 are fetched on mount and on RTK cache invalidation only, and no refetch-on-focus or
 refetch-on-reconnect is configured.
 
+### Retrieval (backend/app/retrieval/router.py)
+
+| Method | Route | Purpose | UI usage |
+| --- | --- | --- | --- |
+| POST | `/api/projects/{project_id}/retrieve` | Hybrid search over the project's indexed chunks: embed the query, run the pgvector cosine and Postgres FTS legs, fuse by reciprocal rank, diversity-select per document, return the grounded chunks | Not called by the UI (the answer endpoint runs the same pipeline in-process) |
+
 ### Answers (backend/app/answers/router.py)
 
 | Method | Route | Purpose | UI usage |
@@ -192,9 +214,9 @@ endpoint's internal call.
 ## Database tables
 
 The ORM models in `backend/app` (`identity`, `projects`, `sources`, `ingestion`,
-`outbox`) are the source of truth; the Alembic migrations under
+`outbox`, `retrieval`) are the source of truth; the Alembic migrations under
 `backend/alembic/versions/` create them exactly (0001-0002: identity and
-projects, 0005: sources, ingestion, outbox).
+projects, 0005: sources, ingestion, outbox; 0006: query logs).
 
 ### Entity relationship diagram
 
@@ -316,6 +338,17 @@ erDiagram
         text last_error "null until a failure"
     }
 
+    query_logs {
+        uuid id PK
+        uuid project_id FK "cascade delete"
+        uuid user_id FK "no ON DELETE: deleting a user keeps the project's query past"
+        text query
+        jsonb params "resolved request plus fusion settings snapshot"
+        int latency_ms "embed through selection, excluding the log insert"
+        jsonb stages "vector / fts / fused candidates and the final ids"
+        timestamptz created_at "server now()"
+    }
+
     users ||--o{ workspaces : "owns"
     workspaces ||--o{ teams : "groups"
     workspaces ||--o{ projects : "groups"
@@ -329,6 +362,8 @@ erDiagram
     source_items ||--o{ ingestion_runs : "is ingested by"
     documents |o--o{ ingestion_runs : "is indexed in"
     documents ||--o{ chunks : "is split into"
+    projects ||--o{ query_logs : "records"
+    users ||--o{ query_logs : "asks"
 ```
 
 ### Table explanations
@@ -432,6 +467,20 @@ once by the dispatcher. `event_type` routes to a Celery task via
 the due gate that backs failed rows off so poison events cannot starve later
 ones; `published_at` marks rows the poller no longer scans.
 
+#### query_logs
+
+One row per retrieval call, written by the pipeline itself: the request echo
+(`query` plus the resolved `params` - top_k, rerank, the per-document cap,
+`origin`: `direct` for the retrieval endpoint and `answer` for the answer
+endpoint's internal call - and a snapshot of the fusion settings), the
+per-stage candidates (`stages`: the vector leg, the FTS leg, the fused list,
+and the final selection), and `latency_ms` (embed through selection, excluding
+the log row's own insert). `project_id` cascades with the project, while
+`user_id` deliberately has no ON DELETE action: deleting a user must not
+rewrite a project's query past. The `(project_id, created_at)` index serves a
+per-project log tail without scanning other tenants; `ix_query_logs_user_id`
+serves the per-user lookups.
+
 ### Conventions
 
 - **Timestamps** are `timestamptz` (migration 0003 migrated the early tables),
@@ -440,11 +489,15 @@ ones; `published_at` marks rows the poller no longer scans.
   `sources -> source_items -> documents -> chunks` so retrieval filters chunks
   by project without joins, and composite foreign keys make Postgres enforce
   the boundary instead of relying on writers.
-- **Deletion**: projects cascade to sources and their trees; `ingestion_runs`
-  cascade with their item but keep their history via `documents.document_id`
-  SET NULL on re-upload.
+- **Deletion**: projects cascade to sources and their trees and to their
+  `query_logs` rows; `ingestion_runs` cascade with their item but keep their
+  history via `documents.document_id` SET NULL on re-upload, and
+  `query_logs.user_id` deliberately has no ON DELETE action so deleting a
+  user does not rewrite a project's query past.
 - **Indexes**: foreign keys are indexed explicitly (Postgres does not index them
   automatically; migration 0004), plus an HNSW index on `chunks.embedding` and
-  a GIN index on `chunks.search_vector` for the two retrieval paths.
+  a GIN index on `chunks.search_vector` for the two retrieval paths;
+  `query_logs` carries `(project_id, created_at)` and `user_id` indexes for
+  log-tail and per-user reads.
 - `alembic_version` also exists in the database: one framework-managed row with
   the current migration revision, not an ORM model.
