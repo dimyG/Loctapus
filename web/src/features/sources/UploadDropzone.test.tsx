@@ -285,4 +285,46 @@ describe("UploadDropzone", () => {
     expect(posts).toHaveLength(0);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("ignores a second gesture while a batch is in flight", async () => {
+    const posts: { file: File | null }[] = [];
+    let resolveFirst: (() => void) | undefined;
+    server.use(
+      http.post("*/projects/p-1/uploads", async ({ request }) => {
+        posts.push({ file: (await request.formData()).get("file") as File | null });
+        // Only the first POST hangs: a leaked second POST (the bug) would
+        // return immediately, so the test can settle every request it sees.
+        if (resolveFirst === undefined) {
+          await new Promise<void>((resolve) => {
+            resolveFirst = resolve;
+          });
+        }
+        return HttpResponse.json(
+          { ...queuedUpload, id: "s-new", filename: "uploaded.pdf" },
+          { status: 201 },
+        );
+      }),
+    );
+    renderDropzone();
+    fireEvent.drop(screen.getByTestId("dropzone"), {
+      dataTransfer: { files: [pdfFile("first.pdf")] },
+    });
+    await vi.waitFor(() => {
+      expect(resolveFirst).toBeDefined();
+    });
+    // The batch spans the whole pending request, so a second drop mid-batch
+    // must not start a second, interleaved batch.
+    fireEvent.drop(screen.getByTestId("dropzone"), {
+      dataTransfer: { files: [pdfFile("second.pdf")] },
+    });
+    resolveFirst?.();
+    await vi.waitFor(() => {
+      expect(screen.getByRole("button", { name: "Upload" })).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    });
+    expect(posts).toHaveLength(1);
+    expect(posts[0].file?.name).toBe("first.pdf");
+  });
 });

@@ -27,31 +27,42 @@ const visuallyHiddenInputSx = {
  * The file-upload dropzone: the client checks, the mutation, and its alert,
  * with drag-and-drop next to the picker. A batch uploads strictly in order
  * and the first failure - a client rejection or a server error - stops it,
- * so later files are never sent.
+ * so later files are never sent. Gestures that arrive while a batch is
+ * running are ignored, so two batches can never interleave.
  */
 export default function UploadDropzone({ projectId }: { projectId: string }) {
-  const [uploadFile, { isLoading: uploading }] = useUploadFileMutation();
+  const [uploadFile] = useUploadFileMutation();
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Spans the whole batch, not each single mutation: between two files the
+  // mutation's pending state dips, and that gap must not accept gestures.
+  const [batchInFlight, setBatchInFlight] = useState(false);
 
   /** Runs the client checks per file, then hands each file to the mutation. */
   async function uploadFiles(files: File[]) {
-    if (files.length === 0) {
-      // An empty pick or drop is a cancelled gesture, not a failed upload.
+    // An empty pick or drop is a cancelled gesture, not a failed upload; a
+    // gesture during a running batch would interleave two batches and break
+    // the strictly-in-order guarantee, so both are ignored.
+    if (files.length === 0 || batchInFlight) {
       return;
     }
     setUploadError(null);
-    for (const file of files) {
-      const rejection = uploadRejection(file);
-      if (rejection !== null) {
-        setUploadError(rejection);
-        return;
+    setBatchInFlight(true);
+    try {
+      for (const file of files) {
+        const rejection = uploadRejection(file);
+        if (rejection !== null) {
+          setUploadError(rejection);
+          return;
+        }
+        try {
+          await uploadFile({ projectId, file }).unwrap();
+        } catch (e) {
+          setUploadError(getErrorMessage(e));
+          return;
+        }
       }
-      try {
-        await uploadFile({ projectId, file }).unwrap();
-      } catch (e) {
-        setUploadError(getErrorMessage(e));
-        return;
-      }
+    } finally {
+      setBatchInFlight(false);
     }
   }
 
@@ -91,14 +102,14 @@ export default function UploadDropzone({ projectId }: { projectId: string }) {
         </Typography>
         {/* tabIndex -1 keeps the label out of the tab order: the visually */}
         {/* hidden input inside it is the upload control's single tab stop. */}
-        <Button variant="contained" component="label" disabled={uploading} tabIndex={-1}>
+        <Button variant="contained" component="label" disabled={batchInFlight} tabIndex={-1}>
           Upload
           <Box
             component="input"
             type="file"
             accept=".pdf,.docx"
             multiple
-            disabled={uploading}
+            disabled={batchInFlight}
             onChange={handleFilesChosen}
             sx={visuallyHiddenInputSx}
           />
