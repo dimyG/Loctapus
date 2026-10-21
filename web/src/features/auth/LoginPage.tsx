@@ -36,7 +36,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   if (user !== null) {
-    return <Navigate to="/projects" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

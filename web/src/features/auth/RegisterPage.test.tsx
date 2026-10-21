@@ -7,15 +7,32 @@ import { initialRootState } from "../../app/store";
 import { loadToken } from "../../lib/tokenStorage";
 import { renderWithProviders } from "../../test/test-utils";
 import { server } from "../../test/server";
+import ChatLanding from "../chat/ChatLanding";
+import ChatPage from "../chat/ChatPage";
 import ProjectsPage from "../projects/ProjectsPage";
 import RegisterPage from "./RegisterPage";
+
+/** The funnel's target project: chattable through the baseline ready upload. */
+const projectP1 = {
+  id: "p-1",
+  name: "Default",
+  is_public: false,
+  created_at: "2026-10-09T10:00:00Z",
+};
+
+/** Makes the projects list land the funnel on p-1's chat. */
+function chattableProjectP1() {
+  server.use(http.get("*/api/projects", () => HttpResponse.json([projectP1])));
+}
 
 /** Renders RegisterPage behind the routes it navigates within. */
 function renderRegister(preloadedState = initialRootState()) {
   return renderWithProviders(
     <Routes>
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/app" element={<ChatLanding />} />
       <Route path="/projects" element={<ProjectsPage />} />
+      <Route path="/projects/:projectId/chat" element={<ChatPage />} />
       <Route path="/login" element={<div>login-page</div>} />
     </Routes>,
     { route: "/register", preloadedState },
@@ -92,13 +109,15 @@ describe("RegisterPage", () => {
     expect(requests).toHaveLength(0);
   });
 
-  it("stores the token and lands on /projects on success", async () => {
+  it("stores the token and lands on the latest chattable project's chat", async () => {
+    chattableProjectP1();
     renderRegister();
     const user = userEvent.setup();
     await fillForm(user);
     await user.click(screen.getByRole("button", { name: "Create account" }));
     expect(loadToken()).toBe("t-register");
-    expect(await screen.findByText("Projects")).toBeInTheDocument();
+    // The resolver walks p-1 (ready report.docx in the baseline uploads).
+    expect(await screen.findByLabelText("Ask a question")).toBeInTheDocument();
   });
 
   it("shows the friendly 409 copy with a sign-in link", async () => {
@@ -135,6 +154,7 @@ describe("RegisterPage", () => {
   });
 
   it("keeps Create account disabled while the request is pending", async () => {
+    chattableProjectP1();
     let resolveRequest: (() => void) | undefined;
     server.use(
       http.post("*/auth/register", async () => {
@@ -156,11 +176,13 @@ describe("RegisterPage", () => {
       expect(resolveRequest).toBeDefined();
     });
     resolveRequest?.();
-    expect(await screen.findByText("Projects")).toBeInTheDocument();
+    // On success the form unmounts and the app lands on p-1's chat.
+    expect(await screen.findByLabelText("Ask a question")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create account" })).not.toBeInTheDocument();
   });
 
-  it("redirects authenticated visitors to /projects", () => {
+  it("redirects authenticated visitors to the latest chattable project's chat", async () => {
+    chattableProjectP1();
     renderRegister({
       ...initialRootState(),
       auth: {
@@ -169,6 +191,6 @@ describe("RegisterPage", () => {
         status: "idle",
       },
     });
-    expect(screen.getByText("Projects")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Ask a question")).toBeInTheDocument();
   });
 });

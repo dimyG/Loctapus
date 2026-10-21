@@ -166,9 +166,9 @@ All routes are served under the `/api` prefix (`app.include_router(..., prefix="
 | Method | Route | Purpose | UI usage |
 | --- | --- | --- | --- |
 | POST | `/api/projects` | Create a project for a team | CreateProjectDialog |
-| GET | `/api/projects` | Projects shared with any of the user's teams | ProjectsPage, and the app shell (ProjectSelect, sidebar Sources/Chat links) |
+| GET | `/api/projects` | Projects shared with any of the user's teams | ProjectsPage, the `/app` landing resolver (ChatLanding), and the app shell (ProjectSelect, sidebar Sources/Chat links) |
 | GET | `/api/projects/public` | Every public project | Not called by the UI |
-| GET | `/api/projects/{project_id}` | One project visible to the user | ProjectPage |
+| GET | `/api/projects/{project_id}` | One project visible to the user | The project guard (`useProjectGuard`) on the sources, file-upload, and chat pages |
 | PATCH | `/api/projects/{project_id}` | Update a project (team admin) | Not called by the UI |
 | DELETE | `/api/projects/{project_id}` | Delete a project (team admin) | Not called by the UI |
 
@@ -176,8 +176,8 @@ All routes are served under the `/api` prefix (`app.include_router(..., prefix="
 
 | Method | Route | Purpose | UI usage |
 | --- | --- | --- | --- |
-| POST | `/api/projects/{project_id}/uploads` | Store one uploaded file (PDF/DOCX, size-gated), queues an ingestion run | UploadCard |
-| GET | `/api/projects/{project_id}/uploads` (polled by the UI: every 2s while any upload row is non-terminal; stops when all rows are terminal or an uncached fetch fails) | List a project's uploads newest first, status derived from the latest run | ProjectPage uploads table (`useProjectUploads`) |
+| POST | `/api/projects/{project_id}/uploads` | Store one uploaded file (PDF/DOCX, size-gated), queues an ingestion run | UploadDropzone (file-upload page) |
+| GET | `/api/projects/{project_id}/uploads` (polled by the UI: every 2s while any upload row is non-terminal; stops when all rows are terminal or an uncached fetch fails) | List a project's uploads newest first, status derived from the latest run | The sources and file-upload pages' tables, the chat page's readiness, and the `/app` resolver's chattable walk (`useProjectUploads`) |
 
 The polling lives in `web/src/features/uploads/useProjectUploads.ts`: the
 `getUploads` RTK Query hook runs with `pollingInterval: 2000` while any cached row
@@ -196,7 +196,7 @@ refetch-on-reconnect is configured.
 
 | Method | Route | Purpose | UI usage |
 | --- | --- | --- | --- |
-| POST | `/api/projects/{project_id}/answer` | Ask one question: run the retrieval internally, then answer grounded in the final chunks (LLM provider layer: stub by default, Groq opt-in) | ProjectPage Ask tab (`ChatPanel`) |
+| POST | `/api/projects/{project_id}/answer` | Ask one question: run the retrieval internally, then answer grounded in the final chunks (LLM provider layer: stub by default, Groq opt-in) | Chat page (`ChatPanel`) |
 
 Every retrieval call writes a `query_logs` row; its `params.origin` records the
 calling surface - `direct` for the retrieval endpoint, `answer` for the answer

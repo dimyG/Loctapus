@@ -29,12 +29,12 @@ export default function LandingPage() {
   // whose token has gone stale must stay on the public landing instead of
   // being bounced to /login by the guarded route. Only settled sessions
   // redirect: during sign-out the stale user rides along with a "busy"
-  // status, and redirecting then would land the user on /projects, which
+  // status, and redirecting then would land the user on /app, which
   // bounces to /login once the session clears (spec 6.2).
   const user = useAppSelector(selectUser);
   const status = useAppSelector(selectAuthStatus);
   if (user !== null && status === "idle") {
-    return <Navigate to="/projects" replace />;
+    return <Navigate to="/app" replace />;
   }
 
   return (

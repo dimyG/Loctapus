@@ -4,6 +4,7 @@ import { Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import { initialRootState } from "../../app/store";
 import { renderWithProviders } from "../../test/test-utils";
+import ChatLanding from "../chat/ChatLanding";
 import LoginPage from "../auth/LoginPage";
 import RegisterPage from "../auth/RegisterPage";
 import ProjectsPage from "../projects/ProjectsPage";
@@ -30,6 +31,7 @@ function renderLanding(preloadedState = initialRootState()) {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/app" element={<ChatLanding />} />
       <Route path="/projects" element={<ProjectsPage />} />
     </Routes>,
     { route: "/", preloadedState },
@@ -55,15 +57,17 @@ describe("LandingPage", () => {
     }
   });
 
-  it("redirects authenticated visitors to the projects page", () => {
+  it("redirects authenticated visitors", async () => {
     renderLanding(authedState());
-    expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    // The resolver now needs MSW round-trips; with the baseline empty
+    // projects list it resolves to /projects.
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
   });
 
   it("renders the landing for a busy session instead of redirecting", () => {
     // Sign-out clears the session while the router lands on "/"; a render
     // can still see the stale user mid-transition. Redirecting then would
-    // land the user on the guarded /projects, which bounces to /login
+    // land the user on the guarded /app, which bounces to /login
     // once the session clears - the race RequireAuth's splash prevents.
     renderLanding(authedState("busy"));
     expect(screen.getByRole("heading", { name: /searchable by meaning/i })).toBeInTheDocument();

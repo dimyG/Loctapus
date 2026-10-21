@@ -54,16 +54,12 @@ describe("App", () => {
     expect(window.location.pathname).toBe("/projects");
   });
 
-  it("renders the project page for an authenticated visitor", async () => {
+  it("redirects a bare project URL to its sources page for an authenticated visitor", async () => {
     saveToken("t-boot");
     renderApp("/projects/p-1");
-    expect(await screen.findByRole("heading", { name: "Default" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Back to projects" })).toHaveAttribute(
-      "href",
-      "/projects",
-    );
+    expect(await screen.findByRole("heading", { name: "Sources" })).toBeInTheDocument();
     expect(await screen.findByText("brief.pdf")).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/projects/p-1");
+    expect(window.location.pathname).toBe("/projects/p-1/sources");
   });
 
   it("redirects unauthenticated visitors from /projects to /login", async () => {
