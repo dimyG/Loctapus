@@ -1,15 +1,18 @@
 # UI overhaul on the official MUI templates - Design
 
 Date: 2026-10-21
-Status: Approved design (2026-10-21 round); not yet implemented.
+Status: Approved design (2026-10-21 round), amended the same day after a fresh-context
+review (Claude Opus 5.5) and two user rulings (sidebar/dropdown URL sync; Tailwind
+removal); not yet implemented.
 Source of truth: `../../2026-10-06-roadmap.md` (the "slices spec") and this document. Where
 they disagree on this slice's topics, this document wins; where it is silent, they govern.
 This slice is pure frontend: no backend, API, or database changes.
 
 Supersessions (UI level only - the frozen specs stay as written):
 
-- The S2 layouts (`MarketingLayout`, `AuthLayout`, `DashboardLayout`, `SiteFooter`) and
-  the S2 Devias-style theme are replaced by the official MUI template ports below.
+- The S2 layouts (`MarketingLayout`, `AuthLayout`, `DashboardLayout`, `SiteFooter`), the S2
+  Devias-style theme, and the S2 Tailwind wiring are replaced by the official MUI template
+  ports below.
 - S5 design decision 3 (the two-tab project page at `/projects/:projectId`) is replaced by
   the section pages and routing below; the ChatPanel thread logic it introduced is kept.
 
@@ -26,44 +29,61 @@ friendly app built on the two free official Material UI templates (v9.5.0):
 
 Sources, at template-pinning time: `mui/material-ui` tag `v9.5.0`, paths
 `docs/data/material/getting-started/templates/{shared-theme,dashboard,crud-dashboard,marketing-page,sign-in,sign-up}`.
-Ports adapt the `.tsx` variants to this repo's lint and typing rules; behavior is ours.
+Ports adapt the `.tsx` variants (one file is `.ts`, section 3) to this repo's lint and
+typing rules; behavior is ours.
 
 Done-when: a user registers, lands on their default project's sources page inside the new
 shell, uploads a file, watches it index, and asks a grounded question in chat - with the
-old theme and old layouts fully gone, and the whole existing test story green.
+old theme, layouts, and styling infrastructure fully gone, and the whole existing test
+story green.
 
-## 2. Decisions (2026-10-21 design round, user-approved)
+## 2. Decisions (2026-10-21 design round, user-approved; 6, 7, 8 amended post-review)
 
 1. **Full template adoption - theme included.** The `shared-theme` port (section 3)
    replaces the current theme entirely. At the end nothing of the old UI framework
-   remains: old theme file, old fonts, old layouts, and the old project tab page are
-   deleted, not kept behind a flag.
+   remains: old theme file, old fonts, old layouts, the Tailwind wiring, and the old
+   project tab page are deleted, not kept behind a flag.
 2. **The selected project lives in the URL.** Section pages are project-scoped routes;
-   the topbar dropdown navigates (section 5). Rejected: global-state selection (no deep
-   links, stale-project risk on refresh) and query-param selection (mutating URLs).
-3. **Permanent sidebar with five items.** Projects, Sources, Chat are active; Users and
-   Analytics render disabled with a "Coming soon" chip. Below `md` the sidebar becomes the
-   template's temporary drawer behind a topbar hamburger.
-4. **Topbar: project selector left, account right.** The selector lists the user's
-   visible projects newest-first (latest on top), shows the URL's project, and navigates
-   to the same section under the newly selected project. The right side keeps the avatar
-   menu (email, disabled "Settings" entry, Sign out) plus the template's light/dark/system
-   mode switcher.
+   the topbar dropdown navigates. There are deliberately **no bare `/sources` or `/chat`
+   routes at this stage**: every sources/chat URL is project-scoped (user ruling
+   2026-10-21). A cross-project sources listing (`/sources` over the signed-in user's
+   visible projects, with an "all-projects" option in the dropdown) is a future feature,
+   recorded as a TODO in section 15.
+3. **Permanent sidebar with five items, project-scoped links.** Projects, Sources, Chat
+   are active; Users and Analytics render disabled with a "Coming soon" chip. Below `md`
+   the sidebar becomes the template's temporary drawer behind a topbar hamburger.
+   Sources and Chat link to **the URL's project** when one is present, so navigation
+   never switches projects under the user; with no project in the URL they link to the
+   latest project's section, and with zero projects they are disabled.
+4. **Topbar: project selector left, account right; always in sync with the URL.** The
+   selector lists the user's visible projects newest-first (latest on top) and always
+   shows what the URL carries: the URL's project on project-scoped routes, a "Select
+   project" placeholder on `/projects`, and a disabled "No projects" placeholder with
+   zero projects. Changing the selection navigates to the same section under the new
+   project (keeping deep paths like `/sources/upload`), or to the new project's sources
+   page when no section is in the URL. The right side keeps the avatar menu (email,
+   disabled "Settings" entry, Sign out) plus the template's light/dark/system mode
+   switcher.
 5. **Section pages, not tabs.** Projects (create-only restyle), Sources index with the
    "Add source" dropdown, one page per source type (file upload first), and a dedicated
    Chat page (sections 7-9). Project edit/delete stays out of scope (later slice).
-6. **Landing resolution: latest chattable project.** After login/register, on the signed-in
-   landing redirect, and at the `/chat` section root: the newest project with at least one
-   `ready` source item wins; with none chattable the user lands on the latest project's
-   sources page (section 6).
+6. **Landing resolution: latest chattable project, at an internal `/app` entry.** After
+   login/register, on the signed-in landing redirect, and for any straggler URL: the
+   newest project with at least one `ready` source item wins; with none chattable the
+   user lands on the latest project's sources page; with zero projects, on `/projects`
+   (section 6). The resolver lives at the internal `/app` route - it is never linked
+   from the UI and immediately redirects.
 7. **Outer pages adopt the official templates too.** Landing and /about on the Marketing
    template frame; login on the Sign-in template; register on the Sign-up template
    (section 10).
-8. **Minimal dependency delta.** Add `@mui/icons-material`. Keep `@fontsource/inter` (the
-   new theme's font). Remove `@fontsource/work-sans`. Do not add `@mui/x-charts`,
-   `@mui/x-data-grid`, `@mui/x-date-pickers`, `@mui/x-tree-view`, or `dayjs`: they only
-   serve the dashboard template's demo widgets (charts, tree, date picker), and this app
-   has no content for them yet; each arrives with the slice that needs it.
+8. **Minimal dependency delta.** Add `@mui/icons-material`. Keep `@fontsource/inter`
+   (the new theme's font). Remove `@fontsource/work-sans` **and the Tailwind wiring**
+   (`@tailwindcss/vite` plugin, the `tailwindcss` devDependencies, and the
+   `@import "tailwindcss"` in `global.css` - no component uses a Tailwind class today,
+   user ruling 2026-10-21). Do not add `@mui/x-charts`, `@mui/x-data-grid`,
+   `@mui/x-date-pickers`, `@mui/x-tree-view`, or `dayjs`: they only serve the dashboard
+   template's demo widgets (charts, tree, date picker), and this app has no content for
+   them yet; each arrives with the slice that needs it.
 9. **No backend changes.** Every feature below is served by the existing API; the
    resolver, selector, and lists work purely client-side.
 
@@ -75,12 +95,20 @@ Port of `shared-theme` into `web/src/theme/`:
 | --- | --- |
 | `AppTheme.tsx` | `createTheme` with CSS variables (`colorSchemeSelector: 'data-mui-color-scheme'`, prefix `template`), color schemes, component customizations; replaces `ThemeProvider` + `createAppTheme` in `App.tsx` |
 | `themePrimitives.ts` | Sitemark brand/grey/green/orange/red scales, light and dark `colorSchemes`, Inter typography scale, `shape.borderRadius = 8`, template shadows |
-| `customizations/{inputs,navigation,dataDisplay,feedback,surfaces}.tsx` | The five official component overrides that produce the template look |
-| `ColorModeIconDropdown.tsx` | Light/dark/system switcher (MUI persists the choice); placed in the app topbar and on the marketing and auth frames |
+| `customizations/inputs.tsx`, `customizations/navigation.tsx`, `customizations/dataDisplay.tsx`, `customizations/feedback.tsx`, `customizations/surfaces.ts` | The five official component overrides that produce the template look (`surfaces` is the lone `.ts` file at v9.5.0) |
+| `ColorModeIconDropdown.tsx` | Light/dark/system switcher (MUI persists the choice); its trigger gets an accessible name (`aria-label="color mode"`) and its menu id is renamed away from the upstream "account-menu", so it cannot be confused with the real account menu; placed in the app topbar and on the marketing and auth frames |
 
-Deletions: `theme/theme.ts`, `theme/theme.test.tsx`, the Work Sans imports in `main.tsx`,
-and the `@fontsource/work-sans` dependency. `global.css` keeps only generic resets.
-`theme.test.tsx` is rewritten against the port (renders, both schemes, customizations).
+Port rules: `.tsx` variants where they exist (`surfaces.ts` is the exception); type-only
+imports use `import type` (the repo compiles with `verbatimModuleSyntax`); `AppTheme`
+drops the docs-only `disableCustomTheme` prop and keeps `themeComponents`;
+`themePrimitives` drops the unused `getDesignTokens` export.
+
+Deletions: `theme/theme.ts`, `theme/theme.test.tsx`, the Work Sans imports in
+`global.css`, and the entire Tailwind wiring - the `@tailwindcss/vite` plugin in
+`vite.config.ts`, the `tailwindcss` + `@tailwindcss/vite` devDependencies, and the
+`@import "tailwindcss"` in `global.css`. `global.css` keeps only the Inter imports
+(400/500/600 - the template's heading weights need 600). `theme.test.tsx` is rewritten
+against the port (renders, both schemes, a customization applied).
 
 ## 4. App shell (Dashboard template port)
 
@@ -90,15 +118,20 @@ and the `@fontsource/work-sans` dependency. `global.css` keeps only generic rese
 - **Sidebar** items, top to bottom: wordmark "RAG", then Projects (`FolderRounded`),
   Sources (`UploadFileRounded`), Chat (`ChatBubbleRounded`), Users (`GroupRounded`,
   disabled + "Coming soon"), Analytics (`InsightsRounded`, disabled + "Coming soon").
-  Items link to the section roots (`/projects`, `/sources`, `/chat`); the active item
-  matches by URL prefix, so `/projects/:id/sources/upload` highlights Sources.
+- **Sidebar links are project-scoped** (decision 3): with `:projectId` in the URL,
+  Sources links to `/projects/:id/sources` and Chat to `/projects/:id/chat`; with no
+  project in the URL they link to the latest project's section; with zero projects they
+  are disabled. The hrefs and the active-item detection come from one shared pure
+  module, `web/src/app/sectionPaths.ts`:
+  - `projectIdFromPath(pathname): string | null` - the project id the URL carries;
+  - `sectionPath(section, projectId): string` - a section's project-scoped path;
+  - `activeSection(pathname): "projects" | "sources" | "chat" | null` - Projects active
+    only on exactly `/projects`; Sources on `/projects/:id/sources/*`; Chat on
+    `/projects/:id/chat`. Prefix rules never let two sections light up at once.
 - **Topbar** (template's `AppNavbar` shape): left - the project selector, a `Select`
-  styled after the template's `SelectContent`; right - `ColorModeIconDropdown`, then the
-  avatar menu: email subheader, "Settings" disabled with a "Coming soon" chip, "Sign out".
-- **Selector behavior.** Outside project-scoped routes it shows the latest project;
-  changing it navigates to that project's sources page (there is no "same section" to
-  preserve on the projects list). Inside a section it swaps the project, keeping the
-  section. With no projects it renders disabled with a "No projects" placeholder.
+  styled after the template's `SelectContent`, always in sync with the URL (decision 4);
+  right - `ColorModeIconDropdown`, then the avatar menu: email subheader, "Settings"
+  disabled with a "Coming soon" chip, "Sign out".
 - The sign-out race semantics documented in `UserMenu` and `RequireAuth` are preserved
   unchanged; only presentation moves.
 
@@ -114,12 +147,14 @@ All signed-in routes stay behind `RequireAuth` (its guard logic is untouched; it
 | `/projects/:projectId/sources/upload` | File-upload page - upload UI + that type's items |
 | `/projects/:projectId/chat` | Chat page |
 | `/projects/:projectId` | Redirect to `.../sources` (old tab page deleted) |
-| `/sources` | Redirect to the latest project's `.../sources`; with no projects, the no-project empty state |
-| `/chat` | Landing resolver (section 6) |
+| `/app` | Internal landing resolver (section 6); never linked, immediately redirects |
 | `/`, `/about`, `/login`, `/register` | Outer pages (section 10) |
 
-An invalid or invisible project id (404) renders the existing "Project not found" state
-with a link back to `/projects` - no silent redirect.
+There is no bare `/sources` or `/chat` route (decision 2). Unknown paths - including
+stragglers like a stale `/chat` bookmark - fall through the `*` catch-all to `/`, whose
+signed-in redirect funnels through `/app`. An invalid or invisible project id (404)
+renders the existing "Project not found" state with a link back to `/projects` - no
+silent redirect.
 
 ## 6. Landing resolution ("latest chattable project")
 
@@ -131,32 +166,34 @@ Definitions:
   condition that enables the chat input. Projects with items still processing are skipped;
   they qualify once indexing completes.
 
-One shared resolver, mounted at the `/chat` route and used by the three post-auth
-destinations (`LoginPage`, `RegisterPage`, and the signed-in `LandingPage` redirect
-navigate to `/chat` instead of `/projects`):
+One resolver, mounted at `/app` and reached from the signed-in funnel (`LandingPage`,
+`LoginPage`, and `RegisterPage` navigate to `/app` instead of `/projects` when a session
+exists or just started):
 
-1. Fetch `GET /api/projects`, sort newest-first; walk the list checking each project's
-   `GET /api/projects/:id/uploads` (RTK Query cache; the walks on later pages reuse it),
-   stopping at the first project with a `ready` item.
+1. Fetch `GET /api/projects`, sort newest-first; walk the list in order, fetching each
+   project's `GET /api/projects/:id/uploads` with a forced refetch (cached statuses can
+   be stale) and stopping at the first project with a `ready` item. A failed uploads
+   fetch counts as not chattable; the walk continues.
 2. Chattable project found -> its `/projects/:id/chat`.
 3. None chattable -> the latest project's `/projects/:id/sources` (exactly the fresh-user
    path: default project, empty sources).
-4. No projects at all -> the no-project empty state ("Create a project" CTA) instead of a
-   redirect; the `/sources` root shares it.
+4. No projects at all -> `/projects`, whose empty state carries the create CTA.
 
-The `/sources` root is the simpler sibling: latest project's sources, else the same
-no-project state. The chat empty state remains reachable on any specific project's chat
-route (dropdown selection, deep links) - it is a page state, not a redirect.
+While scanning, `/app` renders a light centered spinner inside the shell (not
+`BootSplash`, which assumes a full viewport). The chat empty state is reachable only on a
+specific project's chat route (sidebar with a project selected, dropdown, deep links) -
+it is a page state, never a redirect target.
 
 ## 7. Projects page (`/projects`)
 
 CRUD-template list styling, create-only functionality:
 
-- Toolbar: title, client-side name search, "New project" button (existing
-  `CreateProjectDialog`, restyled to the template look).
-- Table (rounded, outlined card wrapper): Name, Visibility chip, Created.
-- Today's loading skeleton rows, `EmptyProjects` empty state (restyled), error card and
-  stale-data snackbar behavior are kept as is.
+- Toolbar: title, client-side name search, "Create project" button (the existing
+  `CreateProjectDialog`, unchanged apart from the global theme restyle).
+- Table (rounded, outlined card wrapper): Name, Visibility chip, Created. Row name links
+  to the project's sources page.
+- Today's loading skeleton rows, `EmptyProjects` empty state, error card and stale-data
+  snackbar behavior are kept as is.
 - No row actions: PATCH/DELETE stay API-only until their own slice.
 
 ## 8. Sources section
@@ -172,7 +209,8 @@ CRUD-template list styling, create-only functionality:
   **Type column** (constant "File upload" for now) so the table is honest today and ready
   for multi-type listings later. Columns: Filename, Type, Status chip, Created. Filename
   links to the item's type page.
-- Loading, error, and empty states follow the existing patterns.
+- Loading, error, and empty states follow the existing patterns (the uploads-list error
+  copy says "Could not load the source items.", replacing the old "document list" copy).
 
 **File-upload page** (`/projects/:projectId/sources/upload`):
 
@@ -180,13 +218,17 @@ CRUD-template list styling, create-only functionality:
   own page with the UI its workflow needs; this is the file-upload one).
 - **Upload dropzone**: dashed-border surface, upload icon, "Click or drag files to
   upload", PDF/DOCX up to 25 MB helper text, the existing error Alert. Same client checks
-  and endpoint as today's `UploadCard`; drag-and-drop is added and accepts one or more
-  files, uploaded sequentially with the first rejection surfaced.
+  and endpoint as today's `UploadCard`; drag-and-drop is added. The hidden input keeps the
+  accessible name "Upload" and gains the `multiple` attribute. Files upload strictly in
+  order; the first failure (client rejection or server error) stops the batch - later
+  files are not sent.
 - **The project's uploaded file items** below: status chips and the existing 2s polling
   (`useProjectUploads` untouched).
 
-Terminology: the UI says "sources"/"files" everywhere - resolving the backlog's
-"documents" naming note.
+Terminology: the in-app product UI says "sources"/"files" for source items everywhere -
+resolving the backlog's "documents" naming note. The landing page's marketing voice
+("Your documents, searchable by meaning") and the `EmptyProjects` CTA copy are deliberate
+exceptions and stay.
 
 ## 9. Chat page (`/projects/:projectId/chat`)
 
@@ -194,8 +236,9 @@ Terminology: the UI says "sources"/"files" everywhere - resolving the backlog's
   fills the page, restyled to the template look.
 - Readiness derives from the uploads hook: with no `ready` item the page shows the empty
   state ("Upload sources to start asking questions" plus a button to that project's
-  sources page), and the input stays disabled while uploads are in flight; live polling
-  flips the panel on the moment a file reaches `ready`.
+  sources page - an absolute project-scoped link); live polling flips the panel on the
+  moment a file reaches `ready`. There is no separate disabled-input state: the panel
+  exists exactly when something is ready.
 
 ## 10. Outer pages (official template adoption)
 
@@ -215,80 +258,98 @@ Terminology: the UI says "sources"/"files" everywhere - resolving the backlog's
 | Deleted | Replaced by |
 | --- | --- |
 | `theme/theme.ts` + `theme/theme.test.tsx` | `theme/` shared-theme port (section 3) |
+| Tailwind wiring (`@tailwindcss/vite`, `tailwindcss` devDeps, the `global.css` import) | MUI's `CssBaseline` + theme resets |
 | `layouts/DashboardLayout.tsx` (+ test) | `layouts/AppShell` (section 4) |
 | `layouts/MarketingLayout.tsx`, `layouts/AuthLayout.tsx`, `layouts/SiteFooter.tsx` (+ tests) | Marketing frame, Sign-in/Sign-up frames (section 10) |
-| `features/projects/ProjectPage.tsx` (+ test) | Sources index + file-upload page + Chat page (sections 8-9) |
+| `features/projects/ProjectPage.tsx` (+ test) | Sources index + file-upload page + Chat page (sections 8-9); the upload/polling test coverage it held is ported to the new pages' tests, not lost |
 | `features/uploads/UploadCard.tsx` (card look) | Upload dropzone (section 8); its logic and tests carry over |
-| `features/uploads/UploadsTable.tsx` (bare table) | Source items table (sections 7-8); `uploadStatus` chips carry over |
+| `features/uploads/UploadsTable.tsx` (bare table) | Source items table (section 8); `uploadStatus` chips carry over |
 | `@fontsource/work-sans` | Inter only |
 
-Kept untouched: `app/api.ts`, store, `authSlice` + `sessionActions`, all RTK Query APIs,
-`useProjectUploads`, `uploadRules`, `uploadStatus`, `tokenStorage`, `RequireAuth`,
-`BootSplash`, `CreateProjectDialog`, `EmptyProjects`, ChatPanel thread logic, and the
-test infrastructure (`server.ts`, `handlers.ts`, `test-utils.tsx`). Restyled in place:
-the four outer pages, `UserMenu`, `App.tsx`, `AppRoutes.tsx`, `main.tsx`.
+Kept untouched (logic): `app/api.ts`, store, `authSlice` + `sessionActions`, all RTK Query
+APIs, `useProjectUploads`, `uploadRules`, `uploadStatus`, `tokenStorage`, `RequireAuth`,
+`BootSplash`, `CreateProjectDialog` (the global theme restyles it), `EmptyProjects`,
+ChatPanel thread logic, and the test infrastructure (`server.ts`, `handlers.ts`,
+`test-utils.tsx`). Restyled in place: the four outer pages, `UserMenu`, `App.tsx`,
+`AppRoutes.tsx`, `global.css`.
 
 ## 12. Testing
 
-No MSW handler changes (the API does not change).
+No MSW handler changes (the API does not change). Type checking (`tsc -b`) runs in every
+task, not only at the end.
 
-- **Theme**: AppTheme renders; light and dark schemes resolve; a customization is visibly
-  applied (e.g. the styled `MenuItem`).
-- **Shell**: the five sidebar items render with Users/Analytics disabled and chipped; the
-  project selector lists projects newest-first, defaults correctly, and navigates on
-  change (same-section swap inside a section, sources from the projects list); the avatar
-  menu shows the email, a disabled Settings entry, and signs out.
-- **Routing/redirects**: `/projects/:id` -> sources; `/sources` -> latest; `/chat` resolver
-  -> chattable chat, else latest sources; no-project empty state; 404 state preserved.
+- **Theme**: AppTheme renders; the light scheme is default and the dark scheme resolves;
+  a customization is visibly applied (e.g. the styled `MenuItem`); the mode switcher has
+  an accessible name.
+- **sectionPaths**: project id extraction, section paths, and the active rules (including
+  "only Sources active on `/projects/:id/sources/upload`").
+- **Shell**: the five sidebar items render with Users/Analytics disabled ("Coming soon"
+  chips); sidebar Sources/Chat hrefs are project-scoped when the URL has a project, fall
+  back to the latest project with none, and are disabled with zero projects; the project
+  selector always mirrors the URL (placeholder on `/projects`, disabled "No projects"
+  with zero) and navigates on change, keeping deep paths inside a section; the avatar menu
+  shows the email, a disabled Settings entry, and signs out.
+- **Routing/redirects**: `/projects/:id` -> sources; `/app` resolver -> chattable chat,
+  else latest sources, else `/projects`; a failed uploads fetch counts as not chattable;
+  stale "queued" caches are refetched; the 404 state is preserved.
 - **Pages**: projects search/create; add-source dropdown with the two disabled "Coming
-  soon" types; dropzone upload via click and drag-and-drop (including multi-file and
-  rejection); items tables render statuses; chat empty-state CTA, disabled input while
-  indexing, and the live flip to ready.
-- **E2e (Playwright)**: the journey is rewritten for the new flow - register -> land on the
-  default project's sources -> upload -> watch status -> chat grounded answer; the
-  route-guard enforcement spec keeps its semantics with updated selectors.
+  soon" types; dropzone upload via click and drag-and-drop, including multi-file batches,
+  the first-failure-stops-the-batch rule, empty drops, and the server rejection copies
+  (409/422/503); items tables render statuses; chat empty-state CTA (absolute link) and
+  the live flip to ready; the ported upload/polling coverage (multipart shape, pending
+  disable, single tab stop, rejection paths, poll start/stop, error-stops-polling).
+- **E2e (Playwright)**: the journey is rewritten for the new flow - register -> land on
+  the default project's sources -> upload -> watch status -> chat grounded answer; the
+  route-guard enforcement spec keeps its semantics with updated selectors and URLs.
 
 ## 13. Risks and mitigations
 
-- **Template-port fidelity under our lint/TS rules** - named imports per file, no
-  default-export surprises: mechanical, `.tsx` sources exist for every port.
+- **Template-port fidelity under our lint/TS rules** - named imports per file, `import
+  type` for type-only imports: mechanical, sources exist for every port.
 - **`useColorScheme`/`useMediaQuery` in jsdom** - mockable; existing suites already
   handle MUI media queries.
 - **Large diff** - mitigated by the ordered build below and one-concern-per-commit.
 - **E2e rewrite touches the CI-critical journey** - the rewrite is a first-class task in
   the plan, not an afterthought.
-- **Resolver chattability scan costs one uploads query per non-chattable project** -
-  acceptable at current project counts; all queries are RTK-cached and reused by the
-  pages. A counts-included projects list can come with a later backend slice.
+- **Resolver chattability scan costs one forced uploads query per non-chattable
+  project** (sequential walk, stops at the first chattable) - acceptable at current
+  project counts; all queries are RTK-cached and reused by the pages. A counts-included
+  projects list can come with a later backend slice.
 
 ## 14. Implementation order
 
 ```mermaid
 flowchart TB
-    theme["1. Theme port + deps swap<br/>(section 3)"] --> shell["2. App shell + routing<br/>(sections 4-6)"]
-    shell --> projects["3. Projects page restyle<br/>(section 7)"]
-    shell --> sources["4. Sources index + file-upload page<br/>(section 8)"]
-    shell --> chat["5. Chat page<br/>(section 9)"]
-    shell --> outer["6. Outer pages<br/>(section 10)"]
+    theme["1. Theme port + deps swap<br/>(section 3)"] --> shell["2. App shell + sectionPaths<br/>(section 4)"]
+    shell --> sources["3. Sources section<br/>(section 8)"]
+    sources --> chat["4. Chat page + /app resolver + route swap<br/>(sections 6, 9)"]
+    chat --> projects["5. Projects restyle<br/>(section 7)"]
+    chat --> outer["6. Outer pages<br/>(section 10)"]
     projects --> e2e["7. E2e rewrite + docs pass"]
-    sources --> e2e
-    chat --> e2e
     outer --> e2e
 ```
 
-Tasks 3-6 are independent of each other and may be parallelized; each lands with its
-component tests, task 7 closes the loop.
+Tasks 3, 4, 6 are sequential by their route dependencies; task 5 follows 4 (it touches the
+projects page's row links, which task 4's route swap makes reachable); task 7 closes the
+loop. Every task lands working software.
 
 ## 15. Documentation and follow-ups
 
-- `docs/system-overview.md`: the web section is rewritten after implementation (new shell
-  and page inventory; service topology and API table unchanged).
+- `docs/2026-10-19-system-overview.md`: the web section is rewritten after implementation
+  (new shell and page inventory; service topology and API table unchanged).
 - Roadmap: this slice is appended to the slice table (post-S5 UI restructure, pairing rule
-  note: this is a frontend-only slice by explicit user decision).
+  note: this is a frontend-only slice by explicit user decision); the status line and the
+  S7 row's "in the project page" wording are refreshed where they name the old UI.
 - Backlog resolutions: the "documents" naming note, the S5 tab-a11y note (tabs no longer
-  exist), and the stale S2 visual-pass note (superseded; a fresh human visual pass on the
-  new UI is recorded as its replacement).
-- Follow-ups recorded with links: project edit/delete UI; Users/Analytics content slices
-  (which bring `@mui/x-*` dependencies with them); a per-source-type items endpoint when
-  the second source type arrives (the sources index currently rides the uploads
-  endpoint).
+  exist), the S5 "pinned Ask tab could end up disabled" note (same), and the stale S2
+  visual-pass note (superseded; a fresh human visual pass on the new UI is recorded as
+  its replacement).
+- TODO (user, 2026-10-21): a future cross-project sources page - bare `/sources` listing
+  all source items across the signed-in user's own visible projects (the same visibility
+  rules as `GET /api/projects`), with an "all-projects" option in the project dropdown.
+  Not in this slice.
+- Backlog residuals recorded with links: project edit/delete UI; Users/Analytics content
+  slices (which bring `@mui/x-*` dependencies with them); a per-source-type items
+  endpoint when the second source type arrives; the dark-mode flash before the stored
+  mode applies (no `InitColorSchemeScript`); the chat thread does not survive leaving
+  the chat page (consistent with S5's thread-lost-on-reload philosophy).
