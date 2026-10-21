@@ -10,7 +10,7 @@ import { useState } from "react";
 import { Link as RouterLink, Navigate } from "react-router";
 import { getErrorMessage } from "../../app/api";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import AuthLayout from "../../layouts/AuthLayout";
+import AuthFrame from "../../layouts/AuthFrame";
 import { registerUser, selectUser } from "./authSlice";
 
 const REQUIRED_COPY = "All fields are required.";
@@ -76,7 +76,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthLayout>
+    <AuthFrame>
       <Typography component="h1" variant="h5" sx={{ fontWeight: 600 }}>
         Create account
       </Typography>
@@ -136,6 +136,6 @@ export default function RegisterPage() {
           </Typography>
         </Stack>
       </Box>
-    </AuthLayout>
+    </AuthFrame>
   );
 }

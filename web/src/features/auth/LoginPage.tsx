@@ -10,7 +10,7 @@ import { useState } from "react";
 import { Link as RouterLink, Navigate } from "react-router";
 import { getErrorMessage } from "../../app/api";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import AuthLayout from "../../layouts/AuthLayout";
+import AuthFrame from "../../layouts/AuthFrame";
 import { loginUser, selectUser } from "./authSlice";
 
 /** The 401 body is backend detail; the product copy is fixed. */
@@ -57,7 +57,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthLayout>
+    <AuthFrame>
       <Typography component="h1" variant="h5" sx={{ fontWeight: 600 }}>
         Sign in
       </Typography>
@@ -101,6 +101,6 @@ export default function LoginPage() {
           </Typography>
         </Stack>
       </Box>
-    </AuthLayout>
+    </AuthFrame>
   );
 }

@@ -46,8 +46,18 @@ describe("LandingPage", () => {
   it("renders the hero copy and both CTAs with correct hrefs", () => {
     renderLanding();
     expect(screen.getByRole("heading", { name: /searchable by meaning/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/register");
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
+    // The navbar and the hero both render the CTA pair (jsdom responsively
+    // hides neither), so every copy must point where it claims.
+    const started = screen.getAllByRole("link", { name: "Get started" });
+    expect(started).toHaveLength(2);
+    for (const link of started) {
+      expect(link).toHaveAttribute("href", "/register");
+    }
+    const signIn = screen.getAllByRole("link", { name: "Sign in" });
+    expect(signIn).toHaveLength(2);
+    for (const link of signIn) {
+      expect(link).toHaveAttribute("href", "/login");
+    }
   });
 
   it("renders the three how-it-works steps", () => {
@@ -76,13 +86,15 @@ describe("LandingPage", () => {
 
   it("navigates to register through the router", async () => {
     renderLanding();
-    await userEvent.setup().click(screen.getByRole("link", { name: "Get started" }));
+    const [getStarted] = screen.getAllByRole("link", { name: "Get started" });
+    await userEvent.setup().click(getStarted);
     expect(await screen.findByRole("heading", { name: "Create account" })).toBeInTheDocument();
   });
 
   it("navigates to login through the router", async () => {
     renderLanding();
-    await userEvent.setup().click(screen.getByRole("link", { name: "Sign in" }));
+    const [signIn] = screen.getAllByRole("link", { name: "Sign in" });
+    await userEvent.setup().click(signIn);
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   });
 });
