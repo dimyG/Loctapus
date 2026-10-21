@@ -30,11 +30,12 @@ const StyledToolbar = styled(Toolbar)(({ theme }) => ({
 
 /**
  * The marketing frame: the template's floating navbar above the children, the
- * copyright footer below. Pages bring their own sections and containers.
+ * wordmark-and-copyright footer pinned to the viewport bottom below. Pages
+ * bring their own sections and containers.
  */
 export default function MarketingFrame({ children }: { children: ReactNode }) {
   return (
-    <Box>
+    <Box sx={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
       <AppBar
         position="fixed"
         enableColorOnDark
@@ -85,12 +86,18 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
           </StyledToolbar>
         </Container>
       </AppBar>
-      {children}
+      <Box sx={{ flexGrow: 1 }}>{children}</Box>
       <Box component="footer" sx={{ borderTop: "1px solid", borderColor: "divider" }}>
         <Container maxWidth="lg" sx={{ py: 4 }}>
-          <Typography variant="body2" color="text.secondary">
-            © {new Date().getFullYear()} RAG. All rights reserved.
-          </Typography>
+          <Stack spacing={1}>
+            <Typography variant="h6">RAG</Typography>
+            <Typography variant="body2" color="text.secondary">
+              RAG is a retrieval-augmented generation workspace.
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ pt: 2 }}>
+              © {new Date().getFullYear()} RAG. All rights reserved.
+            </Typography>
+          </Stack>
         </Container>
       </Box>
     </Box>

@@ -8,7 +8,9 @@ describe("AboutPage", () => {
   it("renders the heading and the release copy", () => {
     renderWithProviders(<AboutPage />);
     expect(screen.getByRole("heading", { name: "About RAG" })).toBeInTheDocument();
-    expect(screen.getByText(/retrieval-augmented generation workspace/)).toBeInTheDocument();
+    // The frame's footer repeats the opening one-liner, so the body paragraph
+    // is matched on the continuation only it carries.
+    expect(screen.getByText(/workspace\. Group your documents/)).toBeInTheDocument();
     expect(screen.getByText(/accounts, sessions, teams, and projects/)).toBeInTheDocument();
   });
 
