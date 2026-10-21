@@ -21,29 +21,42 @@ test.describe("route enforcement", () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
-  test("after login with registered credentials, /projects renders", async ({ page }) => {
+  test("logged-out project-scoped routes redirect to /login", async ({ page }) => {
+    await page.goto("/projects/p-1/sources");
+    await expect(page).toHaveURL(/\/login$/);
+  });
+
+  test("after re-login with registered credentials, the sources landing renders", async ({
+    page,
+  }) => {
     const email = E2E_EMAIL();
 
-    // Register through the UI, then sign out to start the logged-out leg.
+    // Register through the UI: the /app resolver lands on the default
+    // project's sources page. Sign out to start the logged-out leg.
     await page.goto("/register");
     await page.getByLabel(/Email/).fill(email);
     await page.getByLabel(/^Password/).fill("password123");
     await page.getByLabel(/Confirm password/).fill("password123");
     await page.getByRole("button", { name: "Create account" }).click();
-    await expect(page).toHaveURL(/\/projects$/);
+    await expect(page).toHaveURL(/\/projects\/[^/]+\/sources$/);
     await page.getByRole("button", { name: /account menu/i }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page).toHaveURL("http://localhost:5173/");
 
-    // After sign-out the protected route redirects to login (spec 8.2).
+    // After sign-out the protected routes redirect to login (spec 8.2).
     await page.goto("/projects");
     await expect(page).toHaveURL(/\/login$/);
 
-    // Log back in with the same credentials; the projects table renders.
-    await page.goto("/login");
+    // Log back in with the same credentials; the resolver lands on the
+    // default project's sources page again.
     await page.getByLabel(/Email/).fill(email);
     await page.getByLabel(/^Password/).fill("password123");
     await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/projects\/[^/]+\/sources$/);
+
+    // The sidebar's Projects link reaches the projects list, where the
+    // seeded Default row renders.
+    await page.getByRole("link", { name: "Projects" }).click();
     await expect(page).toHaveURL(/\/projects$/);
     await expect(page.getByRole("cell", { name: "Default" })).toBeVisible();
   });

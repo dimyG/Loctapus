@@ -24,14 +24,18 @@ async function makeSampleDocx() {
   return { dir, docxPath };
 }
 
-/** Registers a fresh user through the UI and waits for /projects. */
+/**
+ * Registers a fresh user through the UI and waits for the sources landing.
+ * The /app resolver walks their projects newest-first; nothing is chattable
+ * yet, so it lands on the default project's sources page.
+ */
 async function register(page: import("@playwright/test").Page, email: string) {
   await page.goto("/register");
   await page.getByLabel(/Email/).fill(email);
   await page.getByLabel(/^Password/).fill("password123");
   await page.getByLabel(/Confirm password/).fill("password123");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page).toHaveURL(/\/projects\/[^/]+\/sources$/);
 }
 
 // example.test is a special-use TLD that email-validator rejects; the
@@ -46,8 +50,13 @@ test.describe("journey", () => {
   test("register -> default project -> create -> sign out", async ({ page, request }) => {
     const email = E2E_EMAIL();
 
-    // Register: the seeded Default project is visible immediately.
+    // Register: the resolver lands on the seeded Default project's sources.
     await register(page, email);
+
+    // The permanent sidebar's Projects link opens the projects list; the
+    // desktop viewport renders it, so the link is directly clickable.
+    await page.getByRole("link", { name: "Projects" }).click();
+    await expect(page).toHaveURL(/\/projects$/);
     await expect(page.getByRole("cell", { name: "Default" })).toBeVisible();
 
     // Create a project through the dialog; the team is preselected.
@@ -83,35 +92,26 @@ test.describe("journey", () => {
     await expect(page.getByText("That email is already registered.")).toBeVisible();
   });
 
-  test("register -> default project -> upload pdf and docx -> ready", async ({ page }) => {
+  test("register -> default project -> upload pdf and docx -> ready -> chat", async ({ page }) => {
     const { dir, docxPath } = await makeSampleDocx();
     try {
       const email = E2E_EMAIL();
 
-      // Register, then open the seeded Default project through its row link.
+      // Register, then open the file-upload page through the Add source menu;
+      // the other source types stay disabled with "Coming soon" chips.
       await register(page, email);
-      await page.getByRole("cell", { name: "Default" }).getByRole("link").click();
-      await expect(page).toHaveURL(/\/projects\/[^/]+$/);
+      await page.getByRole("button", { name: "Add source" }).click();
+      await page.getByRole("menuitem", { name: "File upload" }).click();
+      await expect(page).toHaveURL(/\/projects\/[^/]+\/sources\/upload$/);
+      await expect(page.getByRole("link", { name: "Back to sources" })).toBeVisible();
 
-      // The native input is visually folded into the Upload button; setInputFiles
-      // fires its change event, which runs the client checks and the upload.
-      await page.getByLabel("Upload").setInputFiles(TINY_PDF);
+      // The native input is visually folded into the Upload button and takes
+      // a multi-file pick in one change event.
+      const input = page.getByLabel("Upload");
+      await expect(input).toHaveAttribute("multiple");
+      await input.setInputFiles([TINY_PDF, docxPath]);
       await expect(page.getByRole("cell", { name: "tiny.pdf" })).toBeVisible();
-      await page.getByLabel("Upload").setInputFiles(docxPath);
-
-      // The first upload turning ready flips the page's default to Ask, which
-      // hides the cells the Ready assertion waits on. MUI fires a tab's
-      // onChange only when it is not already selected, so the pin must come
-      // after the flip: wait for Ask to become the selected tab (that flip is
-      // the first-ready signal), then click Documents to pin it.
-      await expect(page.getByRole("tab", { name: "Ask" })).toHaveAttribute(
-        "aria-selected",
-        "true",
-        {
-          timeout: 20_000,
-        },
-      );
-      await page.getByRole("tab", { name: "Documents" }).click();
+      await expect(page.getByRole("cell", { name: "sample.docx" })).toBeVisible();
 
       // The default 5s expect timeout does not cover the full pipeline, so the
       // assertion carries an explicit one inside the 30s test budget.
@@ -119,23 +119,24 @@ test.describe("journey", () => {
 
       // A same-name re-upload of an indexed file is a 409: the alert carries the
       // server copy and the table keeps exactly its two data rows.
-      await page.getByLabel("Upload").setInputFiles(TINY_PDF);
+      await input.setInputFiles(TINY_PDF);
       await expect(page.getByRole("alert")).toContainText(
         "A file with this name already exists in this project.",
       );
       // The header's cells are columnheaders, so rows with cells are the data rows.
       await expect(page.getByRole("row").filter({ has: page.getByRole("cell") })).toHaveCount(2);
 
-      // Ask through the browser: the stub LLM answers offline, grounded in the
-      // retrieval this slice wires under the chat panel.
-      await page.getByRole("tab", { name: "Ask" }).click();
+      // Ask through the browser: the sidebar's Chat link keeps the URL's
+      // project, and the stub LLM answers offline, grounded in the
+      // retrieval this app wires under the chat page.
+      await page.getByRole("link", { name: "Chat" }).click();
+      await expect(page).toHaveURL(/\/projects\/[^/]+\/chat$/);
       await page.getByLabel("Ask a question").fill("What is this document about?");
       await page.getByRole("button", { name: "Ask", exact: true }).click();
       await expect(page.getByText(/This is a stub answer grounded/i)).toBeVisible();
 
-      // MUI renders AccordionSummary as a native button, so the sources and
-      // their rows match as buttons; the row-button selector avoids a strict-mode
-      // double match with the hidden Documents panel's table cells.
+      // MUI renders AccordionSummary as a native button, so the cited
+      // sources and their rows match as buttons.
       await page.getByRole("button", { name: /Sources \(\d+\)/ }).click();
       await expect(page.getByRole("button", { name: /tiny\.pdf/ })).toBeVisible();
       await expect(page.getByRole("button", { name: /sample\.docx/ })).toBeVisible();
