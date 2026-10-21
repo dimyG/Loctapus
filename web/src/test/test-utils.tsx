@@ -1,4 +1,3 @@
-import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { render } from "@testing-library/react";
 import type { RenderOptions } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
@@ -6,9 +5,7 @@ import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router";
 import type { AppStore, RootState } from "../app/store";
 import { makeStore } from "../app/store";
-import { createAppTheme } from "../theme/theme";
-
-const theme = createTheme(createAppTheme());
+import AppTheme from "../theme/AppTheme";
 
 type Options = {
   /** Initial router entry; defaults to "/". */
@@ -25,9 +22,9 @@ export function renderWithProviders(ui: ReactElement, options: Options = {}) {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <Provider store={testStore}>
-        <ThemeProvider theme={theme}>
+        <AppTheme>
           <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
-        </ThemeProvider>
+        </AppTheme>
       </Provider>
     );
   }

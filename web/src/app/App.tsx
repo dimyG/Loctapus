@@ -1,14 +1,11 @@
 import CssBaseline from "@mui/material/CssBaseline";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { useEffect, useMemo } from "react";
 import { Provider } from "react-redux";
 import { BrowserRouter } from "react-router";
 import { bootstrapAuth } from "../features/auth/authSlice";
-import { createAppTheme } from "../theme/theme";
+import AppTheme from "../theme/AppTheme";
 import AppRoutes from "./AppRoutes";
 import { makeStore } from "./store";
-
-const theme = createTheme(createAppTheme());
 
 /** Root component: composes store, theme, and router, and bootstraps the session. */
 export default function App() {
@@ -23,12 +20,12 @@ export default function App() {
   }, [store]);
   return (
     <Provider store={store}>
-      <ThemeProvider theme={theme}>
+      <AppTheme>
         <CssBaseline />
         <BrowserRouter>
           <AppRoutes />
         </BrowserRouter>
-      </ThemeProvider>
+      </AppTheme>
     </Provider>
   );
 }
