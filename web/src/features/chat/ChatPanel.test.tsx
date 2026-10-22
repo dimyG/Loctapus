@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
@@ -82,7 +82,30 @@ describe("ChatPanel", () => {
     expect(posts).toEqual([{ query: "first line\n" }]);
   });
 
-  it("renders no sources accordion for a canned empty answer", async () => {
+  it("keeps Ask disabled for empty and whitespace-only input", async () => {
+    renderPanel();
+    const user = userEvent.setup({ applyAccept: false });
+    const ask = screen.getByRole("button", { name: "Ask" });
+    expect(ask).toBeDisabled();
+    await user.type(screen.getByLabelText("Ask a question"), "   ");
+    expect(ask).toBeDisabled();
+  });
+
+  it("shows the sending state", async () => {
+    // The answer endpoint never resolves, so the pending state stays observable.
+    server.use(http.post("*/api/projects/p-1/answer", () => new Promise<Response>(() => {})));
+    renderPanel();
+    const user = userEvent.setup({ applyAccept: false });
+    const textbox = screen.getByLabelText("Ask a question");
+    await user.type(textbox, "How long does indexing take?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    const ask = screen.getByRole("button", { name: "Ask" });
+    await waitFor(() => expect(ask).toBeDisabled());
+    expect(within(ask).getByRole("progressbar")).toBeInTheDocument();
+    expect(textbox).toBeDisabled();
+  });
+
+  it("renders no source chips for a canned empty answer", async () => {
     server.use(
       http.post("*/api/projects/p-1/answer", () =>
         HttpResponse.json({
@@ -98,7 +121,7 @@ describe("ChatPanel", () => {
     expect(
       await screen.findByText("No indexed content in this project matches your question yet."),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Sources \(\d+\)/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^\[\d+\]/)).not.toBeInTheDocument();
   });
 
   it("keeps the input disabled while the request is pending", async () => {
@@ -130,19 +153,24 @@ describe("ChatPanel", () => {
     await waitFor(() => expect(ask).toBeEnabled());
   });
 
-  it("lists and expands the answer sources", async () => {
+  it("shows the sources as small chips that open the chunk", async () => {
     server.use(http.post("*/api/projects/p-1/answer", () => HttpResponse.json(answerFixture)));
     renderPanel();
     const user = userEvent.setup({ applyAccept: false });
     await user.type(screen.getByLabelText("Ask a question"), "Where are keys rotated?");
     await user.click(screen.getByRole("button", { name: "Ask" }));
     await screen.findByText(answerFixture.answer);
-    await user.click(screen.getByText("Sources (1)"));
-    const row = await screen.findByText("[1] handbook.pdf > Keys > Rotation");
-    await user.click(row);
+    // The accordion is gone; the sources are a row of small chips.
+    expect(screen.queryByText(/Sources \(\d+\)/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "[1] handbook.pdf" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("[1] handbook.pdf > Keys > Rotation")).toBeInTheDocument();
     expect(
-      screen.getByText("To rotate the key, open the admin UI and click Rotate."),
+      within(dialog).getByText("To rotate the key, open the admin UI and click Rotate."),
     ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByText(answerFixture.answer)).toBeInTheDocument();
   });
 
   it("shows an error card and try again re-sends", async () => {

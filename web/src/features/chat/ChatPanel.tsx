@@ -1,15 +1,21 @@
-import Accordion from "@mui/material/Accordion";
-import AccordionDetails from "@mui/material/AccordionDetails";
-import AccordionSummary from "@mui/material/AccordionSummary";
+import ArrowUpwardRoundedIcon from "@mui/icons-material/ArrowUpwardRounded";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useRef, useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
 import { getErrorMessage } from "../../app/api";
+import { gray } from "../../theme/themePrimitives";
 import { type RetrievedChunk, useAskQuestionMutation } from "./answersApi";
 
 /** One question/answer exchange in the thread. */
@@ -27,20 +33,45 @@ function chunkLabel(chunk: RetrievedChunk, index: number): string {
   return `[${index + 1}] ${chunk.filename}${path}`;
 }
 
-/** The collapsed "Sources (n)" accordion holding one inner accordion per chunk. */
-function SourcesAccordion({ chunks }: { chunks: RetrievedChunk[] }) {
+/** Builds the chip label for a chunk: `[i] filename`, without the heading path. */
+function chipLabel(chunk: RetrievedChunk, index: number): string {
+  return `[${index + 1}] ${chunk.filename}`;
+}
+
+/** The small source chips under an answer; a chip opens a dialog with its chunk. */
+function SourcesChips({ chunks }: { chunks: RetrievedChunk[] }) {
+  // One dialog open at a time: the state holds the open chip's id.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openIndex = chunks.findIndex((chunk) => chunk.id === openId);
+  const openChunk = openIndex >= 0 ? chunks[openIndex] : undefined;
+
   return (
-    <Accordion>
-      <AccordionSummary>{`Sources (${chunks.length})`}</AccordionSummary>
-      <AccordionDetails>
+    <>
+      <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: "wrap" }}>
         {chunks.map((chunk, index) => (
-          <Accordion key={chunk.id} disableGutters>
-            <AccordionSummary>{chunkLabel(chunk, index)}</AccordionSummary>
-            <AccordionDetails sx={{ whiteSpace: "pre-wrap" }}>{chunk.text}</AccordionDetails>
-          </Accordion>
+          <Chip
+            key={chunk.id}
+            size="small"
+            variant="outlined"
+            label={chipLabel(chunk, index)}
+            onClick={() => setOpenId(chunk.id)}
+          />
         ))}
-      </AccordionDetails>
-    </Accordion>
+      </Stack>
+      <Dialog open={openChunk !== undefined} onClose={() => setOpenId(null)} maxWidth="sm">
+        {openChunk !== undefined && (
+          <>
+            <DialogTitle>{chunkLabel(openChunk, openIndex)}</DialogTitle>
+            <DialogContent>
+              <Typography sx={{ whiteSpace: "pre-wrap" }}>{openChunk.text}</Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setOpenId(null)}>Close</Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+    </>
   );
 }
 
@@ -106,51 +137,116 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
   const pending = pendingId !== null;
 
   return (
-    <Stack spacing={2}>
-      {turns.map((turn) => (
-        <Box key={turn.id}>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {turn.question}
-          </Typography>
-          {turn.answer !== undefined ? (
-            <Box>
-              <Typography sx={{ whiteSpace: "pre-wrap" }}>{turn.answer}</Typography>
-              {turn.chunks !== undefined && turn.chunks.length > 0 && (
-                <SourcesAccordion chunks={turn.chunks} />
-              )}
+    <Box
+      sx={{
+        mx: "auto",
+        width: "100%",
+        maxWidth: 760,
+        display: "flex",
+        flexDirection: "column",
+        height: { xs: "calc(100dvh - 176px)", sm: "calc(100dvh - 192px)" },
+      }}
+    >
+      <Box
+        sx={{
+          flexGrow: 1,
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
+        {turns.map((turn) => (
+          <Box key={turn.id} sx={{ display: "flex", flexDirection: "column" }}>
+            <Box
+              sx={{
+                ml: "auto",
+                maxWidth: "80%",
+                borderRadius: "18px",
+                px: 2,
+                py: 1,
+                backgroundColor: "action.hover",
+              }}
+            >
+              <Typography variant="body2">{turn.question}</Typography>
             </Box>
-          ) : turn.error !== undefined ? (
-            <Stack spacing={1}>
-              <Alert role="alert" severity="error">
-                {turn.error}
-              </Alert>
-              <Button
-                variant="outlined"
-                disabled={pending}
-                onClick={() => void send(turn.question, turn.id)}
+            {turn.answer !== undefined ? (
+              <Box>
+                <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
+                  {turn.answer}
+                </Typography>
+                {turn.chunks !== undefined && turn.chunks.length > 0 && (
+                  <SourcesChips chunks={turn.chunks} />
+                )}
+              </Box>
+            ) : turn.error !== undefined ? (
+              <Stack spacing={1}>
+                <Alert role="alert" severity="error">
+                  {turn.error}
+                </Alert>
+                <Button
+                  variant="outlined"
+                  disabled={pending}
+                  onClick={() => void send(turn.question, turn.id)}
+                >
+                  Try again
+                </Button>
+              </Stack>
+            ) : (
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: "center", color: "text.secondary" }}
               >
-                Try again
-              </Button>
-            </Stack>
-          ) : (
-            <Typography>Thinking...</Typography>
-          )}
+                <CircularProgress size={16} color="inherit" />
+                <Typography>Thinking...</Typography>
+              </Stack>
+            )}
+          </Box>
+        ))}
+        <div ref={sentinelRef} />
+      </Box>
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1 }}>
+        <TextField
+          label="Ask a question"
+          multiline
+          minRows={2}
+          fullWidth
+          disabled={pending}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+          <IconButton
+            aria-label="Ask"
+            disabled={pending || text.trim() === ""}
+            onClick={submit}
+            sx={(theme) => ({
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              backgroundColor: "primary.main",
+              color: "primary.contrastText",
+              "&:hover": {
+                backgroundColor: "primary.dark",
+              },
+              "&.Mui-disabled": {
+                backgroundColor: gray[100],
+                color: gray[500],
+              },
+              ...theme.applyStyles("dark", {
+                "&.Mui-disabled": {
+                  backgroundColor: gray[800],
+                  color: gray[500],
+                },
+              }),
+            })}
+          >
+            {pending ? <CircularProgress size={16} color="inherit" /> : <ArrowUpwardRoundedIcon />}
+          </IconButton>
         </Box>
-      ))}
-      <div ref={sentinelRef} />
-      <TextField
-        label="Ask a question"
-        multiline
-        minRows={2}
-        fullWidth
-        disabled={pending}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={handleKeyDown}
-      />
-      <Button variant="contained" disabled={pending || text.trim() === ""} onClick={submit}>
-        Ask
-      </Button>
-    </Stack>
+      </Box>
+    </Box>
   );
 }
