@@ -27,7 +27,14 @@ export const uploadsApi = api.injectEndpoints({
       },
       invalidatesTags: (_upload, _error, { projectId }) => [{ type: "Upload", id: projectId }],
     }),
+    getUploadRaw: build.query<Blob, { projectId: string; uploadId: string }>({
+      // Raw bytes, not JSON: the default JSON response handler would mangle them.
+      query: ({ projectId, uploadId }) => ({
+        url: `/projects/${projectId}/uploads/${uploadId}/raw`,
+        responseHandler: (response) => response.blob(),
+      }),
+    }),
   }),
 });
 
-export const { useGetUploadsQuery, useUploadFileMutation } = uploadsApi;
+export const { useGetUploadsQuery, useUploadFileMutation, useLazyGetUploadRawQuery } = uploadsApi;
