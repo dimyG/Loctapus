@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { Route, Routes } from "react-router";
 import { useLocation } from "react-router";
@@ -61,6 +61,10 @@ describe("ProjectSelect", () => {
     const combobox = screen.getByRole("combobox", { name: "Project" });
     await openOptions();
     expect(combobox).toHaveTextContent("Default");
+    // The closed value follows the template's two-line selector: avatar
+    // initial, project name, and a "Project" caption beneath it.
+    expect(within(combobox).getByText("Project")).toBeInTheDocument();
+    expect(within(combobox).getByText("D")).toBeInTheDocument();
   });
 
   it("lists projects newest first", async () => {
@@ -90,6 +94,8 @@ describe("ProjectSelect", () => {
     renderSelect("/projects");
     const combobox = screen.getByRole("combobox", { name: "Project" });
     expect(combobox).toHaveTextContent("Select project");
+    // Placeholders stay single-line, so the two-line caption never shows.
+    expect(within(combobox).queryByText("Project")).not.toBeInTheDocument();
     await openOptions();
     fireEvent.click(screen.getByRole("option", { name: "Research" }));
     expect(await screen.findByText("at:/projects/p-2/sources")).toBeInTheDocument();

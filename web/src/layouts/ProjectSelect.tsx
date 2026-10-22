@@ -1,6 +1,9 @@
+import Avatar from "@mui/material/Avatar";
 import MenuItem from "@mui/material/MenuItem";
 import Select, { selectClasses } from "@mui/material/Select";
 import type { SelectChangeEvent } from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import { useLocation, useNavigate } from "react-router";
 import { projectIdFromPath, sectionPath, switchProjectPath } from "../app/sectionPaths";
 import type { Project } from "../features/projects/projectsApi";
@@ -64,7 +67,23 @@ export default function ProjectSelect() {
         if (selected === "") {
           return noProjects ? "No projects" : "Select project";
         }
-        return sorted.find((project) => project.id === selected)?.name ?? "";
+        const project = sorted.find((candidate) => candidate.id === selected);
+        if (project === undefined) {
+          return "";
+        }
+        // The template's two-line selector: leading avatar initial, then the
+        // name over a "Project" caption; the 56px cap above keeps it centered.
+        return (
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <Avatar sx={{ width: 28, height: 28, fontSize: 14 }}>{project.name.charAt(0)}</Avatar>
+            <Stack>
+              <Typography variant="body2">{project.name}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Project
+              </Typography>
+            </Stack>
+          </Stack>
+        );
       }}
     >
       {sorted.map((project) => (
