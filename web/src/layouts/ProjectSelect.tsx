@@ -8,6 +8,7 @@ import { useLocation, useNavigate } from "react-router";
 import { projectIdFromPath, sectionPath, switchProjectPath } from "../app/sectionPaths";
 import type { Project } from "../features/projects/projectsApi";
 import { useGetProjectsQuery } from "../features/projects/projectsApi";
+import { gray } from "../theme/themePrimitives";
 
 /** Projects newest first, so the freshest project leads the list. */
 function sortNewestFirst(projects: Project[]): Project[] {
@@ -78,7 +79,15 @@ export default function ProjectSelect() {
             <Avatar sx={{ width: 28, height: 28, fontSize: 14 }}>{project.name.charAt(0)}</Avatar>
             <Stack>
               <Typography variant="body2">{project.name}</Typography>
-              <Typography variant="caption" color="text.secondary">
+              {/* Dark mode's text.secondary lands too close to the white name
+                  at caption size, so dim it to gray[500] there only. */}
+              <Typography
+                variant="caption"
+                sx={(theme) => ({
+                  color: "text.secondary",
+                  ...theme.applyStyles("dark", { color: gray[500] }),
+                })}
+              >
                 Project
               </Typography>
             </Stack>
