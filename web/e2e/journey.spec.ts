@@ -137,11 +137,17 @@ test.describe("journey", () => {
       await page.getByRole("button", { name: "Ask", exact: true }).click();
       await expect(page.getByText(/This is a stub answer grounded/i)).toBeVisible();
 
-      // MUI renders AccordionSummary as a native button, so the cited
-      // sources and their rows match as buttons.
-      await page.getByRole("button", { name: /Sources \(\d+\)/ }).click();
+      // The cited sources render as small chip buttons labeled "[i] filename";
+      // a chip opens a dialog titled with the full label and the chunk text.
       await expect(page.getByRole("button", { name: /tiny\.pdf/ })).toBeVisible();
       await expect(page.getByRole("button", { name: /sample\.docx/ })).toBeVisible();
+      await page.getByRole("button", { name: /tiny\.pdf/ }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toContainText(/tiny\.pdf/);
+      // tiny.pdf indexes as one fixture chunk, so its text is the dialog body.
+      await expect(dialog).toContainText("Stub fixture paragraph.");
+      await dialog.getByRole("button", { name: "Close" }).click();
+      await expect(dialog).not.toBeVisible();
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
