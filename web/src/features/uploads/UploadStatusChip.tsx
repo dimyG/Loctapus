@@ -7,5 +7,14 @@ import type { UploadStatus } from "./uploadsApi";
 export default function UploadStatusChip({ status }: { status: UploadStatus }) {
   // Terminal statuses decided an outcome, so only in-flight ones earn a spinner.
   const icon = isTerminal(status) ? undefined : <CircularProgress color="inherit" size={12} />;
-  return <Chip size="small" icon={icon} {...statusChip(status)} />;
+  // Pin the width to the widest combo ("Processing" plus spinner) so status
+  // transitions stop resizing the chip and reflowing the sources table.
+  return (
+    <Chip
+      size="small"
+      icon={icon}
+      {...statusChip(status)}
+      sx={{ minWidth: 104, justifyContent: "center" }}
+    />
+  );
 }
