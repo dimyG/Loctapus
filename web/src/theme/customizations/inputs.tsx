@@ -383,19 +383,26 @@ export const inputsCustomizations: Components<Theme> = {
         padding: "8px 12px",
         color: (theme.vars || theme).palette.text.primary,
         borderRadius: (theme.vars || theme).shape.borderRadius,
-        border: `1px solid ${(theme.vars || theme).palette.divider}`,
         backgroundColor: (theme.vars || theme).palette.background.default,
         transition: "border 120ms ease-in",
+        // The border lives on the notched outline so the floating label sits
+        // in a gap; hover and focus recolor it from here because those states
+        // land on the root, not on the fieldset.
         "&:hover": {
-          borderColor: gray[400],
+          [`& .${outlinedInputClasses.notchedOutline}`]: {
+            borderColor: gray[400],
+          },
         },
         [`&.${outlinedInputClasses.focused}`]: {
-          outline: `3px solid ${alpha(brand[500], 0.5)}`,
-          borderColor: brand[400],
+          [`& .${outlinedInputClasses.notchedOutline}`]: {
+            borderColor: brand[400],
+          },
         },
         ...theme.applyStyles("dark", {
           "&:hover": {
-            borderColor: gray[500],
+            [`& .${outlinedInputClasses.notchedOutline}`]: {
+              borderColor: gray[500],
+            },
           },
         }),
         variants: [
@@ -417,9 +424,11 @@ export const inputsCustomizations: Components<Theme> = {
           },
         ],
       }),
-      notchedOutline: {
-        border: "none",
-      },
+      notchedOutline: ({ theme }) => ({
+        // The notch only opens around the shrunken label when the fieldset
+        // carries a visible border, so "none" is not an option here.
+        border: `1px solid ${(theme.vars || theme).palette.divider}`,
+      }),
     },
   },
   MuiInputAdornment: {
@@ -436,7 +445,6 @@ export const inputsCustomizations: Components<Theme> = {
     styleOverrides: {
       root: ({ theme }) => ({
         typography: theme.typography.caption,
-        marginBottom: 8,
       }),
     },
   },
