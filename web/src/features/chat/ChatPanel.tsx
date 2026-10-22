@@ -213,7 +213,6 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
             label="Ask a question"
             multiline
             minRows={2}
-            fullWidth
             disabled={pending}
             value={text}
             onChange={(event) => setText(event.target.value)}
@@ -225,6 +224,8 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
             disabled={pending || text.trim() === ""}
             onClick={submit}
             sx={(theme) => ({
+              // Row pressure must never squash the 40px circle.
+              flexShrink: 0,
               width: 40,
               height: 40,
               borderRadius: "50%",
