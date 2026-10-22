@@ -25,6 +25,9 @@ Follow-ups from the 2026-10-22 UI polish round (plan
 - `364f7eb` - the real-browser tab-open path (clicking a filename) is
   unit-tested only (jsdom covers it with stubs); a 1-minute manual smoke is
   worth doing.
+- The localStorage modules (`tokenStorage`, `lastProject`) assume storage
+  access is permitted; a denied-storage environment (some privacy modes)
+  throws on mount/navigation.
 
 
 ## 2026-10-21 - UI overhaul final review residuals (`ui-mui-templates`)
