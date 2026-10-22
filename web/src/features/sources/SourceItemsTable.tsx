@@ -1,5 +1,4 @@
 import Card from "@mui/material/Card";
-import Chip from "@mui/material/Chip";
 import Link from "@mui/material/Link";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -8,7 +7,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { Link as RouterLink } from "react-router";
-import { statusChip } from "../uploads/uploadStatus";
+import UploadStatusChip from "../uploads/UploadStatusChip";
 import type { Upload } from "../uploads/uploadsApi";
 
 /**
@@ -39,7 +38,7 @@ export default function SourceItemsTable({ items }: { items: Upload[] }) {
               </TableCell>
               <TableCell>File upload</TableCell>
               <TableCell>
-                <Chip size="small" {...statusChip(item.status)} />
+                <UploadStatusChip status={item.status} />
               </TableCell>
               <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
             </TableRow>
