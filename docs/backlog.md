@@ -19,9 +19,11 @@ Follow-ups from the 2026-10-22 UI polish round (plan
   topbar or container padding changes.
 - `uv run` in `backend/` auto-generates an untracked `backend/uv.lock` (the
   repo tracks none); consider a gitignore entry.
-- Pre-existing cold-stack flake at the journey's upload step: the "tiny.pdf"
+- ~~Pre-existing cold-stack flake at the journey's upload step: the "tiny.pdf"
   cell can exceed the 5s default expect timeout on a just-booted API (predates
-  this branch; surfaced by this round's e2e runs).
+  this branch; surfaced by this round's e2e runs).~~ Resolved on 2026-10-22 via
+  `98e336d` (the assertion now carries the same 20s headroom as the pipeline
+  one).
 - `364f7eb` - the real-browser tab-open path (clicking a filename) is
   unit-tested only (jsdom covers it with stubs); a 1-minute manual smoke is
   worth doing.
