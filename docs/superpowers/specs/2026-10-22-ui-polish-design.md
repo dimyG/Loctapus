@@ -58,8 +58,11 @@ carries the new marketing copy with one centered "Get started" button, and the a
    "loctapus"; this spec uses title case - flagged for the spec review.)
 10. **The octopus logo is the brand mark (remark 10).** `D:\Downloads\Blue Chat Octopus
     Logo.png` is committed as `web/public/logo.png` (a 28px `img` beside each wordmark, 4 spots)
-    and replaces `favicon.svg` as the favicon. The image itself has not been viewed by the
-    implementing agent (no image input) - flagged for the spec review.
+    and replaces `favicon.svg` as the favicon. Verified 2026-10-22: a 1254x1254 RGBA PNG with a
+    fully transparent background (corner alpha 0), solid blue body (~#0A67FD) - a chat-bubble
+    octopus head with three white typing dots and five curled tentacles. The bold flat shapes
+    stay legible at 28px and the transparency sits cleanly on both light and dark surfaces, so
+    no image processing is needed.
 
 ## 3. Backend: the raw-file endpoint
 
