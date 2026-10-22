@@ -7,7 +7,7 @@ import AboutPage from "./AboutPage";
 describe("AboutPage", () => {
   it("renders the heading and the release copy", () => {
     renderWithProviders(<AboutPage />);
-    expect(screen.getByRole("heading", { name: "About RAG" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "About Loctapus" })).toBeInTheDocument();
     // The frame's footer repeats the opening one-liner, so the body paragraph
     // is matched on the continuation only it carries.
     expect(screen.getByText(/workspace\. Group your documents/)).toBeInTheDocument();
@@ -25,6 +25,6 @@ describe("AboutPage", () => {
         },
       },
     });
-    expect(screen.getByRole("heading", { name: "About RAG" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "About Loctapus" })).toBeInTheDocument();
   });
 });

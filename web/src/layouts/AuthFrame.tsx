@@ -2,11 +2,11 @@ import Card from "@mui/material/Card";
 import Container from "@mui/material/Container";
 import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
 import { styled } from "@mui/material/styles";
 import type { ReactNode } from "react";
 import { Link as RouterLink } from "react-router";
 import ColorModeIconDropdown from "../theme/ColorModeIconDropdown";
+import BrandMark from "./BrandMark";
 
 /** Full-height centered column with the sign-in template's soft radial backdrop. */
 const FrameStack = styled(Stack)(({ theme }) => ({
@@ -44,7 +44,7 @@ export default function AuthFrame({ children }: { children: ReactNode }) {
           color="text.primary"
           sx={{ fontWeight: 600, textAlign: "center" }}
         >
-          <Typography variant="h6">RAG</Typography>
+          <BrandMark />
         </Link>
         <Card variant="outlined" sx={{ p: 4 }}>
           {children}

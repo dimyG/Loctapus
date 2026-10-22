@@ -10,7 +10,11 @@ describe("AuthFrame", () => {
         <div>auth-content</div>
       </AuthFrame>,
     );
-    expect(screen.getByRole("link", { name: "RAG" })).toHaveAttribute("href", "/");
+    const brandLink = screen.getByRole("link", { name: "Loctapus" });
+    expect(brandLink).toHaveAttribute("href", "/");
+    // The decorative logo rides inside the wordmark link; the empty alt keeps
+    // the link's accessible name as "Loctapus".
+    expect(brandLink.querySelector('img[src="/logo.png"]')).toHaveAttribute("alt", "");
     // The switcher's trigger answers once useColorScheme settles its mount effect.
     expect(await screen.findByRole("button", { name: "color mode" })).toBeInTheDocument();
     const card = screen.getByText("auth-content").closest(".MuiCard-root");

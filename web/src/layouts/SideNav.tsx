@@ -1,8 +1,8 @@
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import MuiDrawer, { drawerClasses } from "@mui/material/Drawer";
-import Typography from "@mui/material/Typography";
 import { styled } from "@mui/material/styles";
+import BrandMark from "./BrandMark";
 import NavMenuContent from "./NavMenuContent";
 
 /** The permanent sidebar's width; the topbar offsets by it on md and up. */
@@ -31,9 +31,7 @@ export default function SideNav() {
       }}
     >
       <Box sx={{ px: 2, py: 3 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          RAG
-        </Typography>
+        <BrandMark />
       </Box>
       <Divider />
       <Box

@@ -10,6 +10,7 @@ import { alpha, styled } from "@mui/material/styles";
 import type { ReactNode } from "react";
 import { Link as RouterLink } from "react-router";
 import ColorModeIconDropdown from "../theme/ColorModeIconDropdown";
+import BrandMark from "./BrandMark";
 
 /** The floating pill toolbar, ported from the marketing template's AppAppBar. */
 const StyledToolbar = styled(Toolbar)(({ theme }) => ({
@@ -56,7 +57,7 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
                 color="text.primary"
                 sx={{ fontWeight: 600 }}
               >
-                <Typography variant="h6">RAG</Typography>
+                <BrandMark />
               </Link>
               <Button variant="text" color="info" size="small" component={RouterLink} to="/about">
                 About
@@ -90,12 +91,12 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
       <Box component="footer" sx={{ borderTop: "1px solid", borderColor: "divider" }}>
         <Container maxWidth="lg" sx={{ py: 4 }}>
           <Stack spacing={1}>
-            <Typography variant="h6">RAG</Typography>
+            <BrandMark />
             <Typography variant="body2" color="text.secondary">
-              RAG is a retrieval-augmented generation workspace.
+              Loctapus is a retrieval-augmented generation workspace.
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ pt: 2 }}>
-              © {new Date().getFullYear()} RAG. All rights reserved.
+              © {new Date().getFullYear()} Loctapus. All rights reserved.
             </Typography>
           </Stack>
         </Container>

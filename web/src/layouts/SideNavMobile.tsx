@@ -2,7 +2,7 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Drawer, { drawerClasses } from "@mui/material/Drawer";
 import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
+import BrandMark from "./BrandMark";
 import NavMenuContent from "./NavMenuContent";
 
 /** Props for the xs-only slide-in sidebar. */
@@ -30,9 +30,7 @@ export default function SideNavMobile({ open, onClose }: SideNavMobileProps) {
     >
       <Stack sx={{ maxWidth: "70dvw", height: "100%" }}>
         <Box sx={{ px: 2, py: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            RAG
-          </Typography>
+          <BrandMark />
         </Box>
         <Divider />
         <Stack sx={{ flexGrow: 1 }}>

@@ -30,7 +30,7 @@ describe("App", () => {
 
   it("renders the about page for public visitors", async () => {
     renderApp("/about");
-    expect(await screen.findByRole("heading", { name: "About RAG" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "About Loctapus" })).toBeInTheDocument();
   });
 
   it("keeps a visitor whose stored token was rejected on the landing", async () => {

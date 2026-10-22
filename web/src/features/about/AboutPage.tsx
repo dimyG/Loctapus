@@ -10,13 +10,13 @@ export default function AboutPage() {
       <Container maxWidth="md" sx={{ pt: { xs: 14, sm: 20 }, pb: { xs: 8, sm: 12 } }}>
         <Stack spacing={3}>
           <Typography component="h1" variant="h3" sx={{ fontWeight: 600 }}>
-            About RAG
+            About Loctapus
           </Typography>
           {/* Draft copy pending the owner's review; do not treat as final product text. */}
           <Typography variant="body1" color="text.secondary">
-            RAG is a retrieval-augmented generation workspace. Group your documents into projects
-            and teams, then ask questions grounded in your own material instead of a general-purpose
-            model's guesswork.
+            Loctapus is a retrieval-augmented generation workspace. Group your documents into
+            projects and teams, then ask questions grounded in your own material instead of a
+            general-purpose model's guesswork.
           </Typography>
           <Typography variant="body1" color="text.secondary">
             Documents, semantic search, and answers are rolling out next. This release covers the
