@@ -40,7 +40,7 @@ describe("App", () => {
     // The redirect waits for the hydrated user, so a stale token never
     // bounces a public visitor into the guarded login flow.
     expect(
-      await screen.findByRole("heading", { name: /searchable by meaning/i }),
+      await screen.findByRole("heading", { name: "Chat with your company's knowledge base" }),
     ).toBeInTheDocument();
     expect(window.location.pathname).toBe("/");
   });

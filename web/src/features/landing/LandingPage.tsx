@@ -1,9 +1,15 @@
 import ChatBubbleRoundedIcon from "@mui/icons-material/ChatBubbleRounded";
-import PostAddRoundedIcon from "@mui/icons-material/PostAddRounded";
-import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
+import CloudSyncRoundedIcon from "@mui/icons-material/CloudSyncRounded";
+import GroupsRoundedIcon from "@mui/icons-material/GroupsRounded";
+import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
+import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
+import SmartToyRoundedIcon from "@mui/icons-material/SmartToyRounded";
+import SupportAgentRoundedIcon from "@mui/icons-material/SupportAgentRounded";
+import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
+import Chip from "@mui/material/Chip";
 import Container from "@mui/material/Container";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -14,19 +20,52 @@ import { selectAuthStatus, selectUser } from "../auth/authSlice";
 
 const steps = [
   {
-    icon: <PostAddRoundedIcon />,
-    title: "Create a project",
-    description: "Group your documents in one place and share them with a team.",
-  },
-  {
-    icon: <UploadFileRoundedIcon />,
-    title: "Upload documents",
-    description: "Add PDFs and text files; every file is stored and tracked.",
+    icon: <CloudSyncRoundedIcon />,
+    title: "Connect your knowledge base",
+    description: "Upload files, connect cloud storages and websites, and keep them in sync.",
+    coming: false,
   },
   {
     icon: <ChatBubbleRoundedIcon />,
-    title: "Ask questions",
-    description: "Ask in plain language and get answers that cite the source.",
+    title: "Chat in our interface",
+    description: "Ask questions inside our web app; it is the simplest way to use the service.",
+    coming: false,
+  },
+  {
+    icon: <RocketLaunchRoundedIcon />,
+    title: "Deploy an agent",
+    description:
+      "Give an agent access to your knowledge base where your users need it: your docs page, your app, Slack, your support desk.",
+    coming: true,
+  },
+  {
+    icon: <InsightsRoundedIcon />,
+    title: "Analyze",
+    description: "See what people ask, where your agent shines, and where it struggles.",
+    coming: true,
+  },
+];
+
+const values = [
+  {
+    icon: <SupportAgentRoundedIcon />,
+    title: "Answer complex customer questions",
+    description: "Ground every answer in your own documents, with the sources to prove it.",
+  },
+  {
+    icon: <GroupsRoundedIcon />,
+    title: "Give your teams a personal assistant",
+    description: "An assistant that knows your product, your processes, and your terminology.",
+  },
+  {
+    icon: <SyncRoundedIcon />,
+    title: "Keep your knowledge base always up to date",
+    description: "Re-asking always reads the latest version of your sources.",
+  },
+  {
+    icon: <SmartToyRoundedIcon />,
+    title: "AI agents custom to your enterprise",
+    description: "Spin up an agent wherever your users already are, on top of your own knowledge.",
   },
 ];
 
@@ -81,43 +120,73 @@ export default function LandingPage() {
                 textAlign: "center",
               }}
             >
-              Your documents, searchable by meaning - upload, ask, get grounded answers
+              Chat with your company's knowledge base
             </Typography>
             <Typography
               variant="h6"
               color="text.secondary"
               sx={{ fontWeight: 400, textAlign: "center", width: { sm: "100%", md: "80%" } }}
             >
-              A private workspace where your team stores its documents and asks questions in
-              everyday language.
+              Deploy AI teammates that understand your data, product, knowledge, and tools. A
+              private workspace where your team stores its documents and asks questions in everyday
+              language.
             </Typography>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={1}
-              useFlexGap
-              sx={{ pt: 2, width: { xs: "100%", sm: "350px" } }}
-            >
+            {/* "Sign in" stays in the navbar only; the hero keeps the single
+            centered primary action (spec decision 7). */}
+            <Stack direction="row" useFlexGap sx={{ pt: 2, justifyContent: "center" }}>
               <Button variant="contained" component={RouterLink} to="/register">
                 Get started
-              </Button>
-              <Button variant="outlined" component={RouterLink} to="/login">
-                Sign in
               </Button>
             </Stack>
           </Stack>
         </Container>
       </Box>
       <Container maxWidth="lg" sx={{ pb: { xs: 8, sm: 16 } }}>
+        <Typography
+          component="h2"
+          variant="h4"
+          sx={{ fontWeight: 600, textAlign: "center", mb: 4 }}
+        >
+          How it works
+        </Typography>
         <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
           {steps.map((step) => (
-            <Card key={step.title} variant="outlined" sx={{ flex: 1, p: 3 }}>
+            <Card
+              key={step.title}
+              variant="outlined"
+              sx={{ flex: 1, p: 3, opacity: step.coming ? 0.6 : 1 }}
+            >
               <Box sx={{ color: "primary.main", mb: 1.5 }}>{step.icon}</Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                {step.title}
-              </Typography>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  {step.title}
+                </Typography>
+                {step.coming ? <Chip size="small" label="Coming" /> : null}
+              </Stack>
               <Box sx={{ mt: 1 }} />
               <Typography variant="body2" color="text.secondary">
                 {step.description}
+              </Typography>
+            </Card>
+          ))}
+        </Stack>
+        <Typography
+          component="h2"
+          variant="h4"
+          sx={{ fontWeight: 600, textAlign: "center", mt: { xs: 8, sm: 12 }, mb: 4 }}
+        >
+          Built for your team
+        </Typography>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
+          {values.map((value) => (
+            <Card key={value.title} variant="outlined" sx={{ flex: 1, p: 3 }}>
+              <Box sx={{ color: "primary.main", mb: 1.5 }}>{value.icon}</Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                {value.title}
+              </Typography>
+              <Box sx={{ mt: 1 }} />
+              <Typography variant="body2" color="text.secondary">
+                {value.description}
               </Typography>
             </Card>
           ))}

@@ -86,7 +86,7 @@ describe("UserMenu", () => {
     // The session clears during the click handler; the landing renders with
     // no user, so the authed-visitor redirect never fires mid-sign-out.
     expect(
-      await screen.findByRole("heading", { name: /searchable by meaning/i }),
+      await screen.findByRole("heading", { name: "Chat with your company's knowledge base" }),
     ).toBeInTheDocument();
     // And the guard never bounced the sign-out to the login page.
     expect(screen.queryByText("login-page")).not.toBeInTheDocument();
@@ -105,7 +105,7 @@ describe("UserMenu", () => {
     await openMenu(user);
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
     expect(
-      await screen.findByRole("heading", { name: /searchable by meaning/i }),
+      await screen.findByRole("heading", { name: "Chat with your company's knowledge base" }),
     ).toBeInTheDocument();
     await vi.waitFor(() => {
       expect(loadToken()).toBeNull();

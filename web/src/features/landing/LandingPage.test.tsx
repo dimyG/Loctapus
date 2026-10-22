@@ -43,27 +43,51 @@ describe("LandingPage", () => {
     window.localStorage.clear();
   });
 
-  it("renders the hero copy and both CTAs with correct hrefs", () => {
+  it("renders the hero copy with one centered CTA", () => {
     renderLanding();
-    expect(screen.getByRole("heading", { name: /searchable by meaning/i })).toBeInTheDocument();
-    // The navbar and the hero both render the CTA pair (jsdom responsively
-    // hides neither), so every copy must point where it claims.
+    expect(
+      screen.getByRole("heading", { name: "Chat with your company's knowledge base" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Deploy AI teammates that understand your data, product, knowledge, and tools. A private workspace where your team stores its documents and asks questions in everyday language.",
+      ),
+    ).toBeInTheDocument();
+    // The navbar and the hero both render "Get started", but "Sign in" leaves
+    // the hero and survives only in the navbar (spec decision 7).
     const started = screen.getAllByRole("link", { name: "Get started" });
     expect(started).toHaveLength(2);
     for (const link of started) {
       expect(link).toHaveAttribute("href", "/register");
     }
     const signIn = screen.getAllByRole("link", { name: "Sign in" });
-    expect(signIn).toHaveLength(2);
-    for (const link of signIn) {
-      expect(link).toHaveAttribute("href", "/login");
-    }
+    expect(signIn).toHaveLength(1);
+    expect(signIn[0]).toHaveAttribute("href", "/login");
   });
 
-  it("renders the three how-it-works steps", () => {
+  it("renders the four how-it-works steps", () => {
     renderLanding();
-    for (const step of ["Create a project", "Upload documents", "Ask questions"]) {
+    for (const step of [
+      "Connect your knowledge base",
+      "Chat in our interface",
+      "Deploy an agent",
+      "Analyze",
+    ]) {
       expect(screen.getByText(step)).toBeVisible();
+    }
+    // Steps 3 and 4 are teased as upcoming, one "Coming" chip each.
+    expect(screen.getAllByText("Coming")).toHaveLength(2);
+  });
+
+  it("renders the four value cards", () => {
+    renderLanding();
+    for (const title of [
+      "Answer complex customer questions",
+      "Give your teams a personal assistant",
+      "Keep your knowledge base always up to date",
+      "AI agents custom to your enterprise",
+    ]) {
+      expect(screen.getByText(title)).toBeVisible();
     }
   });
 
@@ -80,7 +104,9 @@ describe("LandingPage", () => {
     // land the user on the guarded /app, which bounces to /login
     // once the session clears - the race RequireAuth's splash prevents.
     renderLanding(authedState("busy"));
-    expect(screen.getByRole("heading", { name: /searchable by meaning/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Chat with your company's knowledge base" }),
+    ).toBeInTheDocument();
     expect(window.location.pathname).toBe("/");
   });
 
@@ -93,8 +119,8 @@ describe("LandingPage", () => {
 
   it("navigates to login through the router", async () => {
     renderLanding();
-    const [signIn] = screen.getAllByRole("link", { name: "Sign in" });
-    await userEvent.setup().click(signIn);
+    // The hero no longer repeats "Sign in"; the navbar's single link remains.
+    await userEvent.setup().click(screen.getByRole("link", { name: "Sign in" }));
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   });
 });
