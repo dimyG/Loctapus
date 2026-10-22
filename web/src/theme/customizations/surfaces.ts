@@ -56,6 +56,18 @@ export const surfacesCustomizations: Components<Theme> = {
       elevation: 0,
     },
   },
+  MuiDialog: {
+    styleOverrides: {
+      paper: ({ theme }) => ({
+        // MUI's dark elevation overlay washes the paper out to a flat gray, so
+        // the tint drops the overlay and shifts the hue toward the brand blue.
+        ...theme.applyStyles("dark", {
+          backgroundImage: "none",
+          backgroundColor: "hsl(210, 30%, 14%)",
+        }),
+      }),
+    },
+  },
   MuiCard: {
     styleOverrides: {
       root: ({ theme }) => {
