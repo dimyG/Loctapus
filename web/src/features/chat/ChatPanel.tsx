@@ -154,6 +154,7 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
           display: "flex",
           flexDirection: "column",
           gap: 2,
+          pt: 3,
         }}
       >
         {turns.map((turn) => (
@@ -207,17 +208,18 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
         <div ref={sentinelRef} />
       </Box>
       <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1 }}>
-        <TextField
-          label="Ask a question"
-          multiline
-          minRows={2}
-          fullWidth
-          disabled={pending}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <TextField
+            label="Ask a question"
+            multiline
+            minRows={2}
+            fullWidth
+            disabled={pending}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={handleKeyDown}
+            sx={{ flexGrow: 1, "& .MuiOutlinedInput-root": { px: 2, py: 1.5 } }}
+          />
           <IconButton
             aria-label="Ask"
             disabled={pending || text.trim() === ""}
@@ -245,7 +247,7 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
           >
             {pending ? <CircularProgress size={16} color="inherit" /> : <ArrowUpwardRoundedIcon />}
           </IconButton>
-        </Box>
+        </Stack>
       </Box>
     </Box>
   );
