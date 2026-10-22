@@ -31,8 +31,11 @@ carries the new marketing copy with one centered "Get started" button, and the a
 2. **Page toolbars get top spacing (remark 2).** `pt: 3` on the header `Stack` of the projects,
    sources, and file-upload pages so the search and primary controls clear the topbar's bottom
    border.
-3. **The topbar dropdown gets a "Project" label (remark 3).** A `Typography` label sits left of
-   the `Select` in `ProjectSelect`; the select keeps its accessible name.
+3. **The topbar dropdown gets a "Project" label (remark 3).** Following the dashboard
+   template's selector (the user's reference screenshot): the `Select`'s closed rendering
+   becomes two lines inside a row with a small rounded leading avatar (the project name's first
+   letter) - the project name on line one and a `caption` "Project" (`text.secondary`) on line
+   two. Menu items stay single-line names; the select keeps its accessible name.
 4. **Chat gets the ChatGPT layout inside our template (remark 4).** Centered 760px column:
    scrolling thread, user questions in gray rounded bubbles aligned right, answers as plain
    full-width text with the existing sources accordion, and a rounded composer whose "Ask"
@@ -142,9 +145,11 @@ inline disposition header.
   file-upload pages inherit it through the shared table).
 - **Spacing** (remark 2): `pt: 3` on the header `Stack` in `ProjectsPage`, `SourcesPage`, and
   `FileUploadPage`.
-- **Dropdown label** (remark 3): `ProjectSelect` wraps its `Select` in a `Stack direction="row"`
-  with `alignItems: "center"` and a `Typography` `variant="body2"` "Project"
-  (`color="text.secondary"`) to its left.
+- **Dropdown label** (remark 3): `ProjectSelect`'s `renderValue` returns a row with a small
+  rounded `Avatar` (the project name's first letter) and a two-line block - the project name
+  (`body2`) over a `caption` "Project" (`text.secondary`) - matching the dashboard template's
+  selector from the user's reference screenshot. The "Select project" / "No projects"
+  placeholders keep their single-line rendering.
 - **Landing** (remarks 7+8): title "Chat with your company's knowledge base"; the given
   subtitle verbatim; hero buttons reduce to one centered contained "Get started"; new sections
   below:
