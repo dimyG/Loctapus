@@ -1,6 +1,6 @@
 /**
- * The only module that touches localStorage (spec 6.1): swapping the storage
- * backend later means changing this file alone.
+ * The only module that touches the stored access token (spec 6.1): swapping
+ * the storage backend later means changing this file alone.
  *
  * XSS trade-off, recorded deliberately: a script injected via XSS can read the
  * token from localStorage. S2 renders no user-supplied HTML, so the attack

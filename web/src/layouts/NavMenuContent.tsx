@@ -6,6 +6,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Stack from "@mui/material/Stack";
 import { Link as RouterLink, useLocation } from "react-router";
+import { loadLastProjectId } from "../app/lastProject";
 import { activeSection, projectIdFromPath, sectionPath } from "../app/sectionPaths";
 import type { Project } from "../features/projects/projectsApi";
 import { useGetProjectsQuery } from "../features/projects/projectsApi";
@@ -26,8 +27,12 @@ export default function NavMenuContent({ onNavigate }: { onNavigate?: () => void
   const { pathname } = useLocation();
   const { data: projects } = useGetProjectsQuery();
   // Links prefer the URL's own project; the list page has none, so fall back
-  // to the newest project so Sources and Chat still lead somewhere.
-  const targetId = projectIdFromPath(pathname) ?? latestProject(projects)?.id;
+  // to the remembered project and then the newest one. The remembered id is
+  // only trusted while it names a loaded project: a stale id (deleted project,
+  // another user on the same browser) must not target an unknown project, and
+  // while the list loads the links stay disabled as before.
+  const rememberedId = projects?.find((project) => project.id === loadLastProjectId())?.id;
+  const targetId = projectIdFromPath(pathname) ?? rememberedId ?? latestProject(projects)?.id;
   const currentSection = activeSection(pathname);
 
   return (

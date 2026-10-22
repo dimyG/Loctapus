@@ -5,8 +5,9 @@ import Container from "@mui/material/Container";
 import IconButton from "@mui/material/IconButton";
 import Toolbar from "@mui/material/Toolbar";
 import { alpha } from "@mui/material/styles";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router";
+import { saveLastProjectId } from "../app/lastProject";
 import { projectIdFromPath } from "../app/sectionPaths";
 import UserMenu from "../features/auth/UserMenu";
 import ColorModeIconDropdown from "../theme/ColorModeIconDropdown";
@@ -18,6 +19,15 @@ import SideNavMobile from "./SideNavMobile";
 export default function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { pathname } = useLocation();
+  const projectId = projectIdFromPath(pathname);
+
+  // Any project the user actually opens becomes the remembered one, so the
+  // sidebar's section links can return to it from the project list page.
+  useEffect(() => {
+    if (projectId !== null) {
+      saveLastProjectId(projectId);
+    }
+  }, [projectId]);
 
   return (
     <Box sx={{ display: "flex" }}>
@@ -67,7 +77,7 @@ export default function AppShell() {
               React Router reuses the element when only :projectId changes, and
               a reused element would carry the old project's state and RTK
               Query's previous-argument data into the new project's URL. */}
-          <Outlet key={projectIdFromPath(pathname) ?? "none"} />
+          <Outlet key={projectId ?? "none"} />
         </Container>
       </Box>
     </Box>

@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { initialRootState } from "../app/store";
 import { server } from "../test/server";
 import { renderWithProviders } from "../test/test-utils";
@@ -30,6 +30,11 @@ function renderNav(route: string) {
 }
 
 describe("NavMenuContent", () => {
+  beforeEach(() => {
+    // A stored last-project id from an earlier test must not leak between cases.
+    window.localStorage.clear();
+  });
+
   it("renders all five sections", () => {
     renderNav("/projects/p-1/sources");
     for (const label of ["Projects", "Sources", "Chat", "Users", "Analytics"]) {
@@ -64,6 +69,35 @@ describe("NavMenuContent", () => {
   it("links sources and chat to the latest project from /projects", async () => {
     renderNav("/projects");
     // The links only exist once the project list resolves.
+    expect(await screen.findByRole("link", { name: "Sources" })).toHaveAttribute(
+      "href",
+      "/projects/p-2/sources",
+    );
+    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+      "href",
+      "/projects/p-2/chat",
+    );
+  });
+
+  it("links sources and chat to the remembered project from /projects", async () => {
+    // The literal key pins the storage contract; a rename must fail loudly.
+    window.localStorage.setItem("rag.lastProjectId", "p-1");
+    renderNav("/projects");
+    expect(await screen.findByRole("link", { name: "Sources" })).toHaveAttribute(
+      "href",
+      "/projects/p-1/sources",
+    );
+    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+      "href",
+      "/projects/p-1/chat",
+    );
+  });
+
+  it("falls back to the newest project when the remembered one is not in the list", async () => {
+    // A deleted project or another user's id on the same browser must not
+    // produce links to a project the list does not hold.
+    window.localStorage.setItem("rag.lastProjectId", "p-gone");
+    renderNav("/projects");
     expect(await screen.findByRole("link", { name: "Sources" })).toHaveAttribute(
       "href",
       "/projects/p-2/sources",

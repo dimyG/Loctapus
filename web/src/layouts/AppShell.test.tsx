@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { Route, Routes } from "react-router";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { initialRootState } from "../app/store";
 import type { Answer } from "../features/chat/answersApi";
 import ChatPage from "../features/chat/ChatPage";
@@ -80,6 +80,11 @@ async function switchProject(name: string) {
 }
 
 describe("AppShell", () => {
+  beforeEach(() => {
+    // A stored last-project id from an earlier test must not leak between cases.
+    window.localStorage.clear();
+  });
+
   it("renders the sidebar, the topbar controls, and the routed page", async () => {
     renderShell();
     // jsdom does not evaluate the media-query CSS the drawer's responsive
@@ -95,6 +100,19 @@ describe("AppShell", () => {
     expect(await screen.findByRole("button", { name: "color mode" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "account menu" })).toBeInTheDocument();
     expect(screen.getByText("sources-page")).toBeInTheDocument();
+  });
+
+  it("remembers the project the URL carries as the last opened project", () => {
+    renderWithProviders(
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route path="/projects/:projectId/sources" element={<div>sources-page</div>} />
+        </Route>
+      </Routes>,
+      { route: "/projects/p-2/sources", preloadedState: authed() },
+    );
+    // The literal key pins the storage contract; a rename must fail loudly.
+    expect(window.localStorage.getItem("rag.lastProjectId")).toBe("p-2");
   });
 
   it("opens the mobile drawer from the hamburger and closes it on navigation", async () => {
