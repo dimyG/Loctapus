@@ -70,7 +70,7 @@ export default function SourcesPage() {
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
-        sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}
+        sx={{ pt: 3, justifyContent: "space-between", alignItems: { sm: "center" } }}
       >
         <Typography component="h1" variant="h4" sx={{ fontWeight: 600 }}>
           Sources

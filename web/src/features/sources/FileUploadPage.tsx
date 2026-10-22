@@ -62,7 +62,7 @@ export default function FileUploadPage() {
 
   return (
     <>
-      <Stack spacing={0.5} sx={{ alignItems: "flex-start" }}>
+      <Stack spacing={0.5} sx={{ pt: 3, alignItems: "flex-start" }}>
         {projectId !== undefined && (
           <Link component={RouterLink} to={sectionPath("sources", projectId)}>
             Back to sources
