@@ -38,9 +38,10 @@ carries the new marketing copy with one centered "Get started" button, and the a
    two. Menu items stay single-line names; the select keeps its accessible name.
 4. **Chat gets the ChatGPT layout inside our template (remark 4).** Centered 760px column:
    scrolling thread, user questions in gray rounded bubbles aligned right, answers as plain
-   full-width text with the existing sources accordion, and a rounded composer whose "Ask"
-   action sits inside at the bottom right. Active, inactive, and sending states are all clearly
-   visible; no label sits on a background that swallows it.
+   full-width text followed by a row of small subtle source chips (each opening its chunk in a
+   dialog), and a rounded composer whose "Ask" action sits inside at the bottom right. Active,
+   inactive, and sending states are all clearly visible; no label sits on a background that
+   swallows it.
 5. **The floating label never crosses the input border (remark 5).** Root cause: the theme draws
    the border on `MuiOutlinedInput` root with `notchedOutline: { border: "none" }`, so the label
    gets no notch gap, and a 3px focus outline on the root runs straight through it. Fix: restore
@@ -59,13 +60,17 @@ carries the new marketing copy with one centered "Get started" button, and the a
    wordmark appears today: document title, marketing topbar and footer, auth frame, both
    sidenav brand areas, about copy, and the tests that assert them. (The user wrote
    "loctapus"; this spec uses title case - flagged for the spec review.)
-10. **The octopus logo is the brand mark (remark 10).** `D:\Downloads\Blue Chat Octopus
-    Logo.png` is committed as `web/public/logo.png` (a 28px `img` beside each wordmark, 4 spots)
-    and replaces `favicon.svg` as the favicon. Verified 2026-10-22: a 1254x1254 RGBA PNG with a
-    fully transparent background (corner alpha 0), solid blue body (~#0A67FD) - a chat-bubble
-    octopus head with three white typing dots and five curled tentacles. The bold flat shapes
-    stay legible at 28px and the transparency sits cleanly on both light and dark surfaces, so
-    no image processing is needed.
+10. **The octopus logo is the brand mark, the favicon package is the tab icon (remark 10,
+    amended 2026-10-22).** `D:\Downloads\Blue Chat Octopus Logo.png` is committed as
+    `web/public/logo.png` (a 28px `img` beside each wordmark, 4 spots). Verified 2026-10-22: a
+    1254x1254 RGBA PNG with a fully transparent background (corner alpha 0), solid blue body
+    (~#0A67FD) - a chat-bubble octopus head with three white typing dots and five curled
+    tentacles; bold flat shapes stay legible at 28px on both light and dark surfaces. The
+    favicon comes from the provided package `D:\Downloads\favicon_io.zip`, extracted unmodified
+    into `web/public/` (`favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`,
+    `apple-touch-icon.png`, `android-chrome-192x192.png`, `android-chrome-512x512.png`, and
+    `site.webmanifest` with its empty `name`/`short_name` set to "Loctapus"), replacing
+    `favicon.svg`.
 
 ## 3. Backend: the raw-file endpoint
 
@@ -124,9 +129,12 @@ inline disposition header.
 - **Thread**: `flexGrow: 1`, `overflowY: auto`, turns spaced; auto-scroll behavior kept as is.
 - **Question**: `body2` text inside a rounded bubble (`borderRadius: 18px`, `px: 2`, `py: 1`,
   `backgroundColor: action.hover`), aligned right, `maxWidth: 80%`.
-- **Answer**: plain `body1` `pre-wrap` text, full width (no bubble, no avatar). Sources
-  accordion unchanged. Pending answer: a small `CircularProgress` next to "Thinking..." in
-  `text.secondary`.
+- **Answer**: plain `body1` `pre-wrap` text, full width (no bubble, no avatar). The sources
+  become small subtle labels (amended 2026-10-22): a wrapping row of `Chip size="small"
+  variant="outlined"` chips labeled `[i] filename`, taking a fraction of the accordion's
+  space; clicking a chip opens a small dialog titled with the full `[i] filename > path` label
+  and showing the chunk text, so the grounding stays one click away without crowding the
+  thread. Pending answer: a small `CircularProgress` next to "Thinking..." in `text.secondary`.
 - **Composer**: one rounded outlined container (`border: 1px solid divider`, `borderRadius:
   <theme>`, `p: 1`) holding the multiline `TextField` (label "Ask a question" kept, 2 min
   rows, no shadow) and the Ask action inside at its bottom right.
@@ -169,9 +177,11 @@ inline disposition header.
     implementing agent's draft from the user's outline; flagged for the spec review.
 - **Name and logo** (remarks 9+10): `Loctapus` wordmark plus a 28px `img` of
   `web/public/logo.png` (committed from the user's file) in the marketing topbar, the marketing
-  footer, the auth frame, and both sidenav brand areas; `index.html` title "Loctapus" and
-  favicon `/logo.png` (the old `favicon.svg` is deleted); about page copy updated; every test
-  that asserts "RAG" is updated with it.
+  footer, the auth frame, and both sidenav brand areas; `index.html` title "Loctapus" and the
+  standard favicon link set pointing at the extracted package files (`favicon.ico`,
+  `favicon-32x32.png`, `favicon-16x16.png`, `apple-touch-icon.png`, `site.webmanifest`), the
+  old `favicon.svg` deleted; about page copy updated; every test that asserts "RAG" is updated
+  with it.
 
 ## 8. Task DAG
 
