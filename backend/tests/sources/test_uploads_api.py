@@ -3,7 +3,7 @@
 import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -537,3 +537,118 @@ def test_project_delete_cascades_fully_ingested_source(
     assert db_session.query(IngestionRun).count() == 0
     # Outbox rows for deleted aggregates linger by design (no FK); later tasks no-op on them.
     assert db_session.query(OutboxEvent).count() == 2
+
+
+def test_upload_raw_returns_the_stored_bytes(*, client: TestClient) -> None:
+    """Check the raw happy path: 200 with the stored bytes, PDF type, and inline disposition."""
+
+    headers = _auth(client=client, email="raw@example.com")
+    project_id = _create_project(client=client, headers=headers, name="raw")
+    content = (FIXTURES_DIR / "tiny.pdf").read_bytes()
+
+    upload = _upload(
+        client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=content
+    )
+    assert upload.status_code == 201
+
+    r = client.get(f"/api/projects/{project_id}/uploads/{upload.json()['id']}/raw", headers=headers)
+    assert r.status_code == 200
+    assert r.content == content
+    assert r.headers["Content-Type"] == PDF_CONTENT_TYPE
+    assert r.headers["Content-Disposition"] == 'inline; filename="notes.pdf"'
+
+
+def test_upload_raw_requires_auth(*, client: TestClient) -> None:
+    """Check that the raw endpoint rejects an anonymous request with 401."""
+
+    headers = _auth(client=client, email="raw-auth@example.com")
+    project_id = _create_project(client=client, headers=headers, name="raw-auth")
+    upload = _upload(
+        client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=b"pdf bytes"
+    )
+    assert upload.status_code == 201
+
+    r = client.get(f"/api/projects/{project_id}/uploads/{upload.json()['id']}/raw")
+    assert r.status_code == 401
+
+
+def test_upload_raw_invisible_project_returns_404(*, client: TestClient) -> None:
+    """Check that another user's raw URL is a 404, as if the project did not exist."""
+
+    owner = _auth(client=client, email="raw-owner@example.com")
+    stranger = _auth(client=client, email="raw-stranger@example.com")
+    project_id = _create_project(client=client, headers=owner, name="raw-invisible")
+    upload = _upload(
+        client=client, headers=owner, project_id=project_id, filename="notes.pdf", content=b"pdf bytes"
+    )
+    assert upload.status_code == 201
+
+    r = client.get(f"/api/projects/{project_id}/uploads/{upload.json()['id']}/raw", headers=stranger)
+    assert r.status_code == 404
+    assert r.json() == {"detail": "project not found"}
+
+
+def test_upload_raw_unknown_or_other_project_item_returns_404(*, client: TestClient) -> None:
+    """Check that a random item id and another project's item id are both a 404."""
+
+    headers = _auth(client=client, email="raw-missing@example.com")
+    project_id = _create_project(client=client, headers=headers, name="raw-one")
+    upload = _upload(
+        client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=b"pdf bytes"
+    )
+    assert upload.status_code == 201
+
+    unknown = client.get(f"/api/projects/{project_id}/uploads/{uuid4()}/raw", headers=headers)
+    assert unknown.status_code == 404
+    assert unknown.json() == {"detail": "upload not found"}
+
+    other_project_id = _create_project(client=client, headers=headers, name="raw-two")
+    other_upload = _upload(
+        client=client,
+        headers=headers,
+        project_id=other_project_id,
+        filename="other.pdf",
+        content=b"other bytes",
+    )
+    assert other_upload.status_code == 201
+
+    other = client.get(f"/api/projects/{project_id}/uploads/{other_upload.json()['id']}/raw", headers=headers)
+    assert other.status_code == 404
+    assert other.json() == {"detail": "upload not found"}
+
+
+def test_upload_raw_missing_object_returns_404(*, client: TestClient, db_session: Session) -> None:
+    """Check that an upload row whose bytes were never stored is a 404, not a crash."""
+
+    headers = _auth(client=client, email="raw-ghost@example.com")
+    project_id = _create_project(client=client, headers=headers, name="raw-ghost")
+    # The factory writes only the rows, so the raw object is absent from Garage.
+    seeded = seed_upload(db=db_session, project_id=UUID(project_id), filename="ghost.pdf")
+
+    r = client.get(f"/api/projects/{project_id}/uploads/{seeded.source_item_id}/raw", headers=headers)
+    assert r.status_code == 404
+    assert r.json() == {"detail": "file not found"}
+
+
+def test_upload_raw_storage_failure_returns_503(
+    *, client: TestClient, db_session: Session, settings: Settings
+) -> None:
+    """Check that a storage failure while serving raw bytes yields a 503."""
+
+    headers = _auth(client=client, email="raw-storage@example.com")
+    project_id = _create_project(client=client, headers=headers, name="raw-storage")
+    seeded = seed_upload(db=db_session, project_id=UUID(project_id), filename="ghost.pdf")
+
+    class FailingStorageService(StorageService):
+        """Storage service whose gets fail as if the backend were down."""
+
+        def get_object(self, *, key: str) -> bytes:
+            """Refuse the get with the unavailable error."""
+
+            raise StorageUnavailableError("backend down")
+
+    app.dependency_overrides[get_storage] = lambda: FailingStorageService(settings=settings)
+
+    r = client.get(f"/api/projects/{project_id}/uploads/{seeded.source_item_id}/raw", headers=headers)
+    assert r.status_code == 503
+    assert r.json()["detail"] == "Could not load the file. Please try again."

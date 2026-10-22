@@ -83,6 +83,16 @@ def _upload_item(*, db: Session, project_id: UUID, filename: str) -> SourceItem 
     ).scalar_one_or_none()
 
 
+def get_upload_item(*, db: Session, project_id: UUID, upload_id: UUID) -> SourceItem | None:
+    """Return the project's upload item with this id, if any."""
+
+    return db.execute(
+        select(SourceItem)
+        .join(Source, Source.id == SourceItem.source_id)
+        .where(Source.project_id == project_id, Source.type == "upload", SourceItem.id == upload_id)
+    ).scalar_one_or_none()
+
+
 def _is_retryable(*, db: Session, item: SourceItem) -> bool:
     """Return whether the item's latest run failed with no document ever indexed."""
 

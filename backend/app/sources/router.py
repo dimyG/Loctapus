@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -15,12 +15,18 @@ from app.sources.schemas import UploadOut
 from app.sources.service import (
     DuplicateUploadError,
     UploadListing,
+    get_upload_item,
     list_uploads,
     sanitize_filename,
     upload_content_type,
     upload_file,
 )
-from app.storage.service import StorageService, StorageUnavailableError, get_storage
+from app.storage.service import (
+    ObjectNotFoundError,
+    StorageService,
+    StorageUnavailableError,
+    get_storage,
+)
 
 router = APIRouter()
 
@@ -109,3 +115,34 @@ def list_all(
     if project is None:
         raise HTTPException(404, "project not found")
     return [_to_out(listing=listing) for listing in list_uploads(db=db, project_id=project.id)]
+
+
+@router.get("/projects/{project_id}/uploads/{upload_id}/raw")
+def download_raw(
+    *,
+    project_id: UUID,
+    upload_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage),
+) -> Response:
+    """Return the upload's stored bytes, raising 404 or 503."""
+
+    project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
+    if project is None:
+        raise HTTPException(404, "project not found")
+    item = get_upload_item(db=db, project_id=project.id, upload_id=upload_id)
+    if item is None:
+        raise HTTPException(404, "upload not found")
+    try:
+        content = storage.get_object(key=item.raw_object_key)
+    except ObjectNotFoundError:
+        raise HTTPException(404, "file not found") from None
+    except StorageUnavailableError:
+        raise HTTPException(503, "Could not load the file. Please try again.") from None
+    # Inline disposition lets a new browser tab render PDFs instead of forcing a download.
+    return Response(
+        content=content,
+        media_type=item.content_type,
+        headers={"Content-Disposition": f'inline; filename="{item.filename}"'},
+    )
