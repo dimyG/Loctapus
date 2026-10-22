@@ -1,6 +1,6 @@
 # System overview
 
-Snapshot as of 2026-10-21, covering the service topology, the HTTP API, the
+Snapshot as of 2026-10-22, covering the service topology, the HTTP API, the
 web UI shell, and the database schema. Sources: `deploy/docker-compose.yml`,
 `backend/app/main.py` and the five routers it mounts, `web/nginx.conf`,
 `web/src/app/api.ts`, the RTK Query feature APIs plus
@@ -108,7 +108,12 @@ file-upload dropzone at `/projects/:id/sources/upload`, and the chat page at
 The internal `/app` resolver funnels every signed-in entry (register, login,
 and the signed-in landing redirect): it walks the user's projects newest-first
 and lands on the first chattable one's chat, else the newest project's sources,
-else `/projects`.
+else `/projects`. A 2026-10-22 polish round (branch `ui-polish`) rebranded the
+app to Loctapus with an octopus logo, rewrote the landing page's marketing
+story, rebuilt the chat page on a ChatGPT-style composer, notched the outlined
+inputs' floating labels, added a spinner to the upload status chip while the
+pipeline runs, and turned source filenames into links that open the raw file
+in a new browser tab.
 
 Runtime flow of one upload:
 
@@ -195,6 +200,7 @@ All routes are served under the `/api` prefix (`app.include_router(..., prefix="
 | --- | --- | --- | --- |
 | POST | `/api/projects/{project_id}/uploads` | Store one uploaded file (PDF/DOCX, size-gated), queues an ingestion run | UploadDropzone (file-upload page) |
 | GET | `/api/projects/{project_id}/uploads` (polled by the UI: every 2s while any upload row is non-terminal; stops when all rows are terminal or an uncached fetch fails) | List a project's uploads newest first, status derived from the latest run | The sources and file-upload pages' tables and the chat page's readiness (`useProjectUploads`); the `/app` resolver's chattable walk (direct `uploadsApi.endpoints.getUploads.initiate` dispatches, not the hook) |
+| GET | `/api/projects/{project_id}/uploads/{upload_id}/raw` | Return an upload's stored bytes for in-browser viewing | SourceItemsTable's filename links |
 
 The polling lives in `web/src/features/uploads/useProjectUploads.ts`: the
 `getUploads` RTK Query hook runs with `pollingInterval: 2000` while any cached row

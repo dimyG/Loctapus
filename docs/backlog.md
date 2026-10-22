@@ -6,6 +6,27 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-22 UI polish follow-ups
+
+Follow-ups from the 2026-10-22 UI polish round (plan
+`superpowers/plans/2026-10-22-ui-polish.md`; branch commits
+`5b01440`..`364f7eb`):
+
+- `364f7eb` - DOCX files download instead of rendering in the new tab (only
+  PDFs render inline); client-side DOCX preview needs a conversion library.
+- `90ff555` - the chat column's pixel offset (`calc(100dvh - 176/192px)`) was
+  tuned against the current chrome heights and may need a revisit if the
+  topbar or container padding changes.
+- `uv run` in `backend/` auto-generates an untracked `backend/uv.lock` (the
+  repo tracks none); consider a gitignore entry.
+- Pre-existing cold-stack flake at the journey's upload step: the "tiny.pdf"
+  cell can exceed the 5s default expect timeout on a just-booted API (predates
+  this branch; surfaced by this round's e2e runs).
+- `364f7eb` - the real-browser tab-open path (clicking a filename) is
+  unit-tested only (jsdom covers it with stubs); a 1-minute manual smoke is
+  worth doing.
+
+
 ## 2026-10-21 - UI overhaul final review residuals (`ui-mui-templates`)
 
 Residuals recorded by the fix wave of the whole-branch final review of the UI
@@ -17,7 +38,9 @@ overhaul (`f7dee71`..`e577c3a`); every other finding was fixed in place.
   than the main checkout at `D:\Projects\RAG`, so the walk never finds it.
   Working workaround (no tracked changes): a git-ignored NTFS junction
   `<worktree>\.venv -> D:\Projects\RAG\.venv`. Follow-up: teach
-  `web/e2e/venv.ts` an env-var override for the venv location.
+  `web/e2e/venv.ts` an env-var override for the venv location. Resolved on
+  2026-10-22 in `ui-polish` (`9cd33fe`): the `RAG_E2E_PYTHON` env var overrides
+  the venv locator, so the junction workaround is no longer needed.
 - `e577c3a` - stale marketing copy, kept for the owner's copy review (the spec
   froze the current copy): the About page still says "Documents, semantic
   search, and answers are rolling out next. This release covers the foundation:
