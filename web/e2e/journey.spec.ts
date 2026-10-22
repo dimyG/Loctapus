@@ -74,9 +74,7 @@ test.describe("journey", () => {
     await page.getByRole("button", { name: /account menu/i }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page).toHaveURL("http://localhost:5173/");
-    await expect(
-      page.getByRole("heading", { name: /company's knowledge base/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /company's knowledge base/i })).toBeVisible();
     await logoutResponse;
 
     // The old token was revoked server-side: replaying it must 401.
