@@ -3,7 +3,7 @@
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.answers.prompt import SYSTEM_PROMPT, SYSTEM_PROMPT_DIRECT
@@ -13,6 +13,7 @@ from app.conversations.models import Conversation, ConversationMessage, Conversa
 from app.conversations.service import SnapshotIn, append_turn, create_conversation
 from app.core.config import Settings
 from app.identity.models import User
+from app.ingestion.models import Chunk
 from app.providers import LLMError
 from app.providers.base import RouteDecision
 from app.providers.stub_llm import STUB_ANSWER
@@ -449,3 +450,73 @@ def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: 
         settings=settings,
     )
     assert result is None
+
+
+def test_reuse_answers_from_snapshots_after_chunk_replacement(
+    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Check REUSE answers from the inline snapshot once the cited chunk row is gone (Focus 5)."""
+
+    project_id = seed_project(db=db_session, email="s6-reuse-stale@example.com")
+    seeded = seed_document_with_chunks(
+        db=db_session, project_id=project_id, chunk_texts=["durable inline"], filename="stale.pdf"
+    )
+    user = _seed_user(db=db_session)
+    conversation = create_conversation(db=db_session, project_id=project_id, user_id=user.id)
+    append_turn(
+        db=db_session,
+        conversation=conversation,
+        question="first question",
+        answer="first answer [1]",
+        route="retrieve",
+        snapshots=[
+            SnapshotIn(
+                chunk_id=seeded.chunk_ids[0],
+                filename="stale.pdf",
+                heading_path=[],
+                text="durable inline",
+                document_content_hash="hash-durable",
+            )
+        ],
+    )
+    # Re-ingestion replaces the chunk row: the snapshot survives with a null link.
+    db_session.execute(delete(Chunk).where(Chunk.id == seeded.chunk_ids[0]))
+    db_session.commit()
+    db_session.expire_all()
+
+    provider = RecordingLLMProvider(
+        answer="stale but readable [1]",
+        route_response=RouteDecision(route="reuse", rewritten_query=None),
+    )
+    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: provider)
+    result = _answer(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=AnswerIn(query="what did it say?", conversation_id=conversation.id),
+        settings=settings,
+    )
+
+    assert result.route == "reuse"
+    assert db_session.scalars(select(RetrieveLog)).all() == []
+    # The answer grounded in the inline snapshot text, never in a live chunk.
+    _system, messages = provider.calls[0]
+    final = messages[-1]
+    assert final.content.startswith("Question: what did it say?")
+    assert "[1] stale.pdf" in final.content
+    assert "durable inline" in final.content
+    assert [chunk.chunk_id for chunk in result.chunks if isinstance(chunk, ConversationMessageChunk)] == [
+        None
+    ]
+    # The new assistant turn's snapshot row also carries the null link and the text.
+    assistant = db_session.scalars(
+        select(ConversationMessage).where(
+            ConversationMessage.conversation_id == conversation.id,
+            ConversationMessage.position == 4,
+        )
+    ).one()
+    snapshot = db_session.scalars(
+        select(ConversationMessageChunk).where(ConversationMessageChunk.message_id == assistant.id)
+    ).one()
+    assert snapshot.chunk_id is None
+    assert snapshot.text == "durable inline"
