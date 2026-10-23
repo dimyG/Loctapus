@@ -2,6 +2,7 @@ import { outlinedInputClasses } from "@mui/material/OutlinedInput";
 import { createTheme } from "@mui/material/styles";
 import type { Theme } from "@mui/material/styles";
 import { describe, expect, it } from "vitest";
+import { gray } from "../themePrimitives";
 import { inputsCustomizations } from "./inputs";
 
 /** Resolves a style override to a plain object, invoking callbacks with a default theme. */
@@ -60,6 +61,8 @@ describe("inputsCustomizations", () => {
     // The default disabled skin is a washed-out overlay that can match the
     // surrounding surface, so both schemes pin their own flat muted pair.
     expect(primaryContained.style["&.Mui-disabled"]).toMatchObject({
+      color: gray[600],
+      backgroundColor: gray[200],
       backgroundImage: "none",
       boxShadow: "none",
     });
@@ -70,6 +73,8 @@ describe("inputsCustomizations", () => {
     }
     const dark = primaryContained.style[darkKey];
     expect(dark["&.Mui-disabled"]).toMatchObject({
+      color: gray[300],
+      backgroundColor: gray[700],
       backgroundImage: "none",
       boxShadow: "none",
     });

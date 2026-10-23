@@ -78,6 +78,9 @@ export const inputsCustomizations: Components<Theme> = {
                 backgroundColor: gray[200],
                 backgroundImage: "none",
                 boxShadow: "none",
+                // The enabled border is near-black; muted, it stops reading as
+                // an active outlined control.
+                border: `1px solid ${gray[300]}`,
               },
               ...theme.applyStyles("dark", {
                 color: "black",
@@ -98,6 +101,7 @@ export const inputsCustomizations: Components<Theme> = {
                   backgroundColor: gray[700],
                   backgroundImage: "none",
                   boxShadow: "none",
+                  border: `1px solid ${gray[600]}`,
                 },
               }),
             },
