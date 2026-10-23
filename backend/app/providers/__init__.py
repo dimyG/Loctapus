@@ -4,6 +4,7 @@ from typing import assert_never
 
 from app.core.config import Settings
 from app.providers.base import (
+    ChatMessage,
     EmbeddingProvider,
     LLMError,
     LLMProvider,
@@ -11,6 +12,7 @@ from app.providers.base import (
     NormalizedElement,
     ParseError,
     Parser,
+    RouteDecision,
 )
 from app.providers.groq_llm import GROQ_ERROR_COPY, GroqLLMProvider
 from app.providers.stub_embeddings import STUB_EMBEDDING_DIM, StubEmbeddingProvider
@@ -18,6 +20,7 @@ from app.providers.stub_llm import STUB_ANSWER, StubLLMProvider
 from app.providers.stub_parser import StubParser
 
 __all__ = [
+    "ChatMessage",
     "EmbeddingProvider",
     "GROQ_ERROR_COPY",
     "GroqLLMProvider",
@@ -27,6 +30,7 @@ __all__ = [
     "NormalizedElement",
     "ParseError",
     "Parser",
+    "RouteDecision",
     "STUB_ANSWER",
     "STUB_EMBEDDING_DIM",
     "StubEmbeddingProvider",

@@ -1,7 +1,7 @@
 """Provider interfaces shared by the parse and embed pipelines."""
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 
 class ParseError(Exception):
@@ -53,6 +53,22 @@ class EmbeddingProvider(Protocol):
 
 class LLMError(Exception):
     """Raised when an LLM provider cannot generate; its message is shown to users."""
+
+
+@dataclass
+class ChatMessage:
+    """One chat turn sent to an LLM provider, in send order."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+@dataclass
+class RouteDecision:
+    """The router's choice of which evidence path one answer turn takes."""
+
+    route: Literal["direct", "reuse", "retrieve"]
+    rewritten_query: str | None
 
 
 class LLMProvider(Protocol):

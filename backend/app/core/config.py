@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     # The S5 answer round resolves a request's omitted top_k and per-document cap against these.
     answer_context_chunks: int = Field(default=10, ge=1, le=50)
     answer_max_chunks_per_document: int = Field(default=3, ge=1)
+    # History trim: the last N conversation messages ride every routed answer prompt.
+    answer_history_messages: int = Field(default=6, ge=1)
+    # REUSE cap: how many deduped conversation snapshots may ground one answer turn.
+    answer_reuse_max_chunks: int = Field(default=10, ge=1)
+    # Router cost guard: routing only emits one JSON line, so the completion stays tiny.
+    llm_route_max_tokens: int = Field(default=128, gt=0)
+    # Router timeout sits inside nginx's 60s budget next to the 30s answer call.
+    llm_route_timeout_seconds: float = Field(default=10.0, gt=0)
 
     @model_validator(mode="after")
     def _validate_chunk_budgets(self) -> Self:
