@@ -5,12 +5,7 @@ import { describe, expect, it } from "vitest";
 import { initialRootState } from "../../app/store";
 import { server } from "../../test/server";
 import { renderWithProviders } from "../../test/test-utils";
-import type {
-  Answer,
-  ConversationMessage,
-  LatestConversation,
-  SnapshotChunk,
-} from "./answersApi";
+import type { Answer, ConversationMessage, LatestConversation, SnapshotChunk } from "./answersApi";
 import ChatPanel from "./ChatPanel";
 
 /** Builds one persisted snapshot fixture; tests override only what they assert. */
@@ -69,9 +64,7 @@ describe("ChatPanel", () => {
     const posts: { query: string; conversation_id: string | null }[] = [];
     server.use(
       http.post("*/api/projects/p-1/answer", async ({ request }) => {
-        posts.push(
-          (await request.json()) as { query: string; conversation_id: string | null },
-        );
+        posts.push((await request.json()) as { query: string; conversation_id: string | null });
         return HttpResponse.json(answerFixture);
       }),
     );
@@ -94,9 +87,7 @@ describe("ChatPanel", () => {
     const posts: { query: string; conversation_id: string | null }[] = [];
     server.use(
       http.post("*/api/projects/p-1/answer", async ({ request }) => {
-        posts.push(
-          (await request.json()) as { query: string; conversation_id: string | null },
-        );
+        posts.push((await request.json()) as { query: string; conversation_id: string | null });
         return HttpResponse.json(answerFixture);
       }),
     );
@@ -237,9 +228,7 @@ describe("ChatPanel", () => {
 
   it("hydrates the latest conversation and its source chips", async () => {
     server.use(
-      http.get("*/api/projects/p-1/conversations/latest", () =>
-        HttpResponse.json(latestFixture),
-      ),
+      http.get("*/api/projects/p-1/conversations/latest", () => HttpResponse.json(latestFixture)),
     );
     renderPanel();
     expect(await screen.findByText("Where are keys rotated?")).toBeInTheDocument();
@@ -298,14 +287,10 @@ describe("ChatPanel", () => {
     await user.click(screen.getByRole("button", { name: "Ask" }));
     expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
     // The ask carried the hydrated conversation id.
-    expect(posts).toEqual([
-      { query: "What about the spare key?", conversation_id: "conv-1" },
-    ]);
+    expect(posts).toEqual([{ query: "What about the spare key?", conversation_id: "conv-1" }]);
     await user.type(screen.getByLabelText("Ask a question"), "And the master key?");
     await user.click(screen.getByRole("button", { name: "Ask" }));
-    expect(
-      await screen.findByText("And the master key?", { selector: "p" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("And the master key?", { selector: "p" })).toBeInTheDocument();
     // The second ask carried the id the first response served.
     expect(posts).toEqual([
       { query: "What about the spare key?", conversation_id: "conv-1" },
@@ -368,9 +353,7 @@ describe("ChatPanel", () => {
         snapshot({ chunk_id: null, filename: "dup.pdf", heading_path: [], text: "second passage" }),
       ],
     };
-    server.use(
-      http.post("*/api/projects/p-1/answer", () => HttpResponse.json(twinAnswer)),
-    );
+    server.use(http.post("*/api/projects/p-1/answer", () => HttpResponse.json(twinAnswer)));
     renderPanel();
     const user = userEvent.setup({ applyAccept: false });
     await user.type(screen.getByLabelText("Ask a question"), "duplicate keys?");
@@ -378,12 +361,81 @@ describe("ChatPanel", () => {
     expect(await screen.findByText(twinAnswer.answer)).toBeInTheDocument();
     // Both null-id chips render (React keys fall back to the index) and open their text.
     await user.click(screen.getByRole("button", { name: "[1] dup.pdf" }));
-    expect(await within(screen.getByRole("dialog")).findByText("first passage")).toBeInTheDocument();
+    expect(
+      await within(screen.getByRole("dialog")).findByText("first passage"),
+    ).toBeInTheDocument();
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "[2] dup.pdf" }));
     expect(
       await within(screen.getByRole("dialog")).findByText("second passage"),
     ).toBeInTheDocument();
+  });
+
+  it("keeps a failed ask's error card when the latest conversation is hydrated", async () => {
+    server.use(
+      http.get("*/api/projects/p-1/conversations/latest", () => HttpResponse.json(latestFixture)),
+      http.post("*/api/projects/p-1/answer", () =>
+        HttpResponse.json({ detail: "boom" }, { status: 500 }),
+      ),
+    );
+    renderPanel();
+    await screen.findByText("Where are keys rotated?");
+    const user = userEvent.setup({ applyAccept: false });
+    await user.type(screen.getByLabelText("Ask a question"), "Another question?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("boom");
+    // The settle of the pending state must not re-apply the stale cached payload:
+    // the failed turn, its error card, and its retry stay rendered.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(screen.getByRole("alert")).toHaveTextContent("boom");
+    expect(screen.getByText("Another question?", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    // The hydrated turns stay rendered too.
+    expect(screen.getByText("Where are keys rotated?")).toBeInTheDocument();
+  });
+
+  it("keeps a settled answer visible while the invalidated latest refetch is in flight", async () => {
+    // A stateful fake: the answer lands immediately, the invalidated latest
+    // refetch lands later, so the window between them is observable.
+    let latest = latestFixture;
+    const answers: string[] = [];
+    server.use(
+      http.get("*/api/projects/p-1/conversations/latest", async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return HttpResponse.json(latest);
+      }),
+      http.post("*/api/projects/p-1/answer", async ({ request }) => {
+        const body = (await request.json()) as { query: string; conversation_id: string | null };
+        answers.push(body.query);
+        latest = {
+          conversation_id: answerFixture.conversation_id,
+          messages: [
+            ...latest.messages,
+            { role: "user", content: body.query, route: null, chunks: [] },
+            {
+              role: "assistant",
+              content: answerFixture.answer,
+              route: answerFixture.route,
+              chunks: answerFixture.chunks,
+            },
+          ],
+        };
+        return HttpResponse.json(answerFixture);
+      }),
+    );
+    renderPanel();
+    await screen.findByText("Where are keys rotated?");
+    const user = userEvent.setup({ applyAccept: false });
+    await user.type(screen.getByLabelText("Ask a question"), "Follow-up?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    // Wait for the answer POST itself, then give the settle effect its window -
+    // the latest refetch is still 300ms out, so a wiped answer cannot come back.
+    await waitFor(() => expect(answers).toEqual(["Follow-up?"]));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByText(answerFixture.answer)).toBeInTheDocument();
+    expect(screen.getByText("Follow-up?", { selector: "p" })).toBeInTheDocument();
+    // Once the refetch lands it carries the persisted turn, so the thread stays whole.
+    await waitFor(() => expect(screen.getByText(answerFixture.answer)).toBeInTheDocument());
   });
 });

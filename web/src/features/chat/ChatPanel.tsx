@@ -19,6 +19,7 @@ import { getErrorMessage } from "../../app/api";
 import { gray } from "../../theme/themePrimitives";
 import {
   type ConversationMessage,
+  type LatestConversation,
   type SnapshotChunk,
   useAskQuestionMutation,
   useCreateConversationMutation,
@@ -120,6 +121,8 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
   const [conversationId, setConversationId] = useState<string | null>(null);
   const nextId = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  // The last latest payload applied to the local thread, by cache identity.
+  const lastApplied = useRef<LatestConversation | null>(null);
   const [askQuestion] = useAskQuestionMutation();
   const [createConversation] = useCreateConversationMutation();
   const { data: latest, isSuccess: hydrated } = useGetLatestConversationQuery({ projectId });
@@ -129,17 +132,17 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
     sentinelRef.current?.scrollIntoView();
   }, [turns, pendingId]);
 
-  // Server state is the truth: each fresh latest payload (mount or invalidation
-  // refetch) replaces the local thread wholesale. A pending local ask is skipped:
-  // its turn is not on the server yet, and its own invalidation refetches.
+  // Server state is the truth: apply each fresh latest payload (mount hydration or
+  // an invalidation refetch) exactly once, by identity. A pending local ask skips
+  // the application - its turn is not on the server yet, and its own completion
+  // invalidates - and the last-applied guard keeps a settled error or answer from
+  // being wiped by the still-cached previous payload.
   useEffect(() => {
-    if (!hydrated || !latest || pendingId !== null) {
+    if (!hydrated || !latest || lastApplied.current === latest || pendingId !== null) {
       return;
     }
+    lastApplied.current = latest;
     const next = turnsFromMessages(latest.messages);
-    // The RTK cache is an external system this panel mirrors into editable local
-    // state; deriving instead would need fragile merges around refetch latency.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTurns(next);
     setConversationId(latest.conversation_id);
     nextId.current = next.length;
