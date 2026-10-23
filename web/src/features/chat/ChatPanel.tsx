@@ -47,7 +47,14 @@ function SourcesChips({ chunks }: { chunks: RetrievedChunk[] }) {
 
   return (
     <>
-      <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: "wrap" }}>
+      <Stack
+        direction="row"
+        spacing={0.5}
+        useFlexGap
+        // The chips answer the text directly above, so they start one clear
+        // step lower instead of touching the answer's last line.
+        sx={{ flexWrap: "wrap", mt: 1.5 }}
+      >
         {chunks.map((chunk, index) => (
           <Chip
             key={chunk.id}
