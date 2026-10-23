@@ -10,7 +10,7 @@ STUB_ANSWER: Final = "This is a stub answer grounded in the supplied context pas
 class StubLLMProvider:
     """Deterministic offline LLM for local development and tests."""
 
-    def generate(self, *, system: str, user: str) -> str:
+    def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
         """Return the fixed stub answer, ignoring both prompts."""
 
         return STUB_ANSWER

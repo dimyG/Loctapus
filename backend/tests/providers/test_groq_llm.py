@@ -55,7 +55,10 @@ def test_generate_returns_message_content() -> None:
         return httpx.Response(200, json={"choices": [{"message": {"content": "Rotate the key. [1]"}}]})
 
     provider = _provider(handler=handler)
-    assert provider.generate(system="be brief", user="rotate the key") == "Rotate the key. [1]"
+    assert (
+        provider.generate(system="be brief", messages=[ChatMessage(role="user", content="rotate the key")])
+        == "Rotate the key. [1]"
+    )
 
 
 def test_generate_sends_model_key_and_messages() -> None:
@@ -70,7 +73,7 @@ def test_generate_sends_model_key_and_messages() -> None:
         return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
 
     provider = _provider(handler=handler, base_url="https://groq.test/openai/v1")
-    provider.generate(system="be brief", user="rotate the key")
+    provider.generate(system="be brief", messages=[ChatMessage(role="user", content="rotate the key")])
 
     request = captured[0]
     assert request.url.path == "/openai/v1/chat/completions"
@@ -95,7 +98,7 @@ def test_non_2xx_raises_user_safe_llm_error(*, status_code: int) -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", user="u")
+        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
@@ -109,7 +112,7 @@ def test_timeout_raises_llm_error() -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", user="u")
+        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
@@ -123,7 +126,7 @@ def test_malformed_body_raises_llm_error() -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", user="u")
+        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
@@ -137,7 +140,7 @@ def test_missing_choices_raises_llm_error() -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", user="u")
+        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
@@ -151,7 +154,7 @@ def test_empty_choices_raises_llm_error() -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", user="u")
+        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
@@ -166,7 +169,7 @@ def test_empty_content_raises_llm_error(*, content: str) -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", user="u")
+        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.answers.service import CANNED_EMPTY_ANSWER
+from app.ingestion.models import Document
 from app.providers.stub_llm import STUB_ANSWER
 from app.retrieval.models import RetrieveLog
 from tests.factories import seed_document_with_chunks
@@ -69,6 +70,7 @@ def test_answer_works_for_public_project_non_member(*, client: TestClient, db_se
         {"query": "x", "top_k": 0},
         {"query": "x", "top_k": 51},
         {"query": "x", "max_chunks_per_document": 0},
+        {"query": "x", "conversation_id": "not-a-uuid"},
     ],
 )
 def test_answer_validation_errors(*, client: TestClient, body: dict[str, object]) -> None:
@@ -117,9 +119,52 @@ def test_answer_empty_project_returns_canned(*, client: TestClient, db_session: 
     assert response.status_code == 200
     body = response.json()
     assert body["answer"] == CANNED_EMPTY_ANSWER
+    assert body["route"] == "retrieve"
     assert body["chunks"] == []
     logs = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == UUID(project_id))).all()
     assert len(logs) == 1
+
+
+def test_answer_with_conversation_id_round_trips(*, client: TestClient, db_session: Session) -> None:
+    """Check the served conversation id threads a second ask into the same conversation."""
+
+    headers, project_id = _create_project(client=client, email="round@example.com")
+    seed_document_with_chunks(db=db_session, project_id=UUID(project_id), chunk_texts=["alpha"])
+    first = client.post(f"/api/projects/{project_id}/answer", json={"query": "alpha"}, headers=headers)
+    assert first.status_code == 200
+    conversation_id = first.json()["conversation_id"]
+
+    second = client.post(
+        f"/api/projects/{project_id}/answer",
+        json={"query": "alpha again", "conversation_id": conversation_id},
+        headers=headers,
+    )
+    assert second.status_code == 200
+    assert second.json()["conversation_id"] == conversation_id
+
+    latest = client.get(f"/api/projects/{project_id}/conversations/latest", headers=headers)
+    assert latest.status_code == 200
+    body = latest.json()
+    assert body["conversation_id"] == conversation_id
+    assert [message["role"] for message in body["messages"]] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+
+
+def test_answer_404_unknown_conversation(*, client: TestClient) -> None:
+    """Check an unowned conversation id answers 404 instead of answering."""
+
+    headers, project_id = _create_project(client=client, email="unknown-conv@example.com")
+    response = client.post(
+        f"/api/projects/{project_id}/answer",
+        json={"query": "alpha", "conversation_id": str(uuid4())},
+        headers=headers,
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "conversation not found"
 
 
 def test_answer_response_shape(*, client: TestClient, db_session: Session) -> None:
@@ -132,6 +177,7 @@ def test_answer_response_shape(*, client: TestClient, db_session: Session) -> No
         chunk_texts=["alpha alpha"],
         filename="shape.pdf",
     )
+    db_content_hash = db_session.get_one(Document, seeded.document_id).content_hash
     response = client.post(
         f"/api/projects/{project_id}/answer",
         json={"query": "alpha", "top_k": 5},
@@ -139,30 +185,18 @@ def test_answer_response_shape(*, client: TestClient, db_session: Session) -> No
     )
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"answer", "chunks"}
+    assert set(body) == {"answer", "route", "conversation_id", "chunks"}
     assert body["answer"] == STUB_ANSWER
+    assert body["route"] == "retrieve"
+    assert body["conversation_id"]
     assert len(body["chunks"]) == 1
     item = body["chunks"][0]
-    assert set(item) == {
-        "id",
-        "document_id",
-        "source_item_id",
-        "filename",
-        "position",
-        "heading_path",
-        "chunk_type",
-        "text",
-        "score",
-    }
-    assert item["id"] == str(seeded.chunk_ids[0])
-    assert item["document_id"] == str(seeded.document_id)
-    assert item["source_item_id"] == str(seeded.source_item_id)
+    assert set(item) == {"chunk_id", "filename", "heading_path", "text", "document_content_hash"}
+    assert item["chunk_id"] == str(seeded.chunk_ids[0])
     assert item["filename"] == "shape.pdf"
-    assert item["position"] == 0
     assert item["heading_path"] == []
-    assert item["chunk_type"] == "text"
     assert item["text"] == "alpha alpha"
-    assert isinstance(item["score"], float)
+    assert item["document_content_hash"] == db_content_hash
 
 
 def test_llm_failure_maps_to_502_and_still_logs(

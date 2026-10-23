@@ -72,11 +72,11 @@ class GroqLLMProvider:
             raise LLMError(GROQ_ERROR_COPY)
         return content
 
-    def generate(self, *, system: str, user: str) -> str:
+    def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
         """Post one chat completion and return its message text."""
 
         return self._complete(
-            messages=_message_dicts(system=system, messages=[ChatMessage(role="user", content=user)]),
+            messages=_message_dicts(system=system, messages=messages),
             max_tokens=self._max_tokens,
             timeout_seconds=self._timeout_seconds,
         )

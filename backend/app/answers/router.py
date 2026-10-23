@@ -1,20 +1,22 @@
 """Grounded-answer HTTP endpoint."""
 
 import logging
+from typing import Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.answers.schemas import AnswerIn, AnswerOut
-from app.answers.service import generate_answer
+from app.answers.service import Answer, generate_answer
+from app.conversations.models import ConversationMessageChunk
+from app.conversations.schemas import SnapshotChunkOut
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.identity.dependencies import get_current_user
 from app.identity.models import User
 from app.projects.service import get_project_visible_to_user
 from app.providers import LLMError
-from app.retrieval.schemas import RetrievedChunkOut
 from app.retrieval.service import RetrievedChunk
 
 _logger = logging.getLogger(__name__)
@@ -22,19 +24,16 @@ _logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _to_out(*, chunk: RetrievedChunk) -> RetrievedChunkOut:
-    """Map one retrieved chunk into its response body."""
+def _to_out(*, chunk: RetrievedChunk | ConversationMessageChunk) -> SnapshotChunkOut:
+    """Map one fresh or stored evidence row into its response body."""
 
-    return RetrievedChunkOut(
-        id=chunk.id,
-        document_id=chunk.document_id,
-        source_item_id=chunk.source_item_id,
+    chunk_id = chunk.id if isinstance(chunk, RetrievedChunk) else chunk.chunk_id
+    return SnapshotChunkOut(
+        chunk_id=chunk_id,
         filename=chunk.filename,
-        position=chunk.position,
         heading_path=chunk.heading_path,
-        chunk_type=chunk.chunk_type,
         text=chunk.text,
-        score=chunk.score,
+        document_content_hash=chunk.document_content_hash,
     )
 
 
@@ -59,4 +58,19 @@ def answer_question(
     except LLMError as error:
         _logger.warning("Answer generation failed", exc_info=error)
         raise HTTPException(502, str(error)) from error
-    return AnswerOut(answer=answer.text, chunks=[_to_out(chunk=chunk) for chunk in answer.chunks])
+    if answer is None:
+        # An explicit conversation id the caller does not own.
+        raise HTTPException(404, "conversation not found")
+    return _to_answer_out(answer=answer)
+
+
+def _to_answer_out(*, answer: Answer) -> AnswerOut:
+    """Map one service answer into its response body."""
+
+    return AnswerOut(
+        answer=answer.text,
+        # The service stores the route as text; the column check pins the literals.
+        route=cast(Literal["direct", "reuse", "retrieve"], answer.route),
+        conversation_id=answer.conversation_id,
+        chunks=[_to_out(chunk=chunk) for chunk in answer.chunks],
+    )

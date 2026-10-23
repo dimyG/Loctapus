@@ -74,8 +74,8 @@ class RouteDecision:
 class LLMProvider(Protocol):
     """Interface every LLM provider implements."""
 
-    def generate(self, *, system: str, user: str) -> str:
-        """Generate one completion from a system prompt and a user prompt."""
+    def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
+        """Generate one completion from a system prompt and the chat turns."""
 
         ...
 
