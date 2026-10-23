@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.identity.models import User
+from app.ingestion.models import Document
 from app.providers.stub_embeddings import StubEmbeddingProvider
 from app.retrieval.models import RetrieveLog
 from app.retrieval.schemas import RetrieveIn
@@ -209,6 +210,49 @@ def test_retrieve_logs_origin_direct_by_default(*, db_session: Session, settings
     )
     log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).one()
     assert log.params["origin"] == "direct"
+    # A direct call passes no answer-layer context, so none leaks into params.
+    assert "route" not in log.params
+    assert "raw_query" not in log.params
+    assert "router_fallback" not in log.params
+
+
+def test_log_context_merges_into_params(*, db_session: Session, settings: Settings) -> None:
+    """Check the answer round's routing context rides the log row's params."""
+
+    project_id = seed_project(db=db_session, email="log-context@example.com")
+    seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
+    user = _seed_user(db=db_session)
+    retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="alpha"),
+        settings=settings,
+        origin="answer",
+        log_context={"route": "retrieve", "raw_query": "alpha?", "router_fallback": "true"},
+    )
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).one()
+    assert log.params["origin"] == "answer"
+    assert log.params["route"] == "retrieve"
+    assert log.params["raw_query"] == "alpha?"
+    assert log.params["router_fallback"] == "true"
+
+
+def test_retrieved_chunk_carries_document_hash(*, db_session: Session, settings: Settings) -> None:
+    """Check the final rows carry their document's content hash for citations."""
+
+    project_id = seed_project(db=db_session, email="doc-hash@example.com")
+    seeded = seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha alpha"])
+    user = _seed_user(db=db_session)
+    result = retrieve(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=RetrieveIn(query="alpha"),
+        settings=settings,
+    )
+    document = db_session.get_one(Document, seeded.document_id)
+    assert result[0].document_content_hash == document.content_hash
 
 
 def test_retrieve_records_explicit_origin(*, db_session: Session, settings: Settings) -> None:

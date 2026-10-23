@@ -19,6 +19,7 @@ def _chunk(*, text: str, heading_path: list[str], filename: str = "handbook.pdf"
         chunk_type="text",
         text=text,
         score=1.0,
+        document_content_hash="hash-1",
     )
 
 

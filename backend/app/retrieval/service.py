@@ -7,6 +7,7 @@ excluding the log row's own insert.
 
 import math
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -35,6 +36,7 @@ class RetrievedChunk:
     chunk_type: str
     text: str
     score: float
+    document_content_hash: str
 
 
 def _search_vector_leg(
@@ -88,24 +90,28 @@ def _enrich(*, db: Session, rows: list[FusedCandidate]) -> list[RetrievedChunk]:
 
     final_ids = [row.chunk_id for row in rows]
     joined = (
-        db.query(Chunk, Document.source_item_id, SourceItem.filename)
+        db.query(Chunk, Document.source_item_id, Document.content_hash, SourceItem.filename)
         .join(Document, Document.id == Chunk.document_id)
         .join(SourceItem, SourceItem.id == Document.source_item_id)
         .filter(Chunk.id.in_(final_ids))
         .all()
     )
-    by_chunk = {chunk.id: (chunk, source_item_id, filename) for chunk, source_item_id, filename in joined}
+    by_chunk = {
+        chunk.id: (chunk, source_item_id, content_hash, filename)
+        for chunk, source_item_id, content_hash, filename in joined
+    }
     return [
         RetrievedChunk(
             id=row.chunk_id,
             document_id=row.document_id,
             source_item_id=by_chunk[row.chunk_id][1],
-            filename=by_chunk[row.chunk_id][2],
+            filename=by_chunk[row.chunk_id][3],
             position=by_chunk[row.chunk_id][0].position,
             heading_path=by_chunk[row.chunk_id][0].heading_path,
             chunk_type=by_chunk[row.chunk_id][0].chunk_type,
             text=by_chunk[row.chunk_id][0].text,
             score=row.score,
+            document_content_hash=by_chunk[row.chunk_id][2],
         )
         for row in rows
     ]
@@ -124,8 +130,13 @@ def _log_query(
     fts: list[StageCandidate],
     fused: list[FusedCandidate],
     final: list[FusedCandidate],
+    log_context: Mapping[str, str] | None = None,
 ) -> None:
-    """Write and commit one query log row: request echo, settings snapshot, stages."""
+    """Write and commit one query log row: request echo, settings snapshot, stages.
+
+    ``log_context`` merges string keys into ``params`` top level so the answer
+    round can label its routing without this module knowing answer concepts.
+    """
 
     log = RetrieveLog(
         project_id=project_id,
@@ -141,6 +152,7 @@ def _log_query(
                 "candidates_per_retriever": settings.retrieval_candidates_per_retriever,
                 "embedding_provider": settings.embedding_provider,
             },
+            **(log_context or {}),
         },
         latency_ms=latency_ms,
         stages={
@@ -170,12 +182,14 @@ def retrieve(
     params: RetrieveIn,
     settings: Settings,
     origin: str = "direct",
+    log_context: Mapping[str, str] | None = None,
 ) -> list[RetrievedChunk]:
     """Embed, search both legs, fuse, select, enrich, and log one query.
 
-    ``origin`` labels the caller surface in the log row. An all-stopword query
-    degrades to the vector leg alone; a project with no indexed chunks returns
-    an empty list and still writes its log row.
+    ``origin`` labels the caller surface in the log row. ``log_context`` adds
+    string keys to that row's ``params``; the answer round labels its routing
+    with it. An all-stopword query degrades to the vector leg alone; a project
+    with no indexed chunks returns an empty list and still writes its log row.
     """
 
     started = time.perf_counter()
@@ -207,5 +221,6 @@ def retrieve(
         fts=fts,
         fused=fused,
         final=final,
+        log_context=log_context,
     )
     return chunks
