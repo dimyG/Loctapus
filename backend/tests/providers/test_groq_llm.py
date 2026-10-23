@@ -6,7 +6,7 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from app.providers.base import LLMError
+from app.providers.base import ChatMessage, LLMError, RouteDecision
 from app.providers.groq_llm import GROQ_ERROR_COPY, GroqLLMProvider
 
 
@@ -14,6 +14,8 @@ def _provider(
     *,
     handler: Callable[[httpx.Request], httpx.Response],
     base_url: str = "https://groq.test",
+    route_max_tokens: int = 128,
+    route_timeout_seconds: float = 10.0,
 ) -> GroqLLMProvider:
     """Build a Groq provider around a hermetic MockTransport handler."""
 
@@ -23,8 +25,23 @@ def _provider(
         model="openai/gpt-oss-20b",
         timeout_seconds=30.0,
         max_tokens=1024,
+        route_max_tokens=route_max_tokens,
+        route_timeout_seconds=route_timeout_seconds,
         transport=httpx.MockTransport(handler),
     )
+
+
+def _router_reply(*, content: str) -> Callable[[httpx.Request], httpx.Response]:
+    """Build one hermetic handler serving a canned router reply."""
+
+    # httpx calls a MockTransport handler with one positional request, so the
+    # closure cannot be keyword-only; it carries the same silencer as the rest.
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
+        """Serve the canned router reply."""
+
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+    return handler
 
 
 def test_generate_returns_message_content() -> None:
@@ -150,4 +167,81 @@ def test_empty_content_raises_llm_error(*, content: str) -> None:
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
         provider.generate(system="s", user="u")
+    assert str(excinfo.value) == GROQ_ERROR_COPY
+
+
+def test_route_parses_valid_decision() -> None:
+    """A strict-JSON router reply parses into one RouteDecision."""
+
+    content = '{"route": "retrieve", "rewritten_query": "standalone q"}'
+    provider = _provider(handler=_router_reply(content=content))
+    decision = provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+    assert decision == RouteDecision(route="retrieve", rewritten_query="standalone q")
+
+
+def test_route_rejects_garbage_json() -> None:
+    """A router reply that is not JSON surfaces as the user-safe LLMError."""
+
+    provider = _provider(handler=_router_reply(content="route: retrieve"))
+    with pytest.raises(LLMError) as excinfo:
+        provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+    assert str(excinfo.value) == GROQ_ERROR_COPY
+
+
+def test_route_rejects_unknown_route_literal() -> None:
+    """A router reply naming an unknown route surfaces as the user-safe LLMError."""
+
+    provider = _provider(handler=_router_reply(content='{"route": "teleport"}'))
+    with pytest.raises(LLMError) as excinfo:
+        provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+    assert str(excinfo.value) == GROQ_ERROR_COPY
+
+
+def test_route_rejects_blank_rewritten_query() -> None:
+    """A retrieval turn with a blank rewrite surfaces as the user-safe LLMError."""
+
+    provider = _provider(handler=_router_reply(content='{"route": "retrieve", "rewritten_query": "  "}'))
+    with pytest.raises(LLMError) as excinfo:
+        provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+    assert str(excinfo.value) == GROQ_ERROR_COPY
+
+
+def test_route_accepts_missing_rewritten_query_on_reuse() -> None:
+    """A reuse turn may omit the rewrite; the field is only required on retrieve."""
+
+    provider = _provider(handler=_router_reply(content='{"route": "reuse"}'))
+    decision = provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+    assert decision == RouteDecision(route="reuse", rewritten_query=None)
+
+
+def test_route_payload_carries_route_max_tokens_and_timeout() -> None:
+    """The router POST carries its own max_tokens and per-call timeout."""
+
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
+        """Capture the router POST and serve one valid decision."""
+
+        captured.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"route": "direct"}'}}]})
+
+    provider = _provider(handler=handler)
+    provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+
+    body = json.loads(captured[0].content)
+    assert body["max_tokens"] == 128
+    assert captured[0].extensions["timeout"]["read"] == 10.0
+
+
+def test_route_maps_http_errors_to_llm_error() -> None:
+    """A non-2xx router reply surfaces as the one fixed user-safe copy."""
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
+        """Serve one upstream failure."""
+
+        return httpx.Response(429, json={"error": {"message": "rate limited"}})
+
+    provider = _provider(handler=handler)
+    with pytest.raises(LLMError) as excinfo:
+        provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
     assert str(excinfo.value) == GROQ_ERROR_COPY

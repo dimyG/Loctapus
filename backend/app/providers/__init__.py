@@ -90,6 +90,8 @@ def get_llm_provider(*, settings: Settings) -> LLMProvider:
                 model=settings.groq_model,
                 timeout_seconds=settings.llm_timeout_seconds,
                 max_tokens=settings.llm_max_tokens,
+                route_max_tokens=settings.llm_route_max_tokens,
+                route_timeout_seconds=settings.llm_route_timeout_seconds,
             )
         case _ as unreachable:
             assert_never(unreachable)

@@ -78,3 +78,8 @@ class LLMProvider(Protocol):
         """Generate one completion from a system prompt and a user prompt."""
 
         ...
+
+    def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
+        """Choose the answer path for one turn from the router prompt and the turns."""
+
+        ...
