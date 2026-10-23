@@ -1,8 +1,9 @@
 # S6 - Multi-turn conversations + LLM-routed answers - Design
 
 Date: 2026-10-23
-Status: Approved design (2026-10-23 round); the implementation plan is not yet written. Frozen
-once implemented: decisions below are as built.
+Status: Implemented 2026-10-23 on the `s6-multi-turn-conversations` branch (`13f59f1`..`de7922a`,
+merge to `master` pending), under `../plans/2026-10-23-s6-multi-turn-conversations.md`. Frozen:
+decisions below are as built.
 Source of truth: `../../2026-10-06-initial_rag_mvp_agent_project_context.md` (the "MD") and
 `2026-10-06-roadmap.md` (the "slices spec"). Where those disagree with this document on S6
 topics, this document wins; where this document is silent, they govern.

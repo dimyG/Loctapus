@@ -1,8 +1,8 @@
 # System overview
 
-Snapshot as of 2026-10-22, covering the service topology, the HTTP API, the
+Snapshot as of 2026-10-23, covering the service topology, the HTTP API, the
 web UI shell, and the database schema. Sources: `deploy/docker-compose.yml`,
-`backend/app/main.py` and the five routers it mounts, `web/nginx.conf`,
+`backend/app/main.py` and the six routers it mounts, `web/nginx.conf`,
 `web/src/app/api.ts`, the RTK Query feature APIs plus
 `web/src/features/uploads/useProjectUploads.ts`, the app shell and its
 project-scoped pages (`web/src/layouts/AppShell.tsx`,
@@ -29,7 +29,7 @@ flowchart TB
     browser -->|"HTTP :8080 (SPA assets, API calls, uploads polling)"| web
     web -->|"/api reverse proxy"| api
     init -->|"migrate schema before the app services start"| db
-    api -->|"SQLAlchemy: users, workspaces, teams, projects,<br/>uploads, ingestion runs, outbox rows, query logs"| db
+    api -->|"SQLAlchemy: users, workspaces, teams, projects,<br/>uploads, ingestion runs, outbox rows,<br/>retrieve logs, conversations"| db
     api -->|"S3 PUT: uploaded file bytes"| garage
     dispatcher -->|"poll due outbox events"| db
     dispatcher -->|"publish ingest_source_item / embed_document"| rabbitmq
@@ -113,7 +113,12 @@ app to Loctapus with an octopus logo, rewrote the landing page's marketing
 story, rebuilt the chat page on a ChatGPT-style composer, notched the outlined
 inputs' floating labels, added a spinner to the upload status chip while the
 pipeline runs, and turned source filenames into links that open the raw file
-in a new browser tab.
+in a new browser tab. A 2026-10-23 round (branch `s6-multi-turn-conversations`)
+gave the chat page a server-backed conversation: the panel hydrates the signed-in
+owner's latest conversation in the project on mount (an empty thread while none
+exists), threads every ask through the served `conversation_id`, offers a
+"New chat" action, and renders each answer's persisted evidence snapshots as
+source chips.
 
 Runtime flow of one upload:
 
@@ -130,18 +135,31 @@ Runtime flow of one upload:
 
 Runtime flow of one question:
 
-1. The UI POSTs the query to `/api/projects/{project_id}/answer`. The api embeds
-   it (stub embedding provider today) and runs the two search legs over the
-   project's indexed chunks - pgvector cosine and Postgres FTS - then fuses the
-   candidates by reciprocal rank and diversity-selects the final chunks.
-2. Every retrieval call writes one `query_logs` row - `params.origin=answer`
-   here, `direct` when the retrieval endpoint is called directly - recording
-   the request, the per-stage candidates, and the latency.
-3. The api builds the numbered context prompt from the final chunks and calls
-   the selected LLM provider (`llm_provider`: stub by default, Groq opt-in). An
-   empty index answers from a canned sentence; a provider failure answers 502.
-4. The response carries the answer text plus the grounded chunks with their
-   fused scores; the ChatPanel renders the answer and the collapsible sources.
+1. The UI POSTs the query plus the hydrated `conversation_id` (null until the
+   server serves one) to `/api/projects/{project_id}/answer`. The api resolves the
+   conversation - null means the owner's latest in the project, else one pending new
+   row - loads the last `answer_history_messages` history messages and the REUSE
+   snapshot set, and closes the read before any LLM call.
+2. The router LLM call (`route()`) decides the turn: `DIRECT` (answer from history
+   alone), `REUSE` (answer from history plus the conversation's gathered earlier
+   evidence), or `RETRIEVE` (a rewritten standalone query, fresh retrieval). A
+   failed router call degrades to `RETRIEVE` with the raw question, logged on the
+   retrieval row (`params.router_fallback`); the stub always retrieves so offline
+   dev and e2e keep the S5 behavior.
+3. `RETRIEVE` embeds the effective question (stub embedding provider today), runs the
+   two search legs over the project's indexed chunks - pgvector cosine and Postgres
+   FTS - fuses the candidates by reciprocal rank, and diversity-selects the final
+   chunks, writing one `retrieve_logs` row (`params.origin=answer`, plus
+   `route`/`raw_query`) - `direct` when the retrieval endpoint is called directly.
+   `REUSE` answers grounded in the gathered snapshots; `DIRECT` needs no passages.
+   An empty index answers from a canned sentence without an LLM call.
+4. One transaction appends the user message, the assistant message (with its route),
+   the evidence snapshot rows, and the `last_message_at` bump - creating the
+   conversation itself only here on the null path, so a failed call persists
+   nothing, not even an empty conversation. A row lock serializes concurrent turns.
+5. The response carries the answer text, the route, the `conversation_id`, and the
+   snapshots; the ChatPanel renders the answer with its source chips and adopts the
+   served `conversation_id` so the follow-up threads into the same conversation.
 
 Notes:
 
@@ -154,7 +172,11 @@ Notes:
   stub parser and a stub embedding provider, and `llm_provider` defaults to the stub
   LLM, so the whole stack (including grounded answers) runs offline. Setting
   `RAG_LLM_PROVIDER=groq` and `RAG_GROQ_API_KEY` opts answers into Groq's
-  `openai/gpt-oss-20b` - the first external AI service. Both live in the gitignored
+  `openai/gpt-oss-20b` - the first external AI service. The 2026-10-23 round widened
+  the LLM interface: `route()` decides each turn's path (the stub always retrieves, so
+  offline dev and e2e keep the retrieval behavior) and `generate()` carries the
+  message list - trimmed history plus the fresh question - instead of one user prompt.
+  Both live in the gitignored
   `backend/.env` (see `backend/.env.example`), which the compose `api` service
   injects as an optional env file (its explicit environment still wins) and which
   local runs from `backend/` read directly. The pytest suite and the e2e webServers
@@ -222,11 +244,20 @@ and no refetch-on-focus or refetch-on-reconnect is configured.
 
 | Method | Route | Purpose | UI usage |
 | --- | --- | --- | --- |
-| POST | `/api/projects/{project_id}/answer` | Ask one question: run the retrieval internally, then answer grounded in the final chunks (LLM provider layer: stub by default, Groq opt-in) | Chat page (`ChatPanel`) |
+| POST | `/api/projects/{project_id}/answer` | Ask one question: route the turn (`direct`/`reuse`/`retrieve`, LLM router with a fallback to retrieval), answer along that path (retrieval in-process on `retrieve` turns), and persist the whole turn as the owner's conversation; 404 when the explicit `conversation_id` is not the caller's | Chat page (`ChatPanel`) |
 
-Every retrieval call writes a `query_logs` row; its `params.origin` records the
+Every retrieval call writes a `retrieve_logs` row; its `params.origin` records the
 calling surface - `direct` for the retrieval endpoint, `answer` for the answer
-endpoint's internal call.
+endpoint's internal call - and answer-round rows carry their routing context
+(`params.route`, `params.raw_query`, `params.router_fallback` on a degraded
+router call).
+
+### Conversations (backend/app/conversations/router.py)
+
+| Method | Route | Purpose | UI usage |
+| --- | --- | --- | --- |
+| POST | `/api/projects/{project_id}/conversations` | Create one empty conversation owned by the caller in one visible project | Chat page's "New chat" button |
+| GET | `/api/projects/{project_id}/conversations/latest` | The caller's latest conversation in one visible project with its full message history and evidence snapshots, or 404 "no conversation yet" | Chat page hydration on mount (`ChatPanel`) |
 
 ### Framework endpoints
 
@@ -240,9 +271,11 @@ endpoint's internal call.
 ## Database tables
 
 The ORM models in `backend/app` (`identity`, `projects`, `sources`, `ingestion`,
-`outbox`, `retrieval`) are the source of truth; the Alembic migrations under
+`outbox`, `retrieval`, `conversations`) are the source of truth; the Alembic migrations under
 `backend/alembic/versions/` create them exactly (0001-0002: identity and
-projects, 0005: sources, ingestion, outbox; 0006: query logs).
+projects, 0005: sources, ingestion, outbox; 0006: query logs; 0007: the
+`query_logs` -> `retrieve_logs` rename plus conversations, messages, and
+evidence snapshots).
 
 ### Entity relationship diagram
 
@@ -364,15 +397,44 @@ erDiagram
         text last_error "null until a failure"
     }
 
-    query_logs {
+    retrieve_logs {
         uuid id PK
         uuid project_id FK "cascade delete"
         uuid user_id FK "no ON DELETE: deleting a user keeps the project's query past"
         text query
-        jsonb params "resolved request plus retrieval settings snapshot"
+        jsonb params "resolved request, settings snapshot, routing context"
         int latency_ms "embed through selection, excluding the log insert"
         jsonb stages "vector / fts / fused candidates and the final ids"
         timestamptz created_at "server now()"
+    }
+
+    conversations {
+        uuid id PK
+        uuid project_id FK "cascade delete"
+        uuid user_id FK "no ON DELETE: the user owns its chat past"
+        timestamptz created_at "server now()"
+        timestamptz last_message_at "non-null, server now(), bumped per append"
+    }
+
+    conversation_messages {
+        uuid id PK
+        uuid conversation_id FK "cascade delete"
+        int position "unique per conversation"
+        text role "user / assistant (check)"
+        text content
+        text route "direct / reuse / retrieve; null iff role = user"
+        timestamptz created_at "server now()"
+    }
+
+    conversation_message_chunks {
+        uuid id PK
+        uuid message_id FK "cascade delete"
+        int ordinal "unique per message, citation order"
+        uuid chunk_id FK "SET NULL: survives re-ingestion replacing the cited chunk"
+        text filename
+        jsonb heading_path
+        text text "durable inline snapshot"
+        text document_content_hash "version marker of the cited document"
     }
 
     users ||--o{ workspaces : "owns"
@@ -388,8 +450,13 @@ erDiagram
     source_items ||--o{ ingestion_runs : "is ingested by"
     documents |o--o{ ingestion_runs : "is indexed in"
     documents ||--o{ chunks : "is split into"
-    projects ||--o{ query_logs : "records"
-    users ||--o{ query_logs : "asks"
+    projects ||--o{ retrieve_logs : "records"
+    users ||--o{ retrieve_logs : "asks"
+    projects ||--o{ conversations : "hosts"
+    users ||--o{ conversations : "owns"
+    conversations ||--o{ conversation_messages : "holds"
+    conversation_messages ||--o{ conversation_message_chunks : "cites"
+    chunks |o--o{ conversation_message_chunks : "is snapshotted by"
 ```
 
 ### Table explanations
@@ -428,7 +495,8 @@ verification treats a listed `jti` as invalid.
 The unit of work: created by a team inside a workspace. `is_public` opens the
 project to every signed-in user; otherwise only teams with a role row on it can
 see it. Deleting a project cascades through sources, items, documents, and
-chunks, and drops its `query_logs` rows.
+chunks, and drops its `retrieve_logs`, `conversations`, and conversation-tree
+rows.
 
 #### project_team_roles
 
@@ -493,19 +561,53 @@ once by the dispatcher. `event_type` routes to a Celery task via
 the due gate that backs failed rows off so poison events cannot starve later
 ones; `published_at` marks rows the poller no longer scans.
 
-#### query_logs
+#### retrieve_logs
 
 One row per retrieval call, written by the pipeline itself: the request echo
 (`query` plus the resolved `params` - top_k, rerank, the per-document cap,
 `origin`: `direct` for the retrieval endpoint and `answer` for the answer
-endpoint's internal call - and a snapshot of the retrieval settings), the
-per-stage candidates (`stages`: the vector leg, the FTS leg, the fused list,
-and the final selection), and `latency_ms` (embed through selection, excluding
-the log row's own insert). `project_id` cascades with the project, while
-`user_id` deliberately has no ON DELETE action: deleting a user must not
+endpoint's internal call, the answer round's routing context when applicable
+(`route`, `raw_query`, `router_fallback`), and a snapshot of the retrieval
+settings), the per-stage candidates (`stages`: the vector leg, the FTS leg, the
+fused list, and the final selection), and `latency_ms` (embed through selection,
+excluding the log row's own insert). `project_id` cascades with the project,
+while `user_id` deliberately has no ON DELETE action: deleting a user must not
 rewrite a project's query past. The `(project_id, created_at)` index serves a
-per-project log tail without scanning other tenants; `ix_query_logs_user_id`
-serves the per-user lookups.
+per-project log tail without scanning other tenants; `ix_retrieve_logs_user_id`
+serves the per-user lookups. Renamed from `query_logs` in migration 0007
+(columns unchanged; the indexes were renamed explicitly because Postgres keeps
+index names on a table rename).
+
+#### conversations
+
+One persisted chat between exactly one user and one project: created empty by
+the New chat button (or lazily by a null-id ask) and hydrated by the chat page
+as the owner's latest. `last_message_at` is non-null from creation (server
+`now()`) so the latest lookup never sorts nulls, and it is bumped inside the
+append transaction; the `(project_id, user_id, last_message_at)` index serves
+that lookup per project and user without scanning other tenants.
+`user_id` has no ON DELETE action: deleting a user keeps the project's chat past.
+
+#### conversation_messages
+
+One user or assistant message at one `position` (unique per conversation) inside
+the append transaction: the user message carries the raw question; the assistant
+message carries the answer text and its `route` - the router's path for the turn
+(`direct`, `reuse`, or `retrieve`, check-constrained) - null exactly when the
+role is `user`. History reads for the prompts load the last
+`answer_history_messages` messages oldest-first with their `[n]` citation
+markers stripped, so old turns cannot renumber the live answer.
+
+#### conversation_message_chunks
+
+The durable evidence snapshot that grounded one assistant message: `ordinal`
+is the citation order `[1..n]` (unique per message), and the row carries the
+chunk's `filename`, `heading_path`, full `text`, and the cited document's
+`document_content_hash` inline. `chunk_id` is a real foreign key onto `chunks`
+with ON DELETE SET NULL: when re-ingestion replaces the cited chunk row the
+snapshot survives with a null link and keeps serving the citation, so an old
+answer's sources stay readable (staleness re-validation is deliberately
+deferred - the 2026-10-23 backlog entry).
 
 ### Conventions
 
@@ -515,15 +617,31 @@ serves the per-user lookups.
   `sources -> source_items -> documents -> chunks` so retrieval filters chunks
   by project without joins, and composite foreign keys make Postgres enforce
   the boundary instead of relying on writers.
-- **Deletion**: projects cascade to sources and their trees and to their
-  `query_logs` rows; `ingestion_runs` cascade with their item but keep their
-  history via `documents.document_id` SET NULL on re-upload, and
-  `query_logs.user_id` deliberately has no ON DELETE action so deleting a
-  user does not rewrite a project's query past.
+- **Deletion**: projects cascade to sources and their trees, to their
+  `retrieve_logs` rows, and to their `conversations` (which cascade onward to
+  messages and snapshots); `ingestion_runs` cascade with their item but keep
+  their history via `documents.document_id` SET NULL on re-upload;
+  `conversation_message_chunks.chunk_id` is SET NULL for the same reason, so a
+  replaced chunk never deletes an answer's evidence; and `retrieve_logs.user_id`
+  plus `conversations.user_id` deliberately have no ON DELETE action so deleting
+  a user does not rewrite a project's past.
 - **Indexes**: foreign keys are indexed explicitly (Postgres does not index them
   automatically; migration 0004), plus an HNSW index on `chunks.embedding` and
   a GIN index on `chunks.search_vector` for the two retrieval paths;
-  `query_logs` carries `(project_id, created_at)` and `user_id` indexes for
-  log-tail and per-user reads.
+  `retrieve_logs` carries `(project_id, created_at)` and `user_id` indexes for
+  log-tail and per-user reads; `conversations` carries
+  `(project_id, user_id, last_message_at)` plus `user_id` for the latest lookup;
+  `conversation_message_chunks.chunk_id` is indexed for the SET NULL link.
+  The messages/chunks uniques lead with their FK columns, so they serve the
+  FK lookups without separate indexes.
+- **Answer settings**: the S6 answer round adds two settings groups to
+  `app/core/config.py` - the conversation knobs `answer_history_messages`
+  (history trim per prompt) and `answer_reuse_max_chunks` (the REUSE gathering
+  cap), and the router knobs `llm_route_max_tokens` plus
+  `llm_route_timeout_seconds` (a tiny, fast completion), split from the
+  answer call's `llm_max_tokens`/`llm_timeout_seconds` so a worst-case turn -
+  a 10s router call plus a 30s answer call plus embedding and search - stays
+  inside nginx's 60s `proxy_read_timeout` and failures surface as the
+  friendly 502, never an nginx 504.
 - `alembic_version` also exists in the database: one framework-managed row with
   the current migration revision, not an ORM model.

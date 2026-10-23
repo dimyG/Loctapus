@@ -6,6 +6,26 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-23 - S6 multi-turn conversations follow-ups
+
+From the S6 slice (`superpowers/specs/2026-10-23-s6-multi-turn-conversations-design.md`; branch
+`s6-multi-turn-conversations`, commits `13f59f1`..`de7922a`):
+
+- Snapshot staleness is known and deferred (spec decision 8, by user instruction): re-ingestion
+  replaces `chunks` rows, so `conversation_message_chunks.chunk_id` nulls out (SET NULL) while
+  the inline `text`/`filename`/`heading_path`/`document_content_hash` snapshot keeps serving
+  the citation. A later round may re-validate stored snapshots against the current document
+  version.
+- Router mis-judgment review: once S9's evaluation data exists, audit `retrieve_logs.params`
+  (`route`, `raw_query`, `router_fallback`) for DIRECT/REUSE turns that should have retrieved
+  and RETRIEVE turns that needed nothing fresh.
+- The done-when's discussion-resolution half stays manual: with `RAG_LLM_PROVIDER=groq` (plus a
+  keyed `backend/.env`), ask a question, then a history-only follow-up ("and what else does it
+  cover?"), and confirm the answer resolves against the discussion. Not yet run (2026-10-23):
+  the pytest and Playwright suites pin the stub, so this needs a keyed manual run before the S6
+  merge is called fully done.
+
+
 ## 2026-10-22 UI polish follow-ups
 
 Follow-ups from the 2026-10-22 UI polish round (plan
