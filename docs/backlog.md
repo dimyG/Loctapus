@@ -16,14 +16,49 @@ From the S6 slice (`superpowers/specs/2026-10-23-s6-multi-turn-conversations-des
   the inline `text`/`filename`/`heading_path`/`document_content_hash` snapshot keeps serving
   the citation. A later round may re-validate stored snapshots against the current document
   version.
-- Router mis-judgment review: once S9's evaluation data exists, audit `retrieve_logs.params`
-  (`route`, `raw_query`, `router_fallback`) for DIRECT/REUSE turns that should have retrieved
-  and RETRIEVE turns that needed nothing fresh.
+- Router mis-judgment review: once S9's evaluation data exists, audit the routing
+  quality - `conversation_messages.route` for which turns went DIRECT/REUSE (they write
+  no log row, decision 10) against `retrieve_logs.params` (`raw_query`,
+  `router_fallback`) for the RETRIEVE turns - looking for DIRECT/REUSE turns that
+  should have retrieved and RETRIEVE turns that needed nothing fresh.
 - The done-when's discussion-resolution half stays manual: with `RAG_LLM_PROVIDER=groq` (plus a
   keyed `backend/.env`), ask a question, then a history-only follow-up ("and what else does it
   cover?"), and confirm the answer resolves against the discussion. Not yet run (2026-10-23):
   the pytest and Playwright suites pin the stub, so this needs a keyed manual run before the S6
   merge is called fully done.
+
+
+## 2026-10-23 - S6 final-review residuals
+
+From the whole-branch fresh review (fix wave `ba8c2ad`, `1f4845c`, `a38c83b`; the
+Critical hydration wipe and the open-transaction-across-LLM-calls findings were fixed
+in place, and the Focus-5 REUSE-after-replacement sequence gained its coverage test):
+
+- The snapshot FK race: a re-ingestion that replaces the cited chunk between
+  `gather_snapshots` and `append_turn` would 500 on the chunk FK. Latent until S7
+  builds re-ingestion replacement; S7 must guard it (`FOR KEY SHARE`, or nulling
+  missing ids before insert).
+- `_effective_question` treats a whitespace-only `rewritten_query` as truthy; only
+  the Groq provider rejects blanks today, so another provider would embed `"  "` with
+  no `router_fallback` flag. Normalize in the service.
+- Code-fenced router JSON replies (```json ...```) always fall back to RETRIEVE. The
+  manual Groq check should watch the `router_fallback` rate; strip one leading/trailing
+  fence if it is high.
+- Two clocks: `last_message_at` bumps use the app clock while creation uses the DB
+  `now()`; `func.now()` would keep one clock.
+- Concurrent first sends (two tabs, null conversation ids) can create two
+  conversations; the UI disables send while pending, so low impact.
+- `test_append_turn_concurrent_sends_serialize` relies on thread timing; a
+  `threading.Barrier` before `append_turn` would make the race guaranteed.
+- `retrieve(log_context=...)` spreads last, so it could overwrite core `params` keys
+  (`origin`, `settings`); merge it first or assert no collisions.
+- `_CITATION_MARKERS` strips bracketed numbers generally (`arr[0]`, `[2024]`), not
+  only citations, from stored history.
+- `MessageOut` types `role`/`route` as plain `str`, not the spec's literals, so
+  OpenAPI loses the enums.
+- Project switch carrying an old thread or `conversation_id` is unreachable in-app
+  (`AppShell` keys the `Outlet` by `projectId`, remounting the panel); a note for
+  any future shell that stops remounting.
 
 
 ## 2026-10-22 UI polish follow-ups
