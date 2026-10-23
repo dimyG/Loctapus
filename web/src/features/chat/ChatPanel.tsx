@@ -217,7 +217,12 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
             value={text}
             onChange={(event) => setText(event.target.value)}
             onKeyDown={handleKeyDown}
-            sx={{ flexGrow: 1, "& .MuiOutlinedInput-root": { px: 2, py: 1.5 } }}
+            sx={{
+              flexGrow: 1,
+              // The shrunk label sits on the top border, so the typed text
+              // needs full vertical padding to clear it comfortably.
+              "& .MuiOutlinedInput-root": { px: 2, py: 2 },
+            }}
           />
           <IconButton
             aria-label="Ask"
