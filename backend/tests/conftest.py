@@ -97,7 +97,13 @@ def db_session(*, engine: Engine) -> Iterator[Session]:
     transaction = connection.begin()
     # The savepoint mode keeps service-level commit() inside the fixture's transaction:
     # commit releases and recreates the savepoint, and teardown stays warning-free.
-    session = Session(bind=connection, join_transaction_mode="create_savepoint")
+    # expire_on_commit matches the app's SessionLocal, so services under test read
+    # their just-committed rows the same way production does.
+    session = Session(
+        bind=connection,
+        join_transaction_mode="create_savepoint",
+        expire_on_commit=False,
+    )
     yield session
     session.close()
     transaction.rollback()
@@ -110,7 +116,7 @@ def client(*, db_session: Session, engine: Engine, monkeypatch: pytest.MonkeyPat
 
     # The lifespan startup guard opens its own session through the app.main indirection;
     # point it at the migration-built test engine so no test ever touches the dev DB.
-    monkeypatch.setattr("app.main.SessionLocal", sessionmaker(bind=engine))
+    monkeypatch.setattr("app.main.SessionLocal", sessionmaker(bind=engine, expire_on_commit=False))
 
     def override_get_db() -> Iterator[Session]:
         """Serve the shared transaction-managed session instead of a fresh one."""

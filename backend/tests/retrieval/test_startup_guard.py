@@ -24,7 +24,7 @@ def test_lifespan_runs_startup_checks(*, engine: Engine, monkeypatch: pytest.Mon
 
         calls.append(db)
 
-    monkeypatch.setattr("app.main.SessionLocal", sessionmaker(bind=engine))
+    monkeypatch.setattr("app.main.SessionLocal", sessionmaker(bind=engine, expire_on_commit=False))
     monkeypatch.setattr("app.main.run_startup_checks", _record_call)
     with TestClient(app):
         pass
@@ -34,7 +34,7 @@ def test_lifespan_runs_startup_checks(*, engine: Engine, monkeypatch: pytest.Mon
 def test_guard_refuses_mismatched_dimension(*, engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
     """Check a provider dimension that disagrees with the catalog refuses startup."""
 
-    monkeypatch.setattr("app.main.SessionLocal", sessionmaker(bind=engine))
+    monkeypatch.setattr("app.main.SessionLocal", sessionmaker(bind=engine, expire_on_commit=False))
     monkeypatch.setattr("app.main.get_embedding_provider", _mismatched_provider)
     with pytest.raises(RuntimeError, match="chunks.embedding is vector"), TestClient(app):
         pass

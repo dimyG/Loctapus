@@ -15,7 +15,7 @@ from app.core.config import Settings
 from app.identity.models import User
 from app.ingestion.models import Chunk
 from app.providers import LLMError
-from app.providers.base import RouteDecision
+from app.providers.base import ChatMessage, RouteDecision
 from app.providers.stub_llm import STUB_ANSWER
 from app.retrieval.models import RetrieveLog
 from app.retrieval.schemas import RetrieveIn
@@ -450,6 +450,66 @@ def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: 
         settings=settings,
     )
     assert result is None
+
+
+def test_llm_calls_run_with_no_open_transaction(
+    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Check no DB transaction stays open on the session across the router and answer calls.
+
+    The history and REUSE reads commit before the LLM calls on purpose (spec
+    decision 14); an expired row attribute would quietly re-open a transaction
+    on first read and pin a pooled connection across both remote calls.
+    """
+
+    project_id = seed_project(db=db_session, email="s6-txn@example.com")
+    seeded = seed_document_with_chunks(
+        db=db_session, project_id=project_id, chunk_texts=["alpha alpha"], filename="txn.pdf"
+    )
+    user = _seed_user(db=db_session)
+    conversation = create_conversation(db=db_session, project_id=project_id, user_id=user.id)
+    append_turn(
+        db=db_session,
+        conversation=conversation,
+        question="first question",
+        answer="first answer [1]",
+        route="retrieve",
+        snapshots=[
+            SnapshotIn(
+                chunk_id=seeded.chunk_ids[0],
+                filename="txn.pdf",
+                heading_path=[],
+                text="alpha alpha",
+                document_content_hash="hash-txn",
+            )
+        ],
+    )
+    recorded: dict[str, list[bool]] = {"route": [], "generate": []}
+
+    class TxnRecordingLLMProvider:
+        """Provider that records the session's transaction state during each call."""
+
+        def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
+            """Record the transaction state, then route the turn to reuse."""
+
+            recorded["route"].append(db_session.in_transaction())
+            return RouteDecision(route="reuse", rewritten_query=None)
+
+        def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
+            """Record the transaction state, then answer."""
+
+            recorded["generate"].append(db_session.in_transaction())
+            return "reused [1]"
+
+    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: TxnRecordingLLMProvider())
+    _answer(
+        db=db_session,
+        project_id=project_id,
+        user_id=user.id,
+        params=AnswerIn(query="follow-up", conversation_id=conversation.id),
+        settings=settings,
+    )
+    assert recorded == {"route": [False], "generate": [False]}
 
 
 def test_reuse_answers_from_snapshots_after_chunk_replacement(
