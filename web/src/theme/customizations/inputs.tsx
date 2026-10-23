@@ -70,6 +70,15 @@ export const inputsCustomizations: Components<Theme> = {
               "&:active": {
                 backgroundColor: gray[800],
               },
+              // MUI's default disabled skin is a washed-out overlay that can
+              // match the surrounding surface, so the disabled button needs its
+              // own readable muted pair to stay an obvious-but-inactive action.
+              "&.Mui-disabled": {
+                color: gray[600],
+                backgroundColor: gray[200],
+                backgroundImage: "none",
+                boxShadow: "none",
+              },
               ...theme.applyStyles("dark", {
                 color: "black",
                 backgroundColor: gray[50],
@@ -83,6 +92,12 @@ export const inputsCustomizations: Components<Theme> = {
                 },
                 "&:active": {
                   backgroundColor: gray[400],
+                },
+                "&.Mui-disabled": {
+                  color: gray[300],
+                  backgroundColor: gray[700],
+                  backgroundImage: "none",
+                  boxShadow: "none",
                 },
               }),
             },

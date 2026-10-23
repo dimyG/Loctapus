@@ -33,4 +33,45 @@ describe("inputsCustomizations", () => {
     const focused = resolveOverride(root[`&.${outlinedInputClasses.focused}`]);
     expect(focused).not.toHaveProperty("outline");
   });
+
+  it("gives disabled primary buttons a readable muted skin in both schemes", () => {
+    const root = inputsCustomizations.MuiButton?.styleOverrides?.root;
+    expect(typeof root).toBe("function");
+    const callback = root as (props: { theme: Theme }) => Record<string, unknown>;
+    const result = callback({
+      theme: createTheme({
+        // Mirrors AppTheme's css-variables setup so applyStyles emits the
+        // data-attribute dark selector the runtime theme uses.
+        cssVariables: { colorSchemeSelector: "data-mui-color-scheme" },
+        colorSchemes: { light: {}, dark: {} },
+      }),
+    });
+    const variants = result.variants as Array<{
+      props: { color?: string; variant?: string };
+      style: Record<string, Record<string, unknown>>;
+    }>;
+    const primaryContained = variants.find(
+      (v) => v.props.color === "primary" && v.props.variant === "contained",
+    );
+    expect(primaryContained).toBeDefined();
+    if (primaryContained === undefined) {
+      return;
+    }
+    // The default disabled skin is a washed-out overlay that can match the
+    // surrounding surface, so both schemes pin their own flat muted pair.
+    expect(primaryContained.style["&.Mui-disabled"]).toMatchObject({
+      backgroundImage: "none",
+      boxShadow: "none",
+    });
+    const darkKey = Object.keys(primaryContained.style).find((key) => key.includes("dark"));
+    expect(darkKey).toBeDefined();
+    if (darkKey === undefined) {
+      return;
+    }
+    const dark = primaryContained.style[darkKey];
+    expect(dark["&.Mui-disabled"]).toMatchObject({
+      backgroundImage: "none",
+      boxShadow: "none",
+    });
+  });
 });
