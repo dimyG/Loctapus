@@ -149,6 +149,19 @@ test.describe("journey", () => {
       await expect(dialog).toContainText("Stub fixture paragraph.");
       await dialog.getByRole("button", { name: "Close" }).click();
       await expect(dialog).not.toBeVisible();
+
+      // Reload: the persisted conversation hydrates back, so the question and
+      // the stub answer render straight from the server, not local state.
+      await page.reload();
+      await expect(page.getByText("What is this document about?")).toBeVisible();
+      await expect(page.getByText(/This is a stub answer grounded/i)).toBeVisible();
+
+      // A follow-up threads into the same conversation: the second answer
+      // renders and the thread carries both turns' four bubbles.
+      await page.getByLabel("Ask a question").fill("And what else does it cover?");
+      await page.getByRole("button", { name: "Ask", exact: true }).click();
+      await expect(page.getByText("And what else does it cover?")).toBeVisible();
+      await expect(page.getByText(/This is a stub answer grounded/i)).toHaveCount(2);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
