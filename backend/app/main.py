@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # registers every ORM model.
 import app.models as app_models  # noqa: F401
 from app.answers.router import router as answers_router
+from app.conversations.router import router as conversations_router
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.identity.router import router as identity_router
@@ -47,6 +48,7 @@ app.include_router(projects_router, prefix="/api")
 app.include_router(sources_router, prefix="/api")
 app.include_router(retrieval_router, prefix="/api")
 app.include_router(answers_router, prefix="/api")
+app.include_router(conversations_router, prefix="/api")
 
 # SPA origins are explicit (no wildcard) so browsers reject cross-site reads from
 # unknown hosts; auth is a Bearer header, so cookies never cross origins.

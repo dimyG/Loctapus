@@ -11,6 +11,7 @@ point pulled in first.
 
 from sqlalchemy.orm import configure_mappers
 
+from app.conversations import models as conversations_models  # noqa: F401
 from app.core import models as core_models  # noqa: F401
 from app.identity import models as identity_models  # noqa: F401
 from app.ingestion import models as ingestion_models  # noqa: F401
