@@ -12,14 +12,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.models import Base
 
 
-class QueryLog(Base):
+class RetrieveLog(Base):
     """One logged retrieval query: request echo, per-stage candidates, and latency."""
 
-    __tablename__ = "query_logs"
+    __tablename__ = "retrieve_logs"
     __table_args__ = (
         # The per-project log tail: recency per project without scanning other tenants.
-        Index("ix_query_logs_project_id_created_at", "project_id", "created_at"),
-        Index("ix_query_logs_user_id", "user_id"),
+        Index("ix_retrieve_logs_project_id_created_at", "project_id", "created_at"),
+        Index("ix_retrieve_logs_user_id", "user_id"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

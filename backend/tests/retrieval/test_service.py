@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.identity.models import User
 from app.providers.stub_embeddings import StubEmbeddingProvider
-from app.retrieval.models import QueryLog
+from app.retrieval.models import RetrieveLog
 from app.retrieval.schemas import RetrieveIn
 from app.retrieval.service import RetrievedChunk, _search_fts_leg, _search_vector_leg, retrieve
 from tests.factories import seed_document_with_chunks, seed_project
@@ -83,7 +83,7 @@ def test_stopword_only_query_uses_vector_leg_only(*, db_session: Session, settin
         settings=settings,
     )
     assert [chunk.id for chunk in result] == seeded.chunk_ids
-    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).one()
     assert log.stages["fts"] == []
 
 
@@ -168,7 +168,7 @@ def test_retrieve_writes_one_query_log_row(*, db_session: Session, settings: Set
         params=RetrieveIn(query="  alpha  "),
         settings=settings,
     )
-    logs = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).all()
+    logs = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).all()
     assert len(logs) == 1
     log = logs[0]
     assert log.query == "alpha"
@@ -207,7 +207,7 @@ def test_retrieve_logs_origin_direct_by_default(*, db_session: Session, settings
         params=RetrieveIn(query="alpha"),
         settings=settings,
     )
-    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).one()
     assert log.params["origin"] == "direct"
 
 
@@ -225,7 +225,7 @@ def test_retrieve_records_explicit_origin(*, db_session: Session, settings: Sett
         settings=settings,
         origin="answer",
     )
-    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).one()
     assert log.params["origin"] == "answer"
 
 
@@ -270,7 +270,7 @@ def test_retrieve_empty_project_returns_empty_and_logs(*, db_session: Session, s
         settings=settings,
     )
     assert result == []
-    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).one()
     assert log.stages["final"] == []
 
 
@@ -289,7 +289,7 @@ def test_zero_norm_query_degrades_to_fts_only(*, db_session: Session, settings: 
         settings=settings,
     )
     assert [chunk.id for chunk in result] == seeded.chunk_ids
-    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).one()
     assert log.stages["vector"] == []
     assert log.stages["fts"]
 
@@ -309,7 +309,7 @@ def test_zero_norm_embedding_chunk_is_excluded(*, db_session: Session, settings:
     )
     # The vector leg drops the NaN distance row; fts still serves the chunk.
     assert [chunk.id for chunk in result] == seeded.chunk_ids
-    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).one()
     assert log.stages["vector"] == []
 
 

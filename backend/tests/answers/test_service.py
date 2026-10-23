@@ -11,7 +11,7 @@ from app.answers.service import CANNED_EMPTY_ANSWER, generate_answer
 from app.core.config import Settings
 from app.identity.models import User
 from app.providers.stub_llm import STUB_ANSWER
-from app.retrieval.models import QueryLog
+from app.retrieval.models import RetrieveLog
 from app.retrieval.schemas import RetrieveIn
 from app.retrieval.service import retrieve
 from tests.factories import seed_document_with_chunks, seed_project
@@ -87,7 +87,7 @@ def test_answer_logs_origin_answer(*, db_session: Session, settings: Settings) -
         params=AnswerIn(query="alpha"),
         settings=settings,
     )
-    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == project_id)).one()
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == project_id)).one()
     assert log.params["origin"] == "answer"
 
 

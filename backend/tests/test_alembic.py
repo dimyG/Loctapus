@@ -14,6 +14,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app.conversations import models as conversation_models  # noqa: F401  # Register the S6 tables into Base.metadata.
 from app.core.db import make_engine
 from app.core.models import Base
 
@@ -52,12 +53,25 @@ def test_ingestion_tables_exist(*, engine: Engine) -> None:
     } <= names
 
 
-def test_query_logs_table_exists(*, engine: Engine) -> None:
-    """Check that migrations created the S4 query log table."""
+def test_retrieve_logs_table_exists(*, engine: Engine) -> None:
+    """Check that migrations created the S4 query log table under its S6 name."""
 
     with engine.connect() as conn:
         names = set(inspect(conn).get_table_names())
-    assert {"query_logs"} <= names
+    assert {"retrieve_logs"} <= names
+    assert "query_logs" not in names
+
+
+def test_conversation_tables_exist(*, engine: Engine) -> None:
+    """Check that migrations created the three S6 conversation tables."""
+
+    with engine.connect() as conn:
+        names = set(inspect(conn).get_table_names())
+    assert {
+        "conversations",
+        "conversation_messages",
+        "conversation_message_chunks",
+    } <= names
 
 
 def test_vector_and_fulltext_indexes(*, engine: Engine) -> None:
@@ -133,13 +147,25 @@ def test_foreign_key_columns_are_indexed(*, engine: Engine) -> None:
         "sources": {"project_id"},
         "chunks": {"project_id"},
         "ingestion_runs": {"document_id", "source_item_id"},
-        "query_logs": {"project_id", "user_id"},
+        "retrieve_logs": {"project_id", "user_id"},
+        "conversations": {"project_id", "user_id"},
+        "conversation_messages": {"conversation_id"},
+        "conversation_message_chunks": {"message_id", "chunk_id"},
     }
     with engine.connect() as conn:
         insp = inspect(conn)
         for table, columns in expected.items():
             leading = {index["column_names"][0] for index in insp.get_indexes(table)}
             assert columns <= leading, f"{table}: {columns - leading} not indexed"
+
+
+def test_migration_chunk_fk_is_set_null(*, engine: Engine) -> None:
+    """Check that the snapshot chunk FK nulls out instead of blocking or cascading on deletion."""
+
+    with engine.connect() as conn:
+        fks = inspect(conn).get_foreign_keys("conversation_message_chunks")
+    chunk_fk = next(fk for fk in fks if fk["referred_table"] == "chunks")
+    assert chunk_fk["options"].get("ondelete") == "SET NULL"
 
 
 def test_migrations_downgrade_to_base(*, engine: Engine) -> None:

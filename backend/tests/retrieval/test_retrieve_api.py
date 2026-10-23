@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.retrieval.models import QueryLog
+from app.retrieval.models import RetrieveLog
 from tests.factories import seed_document_with_chunks
 from tests.helpers import _auth, _default_team_id
 
@@ -115,7 +115,7 @@ def test_retrieve_empty_project_returns_empty_list(*, client: TestClient, db_ses
     response = client.post(f"/api/projects/{project_id}/retrieve", json={"query": "alpha"}, headers=headers)
     assert response.status_code == 200
     assert response.json() == []
-    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == UUID(project_id))).one()
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == UUID(project_id))).one()
     assert log.stages["final"] == []
 
 
@@ -127,7 +127,7 @@ def test_error_paths_log_nothing(*, client: TestClient, db_session: Session) -> 
     client.post(f"/api/projects/{project_id}/retrieve", json={"query": "alpha"})
     client.post(f"/api/projects/{project_id}/retrieve", json={"query": "alpha"}, headers=stranger_headers)
     client.post(f"/api/projects/{project_id}/retrieve", json={"query": "   "}, headers=alice_headers)
-    assert db_session.scalars(select(QueryLog)).all() == []
+    assert db_session.scalars(select(RetrieveLog)).all() == []
 
 
 def test_retrieve_response_shape(*, client: TestClient, db_session: Session) -> None:

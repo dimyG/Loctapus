@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.answers.service import CANNED_EMPTY_ANSWER
 from app.providers.stub_llm import STUB_ANSWER
-from app.retrieval.models import QueryLog
+from app.retrieval.models import RetrieveLog
 from tests.factories import seed_document_with_chunks
 from tests.fakes import RaisingLLMProvider
 from tests.helpers import _auth, _default_team_id
@@ -118,7 +118,7 @@ def test_answer_empty_project_returns_canned(*, client: TestClient, db_session: 
     body = response.json()
     assert body["answer"] == CANNED_EMPTY_ANSWER
     assert body["chunks"] == []
-    logs = db_session.scalars(select(QueryLog).where(QueryLog.project_id == UUID(project_id))).all()
+    logs = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == UUID(project_id))).all()
     assert len(logs) == 1
 
 
@@ -176,7 +176,7 @@ def test_llm_failure_maps_to_502_and_still_logs(
     response = client.post(f"/api/projects/{project_id}/answer", json={"query": "alpha"}, headers=headers)
     assert response.status_code == 502
     assert response.json()["detail"] == "The answer service is down for maintenance."
-    log = db_session.scalars(select(QueryLog).where(QueryLog.project_id == UUID(project_id))).one()
+    log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == UUID(project_id))).one()
     assert log.params["origin"] == "answer"
 
 
@@ -193,4 +193,4 @@ def test_error_paths_log_nothing(*, client: TestClient, db_session: Session) -> 
     assert unauthed.status_code == 401
     assert forbidden.status_code == 404
     assert invalid.status_code == 422
-    assert db_session.scalars(select(QueryLog)).all() == []
+    assert db_session.scalars(select(RetrieveLog)).all() == []

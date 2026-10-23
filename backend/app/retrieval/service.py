@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.ingestion.models import Chunk, Document
 from app.providers import get_embedding_provider
-from app.retrieval.models import QueryLog
+from app.retrieval.models import RetrieveLog
 from app.retrieval.pipeline import FusedCandidate, StageCandidate, fuse_rrf, select_final
 from app.retrieval.schemas import RetrieveIn
 from app.sources.models import SourceItem
@@ -127,7 +127,7 @@ def _log_query(
 ) -> None:
     """Write and commit one query log row: request echo, settings snapshot, stages."""
 
-    log = QueryLog(
+    log = RetrieveLog(
         project_id=project_id,
         user_id=user_id,
         query=params.query,
