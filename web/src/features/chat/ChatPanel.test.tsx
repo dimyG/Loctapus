@@ -5,25 +5,49 @@ import { describe, expect, it } from "vitest";
 import { initialRootState } from "../../app/store";
 import { server } from "../../test/server";
 import { renderWithProviders } from "../../test/test-utils";
-import type { Answer } from "./answersApi";
+import type {
+  Answer,
+  ConversationMessage,
+  LatestConversation,
+  SnapshotChunk,
+} from "./answersApi";
 import ChatPanel from "./ChatPanel";
+
+/** Builds one persisted snapshot fixture; tests override only what they assert. */
+function snapshot(overrides: Partial<SnapshotChunk> = {}): SnapshotChunk {
+  return {
+    chunk_id: "c-1",
+    filename: "handbook.pdf",
+    heading_path: ["Keys", "Rotation"],
+    text: "To rotate the key, open the admin UI and click Rotate.",
+    document_content_hash: "hash-1",
+    ...overrides,
+  };
+}
 
 /** Stable fixture the answer endpoint returns unless a test overrides it. */
 const answerFixture: Answer = {
   answer: "Rotate the garage key from the admin UI. [1]",
-  chunks: [
-    {
-      id: "c-1",
-      document_id: "d-1",
-      source_item_id: "s-1",
-      filename: "handbook.pdf",
-      position: 0,
-      heading_path: ["Keys", "Rotation"],
-      chunk_type: "text",
-      text: "To rotate the key, open the admin UI and click Rotate.",
-      score: 0.75,
-    },
-  ],
+  route: "retrieve",
+  conversation_id: "conv-9",
+  chunks: [snapshot()],
+};
+
+/** One hydrated prior turn, as the latest endpoint serves it. */
+const latestMessages: ConversationMessage[] = [
+  { role: "user", content: "Where are keys rotated?", route: null, chunks: [] },
+  {
+    role: "assistant",
+    content: "Keys rotate in the admin UI. [1]",
+    route: "retrieve",
+    chunks: [snapshot()],
+  },
+];
+
+/** Stable fixture for the latest endpoint; tests override per case. */
+const latestFixture: LatestConversation = {
+  conversation_id: "conv-1",
+  messages: latestMessages,
 };
 
 const authed = () => ({
@@ -42,10 +66,12 @@ function renderPanel() {
 
 describe("ChatPanel", () => {
   it("asks a question and renders the answer", async () => {
-    const posts: { query: string }[] = [];
+    const posts: { query: string; conversation_id: string | null }[] = [];
     server.use(
       http.post("*/api/projects/p-1/answer", async ({ request }) => {
-        posts.push((await request.json()) as { query: string });
+        posts.push(
+          (await request.json()) as { query: string; conversation_id: string | null },
+        );
         return HttpResponse.json(answerFixture);
       }),
     );
@@ -57,16 +83,20 @@ describe("ChatPanel", () => {
     expect(
       screen.getByText("How do I rotate the garage key?", { selector: "p" }),
     ).toBeInTheDocument();
-    expect(posts).toEqual([{ query: "How do I rotate the garage key?" }]);
+    // No conversation exists yet (the baseline latest handler 404s), so the ask
+    // carries a null id and adopts the served one.
+    expect(posts).toEqual([{ query: "How do I rotate the garage key?", conversation_id: null }]);
     // The turn owns the question, so the input resets once it is sent.
     expect(screen.getByLabelText("Ask a question")).toHaveValue("");
   });
 
   it("enter submits and shift-enter inserts a newline", async () => {
-    const posts: { query: string }[] = [];
+    const posts: { query: string; conversation_id: string | null }[] = [];
     server.use(
       http.post("*/api/projects/p-1/answer", async ({ request }) => {
-        posts.push((await request.json()) as { query: string });
+        posts.push(
+          (await request.json()) as { query: string; conversation_id: string | null },
+        );
         return HttpResponse.json(answerFixture);
       }),
     );
@@ -79,7 +109,7 @@ describe("ChatPanel", () => {
     expect(textbox).toHaveValue("first line\n");
     await user.type(textbox, "{Enter}");
     expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
-    expect(posts).toEqual([{ query: "first line\n" }]);
+    expect(posts).toEqual([{ query: "first line\n", conversation_id: null }]);
   });
 
   it("keeps Ask disabled for empty and whitespace-only input", async () => {
@@ -110,6 +140,8 @@ describe("ChatPanel", () => {
       http.post("*/api/projects/p-1/answer", () =>
         HttpResponse.json({
           answer: "No indexed content in this project matches your question yet.",
+          route: "retrieve",
+          conversation_id: "conv-1",
           chunks: [],
         }),
       ),
@@ -201,5 +233,157 @@ describe("ChatPanel", () => {
     resolveRetry(HttpResponse.json(answerFixture));
     expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
     expect(calls).toBe(2);
+  });
+
+  it("hydrates the latest conversation and its source chips", async () => {
+    server.use(
+      http.get("*/api/projects/p-1/conversations/latest", () =>
+        HttpResponse.json(latestFixture),
+      ),
+    );
+    renderPanel();
+    expect(await screen.findByText("Where are keys rotated?")).toBeInTheDocument();
+    expect(screen.getByText("Keys rotate in the admin UI. [1]")).toBeInTheDocument();
+    const user = userEvent.setup({ applyAccept: false });
+    await user.click(screen.getByRole("button", { name: "[1] handbook.pdf" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("[1] handbook.pdf > Keys > Rotation")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("To rotate the key, open the admin UI and click Rotate."),
+    ).toBeInTheDocument();
+  });
+
+  it("starts an empty thread when no conversation exists yet", async () => {
+    server.use(
+      http.get("*/api/projects/p-1/conversations/latest", () =>
+        HttpResponse.json({ detail: "no conversation yet" }, { status: 404 }),
+      ),
+    );
+    renderPanel();
+    expect(await screen.findByLabelText("Ask a question")).toBeEnabled();
+    expect(screen.queryByText("Where are keys rotated?")).not.toBeInTheDocument();
+    expect(screen.queryByText("Keys rotate in the admin UI. [1]")).not.toBeInTheDocument();
+  });
+
+  it("threads the hydrated conversation id and adopts the served one", async () => {
+    const posts: { query: string; conversation_id: string | null }[] = [];
+    // A stateful fake: each answer appends its turn to the hydrated thread, exactly
+    // as the persisted backend would serve it back on the invalidated refetch.
+    let latest = latestFixture;
+    server.use(
+      http.get("*/api/projects/p-1/conversations/latest", () => HttpResponse.json(latest)),
+      http.post("*/api/projects/p-1/answer", async ({ request }) => {
+        const body = (await request.json()) as { query: string; conversation_id: string | null };
+        posts.push(body);
+        latest = {
+          conversation_id: answerFixture.conversation_id,
+          messages: [
+            ...latest.messages,
+            { role: "user", content: body.query, route: null, chunks: [] },
+            {
+              role: "assistant",
+              content: answerFixture.answer,
+              route: answerFixture.route,
+              chunks: answerFixture.chunks,
+            },
+          ],
+        };
+        return HttpResponse.json(answerFixture);
+      }),
+    );
+    renderPanel();
+    await screen.findByText("Where are keys rotated?");
+    const user = userEvent.setup({ applyAccept: false });
+    await user.type(screen.getByLabelText("Ask a question"), "What about the spare key?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
+    // The ask carried the hydrated conversation id.
+    expect(posts).toEqual([
+      { query: "What about the spare key?", conversation_id: "conv-1" },
+    ]);
+    await user.type(screen.getByLabelText("Ask a question"), "And the master key?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(
+      await screen.findByText("And the master key?", { selector: "p" }),
+    ).toBeInTheDocument();
+    // The second ask carried the id the first response served.
+    expect(posts).toEqual([
+      { query: "What about the spare key?", conversation_id: "conv-1" },
+      { query: "And the master key?", conversation_id: "conv-9" },
+    ]);
+  });
+
+  it("starts a new empty conversation from the New chat button", async () => {
+    const posts: { query: string; conversation_id: string | null }[] = [];
+    let latest: LatestConversation = latestFixture;
+    server.use(
+      http.get("*/api/projects/p-1/conversations/latest", () => HttpResponse.json(latest)),
+      http.post("*/api/projects/p-1/conversations", () => {
+        latest = { conversation_id: "conv-2", messages: [] };
+        return HttpResponse.json({ conversation_id: "conv-2" }, { status: 201 });
+      }),
+      http.post("*/api/projects/p-1/answer", async ({ request }) => {
+        const body = (await request.json()) as { query: string; conversation_id: string | null };
+        posts.push(body);
+        // The persisted backend would serve the new turn back on the invalidated
+        // latest refetch, so the fake appends it the same way.
+        latest = {
+          conversation_id: "conv-2",
+          messages: [
+            ...latest.messages,
+            { role: "user", content: body.query, route: null, chunks: [] },
+            {
+              role: "assistant",
+              content: answerFixture.answer,
+              route: answerFixture.route,
+              chunks: answerFixture.chunks,
+            },
+          ],
+        };
+        return HttpResponse.json({ ...answerFixture, conversation_id: "conv-2" });
+      }),
+    );
+    renderPanel();
+    expect(await screen.findByText("Where are keys rotated?")).toBeInTheDocument();
+    const user = userEvent.setup({ applyAccept: false });
+    await user.click(screen.getByRole("button", { name: "New chat" }));
+    // The hydrated thread clears once the fresh conversation hydrates.
+    await waitFor(() =>
+      expect(screen.queryByText("Where are keys rotated?")).not.toBeInTheDocument(),
+    );
+    await user.type(screen.getByLabelText("Ask a question"), "Fresh question?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText(answerFixture.answer)).toBeInTheDocument();
+    // The new conversation's id threaded into the fresh ask.
+    expect(posts).toEqual([{ query: "Fresh question?", conversation_id: "conv-2" }]);
+  });
+
+  it("renders chips for snapshots without chunk ids and duplicate filenames", async () => {
+    const twinAnswer: Answer = {
+      answer: "Both passages agree. [1] [2]",
+      route: "reuse",
+      conversation_id: "conv-1",
+      chunks: [
+        snapshot({ chunk_id: null, filename: "dup.pdf", heading_path: [], text: "first passage" }),
+        snapshot({ chunk_id: null, filename: "dup.pdf", heading_path: [], text: "second passage" }),
+      ],
+    };
+    server.use(
+      http.post("*/api/projects/p-1/answer", () => HttpResponse.json(twinAnswer)),
+    );
+    renderPanel();
+    const user = userEvent.setup({ applyAccept: false });
+    await user.type(screen.getByLabelText("Ask a question"), "duplicate keys?");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+    expect(await screen.findByText(twinAnswer.answer)).toBeInTheDocument();
+    // Both null-id chips render (React keys fall back to the index) and open their text.
+    await user.click(screen.getByRole("button", { name: "[1] dup.pdf" }));
+    expect(await within(screen.getByRole("dialog")).findByText("first passage")).toBeInTheDocument();
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "[2] dup.pdf" }));
+    expect(
+      await within(screen.getByRole("dialog")).findByText("second passage"),
+    ).toBeInTheDocument();
   });
 });

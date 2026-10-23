@@ -73,4 +73,9 @@ export const handlers = [
   http.get("*/api/workspaces/w-1/teams", () =>
     HttpResponse.json([{ id: "t-1", name: "Default", workspace_id: "w-1" }]),
   ),
+  // The S6 baseline: p-1 has no conversation yet, so the panel starts an empty
+  // thread; tests that need hydration override this handler.
+  http.get("*/api/projects/p-1/conversations/latest", () =>
+    HttpResponse.json({ detail: "no conversation yet" }, { status: 404 }),
+  ),
 ];

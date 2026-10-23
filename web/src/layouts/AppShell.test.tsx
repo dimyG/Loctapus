@@ -44,6 +44,8 @@ function renderShell() {
 /** A canned answer the chat panel renders once its POST resolves. */
 const answerFixture: Answer = {
   answer: "Rotate the garage key from the admin UI. [1]",
+  route: "retrieve",
+  conversation_id: "conv-1",
   chunks: [],
 };
 

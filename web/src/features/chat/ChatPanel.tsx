@@ -1,3 +1,4 @@
+import AddCommentRoundedIcon from "@mui/icons-material/AddCommentRounded";
 import ArrowUpwardRoundedIcon from "@mui/icons-material/ArrowUpwardRounded";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -16,34 +17,40 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
 import { getErrorMessage } from "../../app/api";
 import { gray } from "../../theme/themePrimitives";
-import { type RetrievedChunk, useAskQuestionMutation } from "./answersApi";
+import {
+  type ConversationMessage,
+  type SnapshotChunk,
+  useAskQuestionMutation,
+  useCreateConversationMutation,
+  useGetLatestConversationQuery,
+} from "./answersApi";
 
 /** One question/answer exchange in the thread. */
 type Turn = {
   id: number;
   question: string;
   answer?: string;
-  chunks?: RetrievedChunk[];
+  chunks?: SnapshotChunk[];
   error?: string;
 };
 
 /** Builds the summary label for a chunk: `[i] filename > a > b`. */
-function chunkLabel(chunk: RetrievedChunk, index: number): string {
+function chunkLabel(chunk: SnapshotChunk, index: number): string {
   const path = chunk.heading_path.length > 0 ? ` > ${chunk.heading_path.join(" > ")}` : "";
   return `[${index + 1}] ${chunk.filename}${path}`;
 }
 
 /** Builds the chip label for a chunk: `[i] filename`, without the heading path. */
-function chipLabel(chunk: RetrievedChunk, index: number): string {
+function chipLabel(chunk: SnapshotChunk, index: number): string {
   return `[${index + 1}] ${chunk.filename}`;
 }
 
 /** The small source chips under an answer; a chip opens a dialog with its chunk. */
-function SourcesChips({ chunks }: { chunks: RetrievedChunk[] }) {
-  // One dialog open at a time: the state holds the open chip's id.
-  const [openId, setOpenId] = useState<string | null>(null);
-  const openIndex = chunks.findIndex((chunk) => chunk.id === openId);
-  const openChunk = openIndex >= 0 ? chunks[openIndex] : undefined;
+function SourcesChips({ chunks }: { chunks: SnapshotChunk[] }) {
+  // One dialog open at a time: the state holds the open chip's index, because
+  // snapshot chunk ids can be null or duplicated (re-ingestion nulls them).
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const openChunk = openIndex !== null ? chunks[openIndex] : undefined;
 
   return (
     <>
@@ -57,23 +64,23 @@ function SourcesChips({ chunks }: { chunks: RetrievedChunk[] }) {
       >
         {chunks.map((chunk, index) => (
           <Chip
-            key={chunk.id}
+            key={`${index}-${chunk.chunk_id ?? "ghost"}`}
             size="small"
             variant="outlined"
             label={chipLabel(chunk, index)}
-            onClick={() => setOpenId(chunk.id)}
+            onClick={() => setOpenIndex(index)}
           />
         ))}
       </Stack>
-      <Dialog open={openChunk !== undefined} onClose={() => setOpenId(null)} maxWidth="sm">
-        {openChunk !== undefined && (
+      <Dialog open={openChunk !== undefined} onClose={() => setOpenIndex(null)} maxWidth="sm">
+        {openChunk !== undefined && openIndex !== null && (
           <>
             <DialogTitle>{chunkLabel(openChunk, openIndex)}</DialogTitle>
             <DialogContent>
               <Typography sx={{ whiteSpace: "pre-wrap" }}>{openChunk.text}</Typography>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setOpenId(null)}>Close</Button>
+              <Button onClick={() => setOpenIndex(null)}>Close</Button>
             </DialogActions>
           </>
         )}
@@ -82,19 +89,61 @@ function SourcesChips({ chunks }: { chunks: RetrievedChunk[] }) {
   );
 }
 
-/** The project chat panel: a local question/answer thread over the answer endpoint. */
+/** Maps hydrated conversation messages into question/answer turns. */
+function turnsFromMessages(messages: ConversationMessage[]): Turn[] {
+  const mapped: Turn[] = [];
+  for (const message of messages) {
+    const last = mapped.at(-1);
+    if (message.role === "user") {
+      mapped.push({ id: mapped.length + 1, question: message.content });
+    } else if (last && last.answer === undefined) {
+      // The assistant message completes the question turn above it.
+      last.answer = message.content;
+      last.chunks = message.chunks;
+    } else {
+      mapped.push({
+        id: mapped.length + 1,
+        question: "",
+        answer: message.content,
+        chunks: message.chunks,
+      });
+    }
+  }
+  return mapped;
+}
+
+/** The project chat panel: the owner's persisted conversation, hydrated and continued. */
 export default function ChatPanel({ projectId }: { projectId: string }): JSX.Element {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [text, setText] = useState("");
   const [pendingId, setPendingId] = useState<number | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const nextId = useRef(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [askQuestion] = useAskQuestionMutation();
+  const [createConversation] = useCreateConversationMutation();
+  const { data: latest, isSuccess: hydrated } = useGetLatestConversationQuery({ projectId });
 
   // Auto-scroll the thread to the newest turn whenever it changes.
   useEffect(() => {
     sentinelRef.current?.scrollIntoView();
   }, [turns, pendingId]);
+
+  // Server state is the truth: each fresh latest payload (mount or invalidation
+  // refetch) replaces the local thread wholesale. A pending local ask is skipped:
+  // its turn is not on the server yet, and its own invalidation refetches.
+  useEffect(() => {
+    if (!hydrated || !latest || pendingId !== null) {
+      return;
+    }
+    const next = turnsFromMessages(latest.messages);
+    // The RTK cache is an external system this panel mirrors into editable local
+    // state; deriving instead would need fragile merges around refetch latency.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTurns(next);
+    setConversationId(latest.conversation_id);
+    nextId.current = next.length;
+  }, [hydrated, latest, pendingId]);
 
   // Sends one question into an existing turn, filling answer/chunks or error.
   async function send(question: string, turnId: number) {
@@ -104,7 +153,13 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
       prev.map((turn) => (turn.id === turnId ? { ...turn, error: undefined } : turn)),
     );
     try {
-      const result = await askQuestion({ projectId, body: { query: question } }).unwrap();
+      const result = await askQuestion({
+        projectId,
+        body: { query: question, conversation_id: conversationId },
+      }).unwrap();
+      // Adopt the served id: a null-id ask resolves to the conversation the
+      // server picked, and every later ask threads it.
+      setConversationId(result.conversation_id);
       setTurns((prev) =>
         prev.map((turn) =>
           turn.id === turnId ? { ...turn, answer: result.answer, chunks: result.chunks } : turn,
@@ -118,6 +173,15 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
     } finally {
       setPendingId(null);
     }
+  }
+
+  // Starts one fresh conversation server-side and resets the local thread to it.
+  async function startNewChat() {
+    const created = await createConversation({ projectId }).unwrap();
+    setConversationId(created.conversation_id);
+    setTurns([]);
+    setText("");
+    nextId.current = 0;
   }
 
   // Appends a new turn from the input and starts the request.
@@ -154,6 +218,16 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
         height: { xs: "calc(100dvh - 176px)", sm: "calc(100dvh - 192px)" },
       }}
     >
+      <Stack direction="row" sx={{ justifyContent: "flex-end", pt: 2 }}>
+        <Button
+          size="small"
+          startIcon={<AddCommentRoundedIcon />}
+          disabled={pending}
+          onClick={() => void startNewChat()}
+        >
+          New chat
+        </Button>
+      </Stack>
       <Box
         sx={{
           flexGrow: 1,
@@ -161,7 +235,7 @@ export default function ChatPanel({ projectId }: { projectId: string }): JSX.Ele
           display: "flex",
           flexDirection: "column",
           gap: 2,
-          pt: 3,
+          pt: 1,
         }}
       >
         {turns.map((turn) => (
