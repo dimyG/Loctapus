@@ -1,0 +1,20 @@
+{$SITE_ADDRESS}
+
+request_body {
+    # max_upload_mb (25) with headroom; the 1 MB default would reject uploads.
+    # MiB, not MB: Caddy reads MB as 1000^2, so 26MB would undercut the backend's
+    # 25 MiB limit (26,214,400 bytes) and 413 legal uploads.
+    max_size 26MiB
+}
+
+handle /api/* {
+    # No URI rewrite: the backend serves the /api prefix itself.
+    reverse_proxy api:8000
+}
+
+handle {
+    root * /srv
+    # SPA history-routing fallback.
+    try_files {path} /index.html
+    file_server
+}

@@ -168,8 +168,12 @@ services:
   web:
     build: ../web
     image: rag-web
+    # Drives Caddy: ":8080" locally (plain HTTP, no ACME), the demo domain on
+    # Hetzner (automatic HTTPS on 80/443).
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set in deploy/.env}
     ports:
-      - "8080:80"
+      - "8080:8080"
     depends_on:
       api:
         condition: service_healthy
