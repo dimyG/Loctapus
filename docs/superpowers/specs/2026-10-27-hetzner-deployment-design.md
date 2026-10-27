@@ -22,19 +22,24 @@ with CI/CD such that every push to `master` updates the deployment automatically
 explicitly not a production platform: one box, no backups, no zero-downtime, throwaway
 demo data (section 8 states exactly what survives what).
 
-Server assumptions: Hetzner CX22 (2 vCPU, 4 GB RAM, 40 GB disk; roughly EUR 4-5 per month),
-Ubuntu 24.04, root access, the repository cloned to `/root/RAG`, and a DNS A record for
-the demo domain pointing at the VPS before the first deploy (Caddy's certificate issuance
-needs it).
+Server assumptions: Hetzner CX23 (2 vCPU, 4 GB RAM, 40 GB disk; about EUR 6 per month with
+the primary IPv4 - the plan that replaced CX22 in late 2025), Ubuntu 24.04, root access,
+the repository cloned to `/root/RAG`, and DNS pointing at the VPS before the first
+deploy (an A record for the demo domain; any AAAA record must also point at the VPS or be
+absent, or ACME validation can fail). Availability caveat: Hetzner's budget
+Cost-Optimized line (CX23, and the ARM alternative CAX11) has been cycling in and out of
+stock through 2026; if it is unorderable at the moment, either wait for a restock or fall
+back to a Regular Performance CPX server (about EUR 20 per month).
 
 ## 2. Decisions (2026-10-27 design round)
 
 1. **One VPS, compose, build on the server; GitHub Actions deploys over SSH.** Every push
    to `master` (and every manual `workflow_dispatch`) triggers a workflow that renders the
-   env files, copies them to the server, and runs `deploy/hetzner/deploy.sh` over SSH:
-   `git pull --ff-only` plus `docker compose up -d --build`. No registry, no image tags,
-   no second server. A failed build keeps the old version serving (compose builds before
-   it recreates), which is the right failure mode for a demo.
+   env files, copies them to the server, then in one SSH session pulls the branch
+   (`git pull --ff-only`) and runs `deploy/hetzner/deploy.sh`: `docker compose up -d
+   --build`. No registry, no image tags, no second server. A failed build keeps the old
+   version serving (compose builds before it recreates), which is the right failure mode
+   for a demo.
 2. **All Hetzner-specific code lives in `deploy/hetzner/`**: the compose override,
    `deploy.sh`, `bootstrap.sh`, and the operator runbook (`README.md`). One exception by
    platform necessity: the workflow file must live at `.github/workflows/deploy.yml`
@@ -60,18 +65,24 @@ needs it).
    GitHub rendering gives the strongest rebuild story - fresh VPS plus bootstrap plus one
    workflow run equals a fully configured server.
 6. **The workflow pins the server's SSH host key** (`HETZNER_KNOWN_HOSTS` secret,
-   populated from `ssh-keyscan` output at bootstrap). Trust-on-first-use is not used; a
-   host-key mismatch must stop the deploy. After a VPS rebuild the host key legitimately
-   changes, and re-populating the secret is part of the documented rebuild procedure.
+   populated at bootstrap from `ssh-keyscan` output keyed by the server's public IPv4,
+   fetched from the Hetzner metadata service - keying the scan by `localhost` would
+   produce a pin that never matches the address the runner connects to, and
+   `HETZNER_HOST` must hold that same IP). Trust-on-first-use is not used; a host-key
+   mismatch must stop the deploy. After a VPS rebuild the host key legitimately changes,
+   and re-populating the secret is part of the documented rebuild procedure.
 7. **The workflow uses plain OpenSSH on the runner, not a third-party action.** The
    deploy needs `scp` for the env files and custom `known_hosts` handling anyway, and
    plain ssh/scp keeps the supply chain at zero third-party actions.
 8. **`bootstrap.sh` and `deploy.sh` are separate scripts with different lifecycles and
-   privileges.** bootstrap runs once per VPS, by hand (installs Docker, creates swap,
+   duties.** bootstrap runs once per VPS, by hand (installs Docker, creates swap,
    configures the firewall, clones the repo, installs the CI key); deploy runs on every
-   commit, automatically, and only ever touches the checkout and Docker. The CI never
-   holds system-provisioning powers. `deploy.sh` must never contain `down` or `down -v`
-   (section 8).
+   commit, automatically, and only ever touches the checkout and Docker images. Honest
+   privilege note: the CI key sits in root's `authorized_keys`, so it is a full root key
+   by design - the separation is operational (what each script does and how often it
+   runs), not an enforcement boundary, and the runbook documents the optional
+   `command="..."` authorized_keys restriction for hardening it. `deploy.sh` must never
+   contain `down` or `down -v` (section 8).
 9. **Data survives every deploy.** All state lives in named volumes; `up -d --build`
    recreates containers, never volumes. The exhaustive list of destructive actions is
    section 8, and the runbook repeats it verbatim.
@@ -83,6 +94,11 @@ needs it).
     suite drives the Vite dev server (:5173) against a native uvicorn (:8001) and never
     touches the web container, so the nginx-to-Caddy swap adds its own verification list
     (section 10).
+12. **The server runs in production mode.** The render writes `RAG_ENVIRONMENT=production`
+    into `backend/.env`: the rendered secrets are non-default, so the config validators
+    pass, and a mistaken render that ever fell back to the public development secrets
+    would refuse to boot instead of serving with them. `backend/.env.example` already says
+    production is a deployment concern; this deployment takes it.
 
 ## 3. Web tier: nginx -> Caddy
 
@@ -93,7 +109,9 @@ needs it).
 
 request_body {
     # max_upload_mb (25) with headroom; the 1 MB default would reject uploads.
-    max_size 26MB
+    # MiB, not MB: Caddy reads MB as 1000^2, so 26MB would undercut the backend's
+    # 25 MiB limit (26,214,400 bytes) and 413 legal uploads.
+    max_size 26MiB
 }
 
 handle /api/* {
@@ -122,7 +140,7 @@ Behavior parity with the nginx config it replaces:
 | nginx.conf | Caddyfile | Note |
 | --- | --- | --- |
 | `listen 80` | `{$SITE_ADDRESS}` | HTTP locally, automatic HTTPS on the server |
-| `client_max_body_size 26m` | `request_body { max_size 26MB }` | upload headroom |
+| `client_max_body_size 26m` | `request_body { max_size 26MiB }` | upload headroom, byte-identical to nginx's 26m |
 | `resolver 127.0.0.11` + `set $upstream_api` | `reverse_proxy api:8000` | verification point (a) |
 | `location /api/ { proxy_pass }`, no URI rewrite | `handle /api/*` | full URI passthrough |
 | `try_files $uri $uri/ /index.html` | `try_files {path} /index.html` | SPA fallback |
@@ -149,9 +167,12 @@ domain instead. The local UI URL stays `http://localhost:8080`.
 ### 3.4 Implementation verification points
 
 (a) Caddy must re-resolve the `api` container name as CI recreates it (the nginx resolver
-comment existed for exactly this). Caddy 2.5+ re-resolves upstream hostnames periodically;
-implementation verifies this on the pinned image with an explicit api-recreate smoke
-check (section 10) rather than trusting the changelog.
+comment existed for exactly this). A static `reverse_proxy api:8000` upstream is resolved
+when a connection is dialed - the docs only promise periodic refresh for dynamic
+upstreams - and idle keepalive connections are closed by default after about 2 minutes,
+so a recreated api leaves at worst a brief window in which one request can 502 on a
+stale keepalive connection. Acceptable for a demo, and verified by the explicit
+api-recreate smoke check (section 10).
 (b) The exact `request_body` and `try_files` syntax is confirmed against the current
 `caddy:2` image before merging.
 
@@ -173,6 +194,8 @@ deploy/hetzner/docker-compose.server.yml`. Deltas only:
   certificate and hit Let's Encrypt's duplicate-certificate rate limit (5 per week).
 - No credential entries: they already interpolate from `deploy/.env` in the base file,
   and the CI renders that file (section 5).
+- No YAML anchors: anchors are per file, so the override must not reference the base
+  file's `x-backend` anchor - it spells out every per-service key itself.
 
 Because nothing internal is published, the usual "Docker published ports bypass ufw"
 problem does not apply: the firewall and compose agree that only 22, 80, and 443 are
@@ -203,14 +226,20 @@ exposed.
 | App | `APP_RAG_GROQ_API_KEY` | `backend/.env` | optional; unset means the stub provider |
 
 Mapping rule: each `STACK_*` secret renders as the un-prefixed variable (`STACK_X` ->
-`X`), each `APP_*` secret as `RAG_X`; the rendered files therefore match the templates
-`deploy/.env.example` and `backend/.env.example` variable-for-variable.
+`X`), and the `APP_` prefix is stripped (`APP_RAG_JWT_SECRET` -> `RAG_JWT_SECRET`).
+`RAG_LLM_PROVIDER=groq` is derived from the Groq key's presence rather than mapped from a
+secret, and `RAG_ENVIRONMENT=production` is a fixed line (decision 12). The rendered
+files therefore match the templates `deploy/.env.example` and `backend/.env.example`
+variable-for-variable.
 
 ### 5.2 The render step (runs on the GitHub runner)
 
-The workflow writes both files from secret values, copies them over SSH, and deletes the
-local copies; the runner itself is destroyed when the job ends. No `set -x` anywhere near
-this step; GitHub masks secret values in logs automatically.
+The workflow maps every secret into the step's `env:` block (secrets are not ambient
+environment variables on the runner), writes both files from those values, copies them
+over SSH, and deletes the local copies; the runner itself is destroyed when the job ends.
+No `set -x` anywhere near this step; GitHub masks secret values in logs automatically.
+Every `ssh` and `scp` call carries `-i <keyfile> -o UserKnownHostsFile=<known_hosts> -o
+StrictHostKeyChecking=yes` - that is what actually enforces the pin.
 
 ```bash
 printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n' \
@@ -221,24 +250,28 @@ printf 'GARAGE_RPC_SECRET=%s\nGARAGE_DEFAULT_ACCESS_KEY=%s\nGARAGE_DEFAULT_SECRE
   "$STACK_GARAGE_RPC_SECRET" "$STACK_GARAGE_DEFAULT_ACCESS_KEY" "$STACK_GARAGE_DEFAULT_SECRET_KEY" >> stack.env
 printf 'GARAGE_DEFAULT_BUCKET=%s\nGARAGE_ADMIN_TOKEN=%s\nSITE_ADDRESS=%s\n' \
   "$STACK_GARAGE_DEFAULT_BUCKET" "$STACK_GARAGE_ADMIN_TOKEN" "$STACK_SITE_ADDRESS" >> stack.env
-printf 'RAG_JWT_SECRET=%s\n' "$APP_RAG_JWT_SECRET" > app.env
+printf 'RAG_JWT_SECRET=%s\nRAG_ENVIRONMENT=production\n' "$APP_RAG_JWT_SECRET" > app.env
 if [ -n "$APP_RAG_GROQ_API_KEY" ]; then
   printf 'RAG_LLM_PROVIDER=groq\nRAG_GROQ_API_KEY=%s\n' "$APP_RAG_GROQ_API_KEY" >> app.env
 fi
-scp stack.env "$HETZNER_USER@$HETZNER_HOST:/root/RAG/deploy/.env"
-scp app.env "$HETZNER_USER@$HETZNER_HOST:/root/RAG/backend/.env"
+scp -i key -o UserKnownHostsFile=known_hosts -o StrictHostKeyChecking=yes \
+  stack.env "$HETZNER_USER@$HETZNER_HOST:/root/RAG/deploy/.env"
+scp -i key -o UserKnownHostsFile=known_hosts -o StrictHostKeyChecking=yes \
+  app.env "$HETZNER_USER@$HETZNER_HOST:/root/RAG/backend/.env"
 rm stack.env app.env
 ```
 
 The Groq lines are emitted only when the key is set: an empty `RAG_LLM_PROVIDER=` line
 would fail pydantic validation, and an unset key means the stub provider keeps the demo
 fully offline. Rendering whole files (never patching) keeps the server files pure derived
-state - the same `${VAR:?...}` guards as local dev, no hand edits, drift-free.
+state - the same `${VAR:?...}` guards as local dev, no hand edits, drift-free. The
+permissions hold too: bootstrap pre-creates both target files with mode 600, scp
+writing into an existing file preserves that mode, and `deploy.sh` re-asserts the chmod.
 
 ### 5.3 Transport and rest
 
-Nothing crosses a wire in plaintext. GitHub-to-runner is HTTPS-injected environment
-variables; runner-to-server is SSH. At GitHub, secrets are encrypted at rest with logged
+Nothing crosses a wire in plaintext. GitHub-to-runner is HTTPS (the step's `env:` mapping
+carries the values); runner-to-server is SSH. At GitHub, secrets are encrypted at rest with logged
 access and are readable only by workflows that reference them. On the server, the `.env`
 files are plaintext by necessity (compose reads them), protected by 600 root-only
 permissions on a single-tenant box - the same model as the local dev copies. `deploy.sh`
@@ -266,8 +299,13 @@ idempotent, but it is never meant to re-run. Steps, in order:
 5. Clone the repository to `/root/RAG` (public repo, no credentials needed).
 6. Install the CI deploy public key into `authorized_keys` (passed as a file argument;
    the private key only ever lives in the GitHub secret).
-7. Print the `ssh-keyscan` output for the operator to paste into the
-   `HETZNER_KNOWN_HOSTS` secret.
+7. Fetch the server's public IPv4 from the Hetzner metadata service and print
+   `ssh-keyscan` output keyed by that IP, for the operator to paste into the
+   `HETZNER_KNOWN_HOSTS` secret; the `HETZNER_HOST` secret must hold that same IP, or
+   the pin never matches the address the runner connects to.
+8. Pre-create `/root/RAG/deploy/.env` and `/root/RAG/backend/.env` with
+   `install -m 600 /dev/null <path>`, so the first scp writes into 600-mode files
+   instead of creating world-readable ones.
 
 Deliberately no secrets in bootstrap: every credential value arrives via the first
 workflow run. That is the rebuild story - fresh VPS plus bootstrap plus one workflow run
@@ -279,17 +317,19 @@ equals a fully configured server.
 
 ```bash
 #!/usr/bin/env bash
-# Runs on the VPS, invoked by the CI workflow over SSH. Never loses state:
-# no down, no down -v, nothing beyond what up recreates.
+# Runs on the VPS, invoked by the CI workflow after the workflow's own git pull.
+# Never loses state: no down, no down -v, nothing beyond what up recreates.
 set -euo pipefail
 cd /root/RAG
 chmod 600 deploy/.env backend/.env
-git pull --ff-only
 docker compose -f deploy/docker-compose.yml -f deploy/hetzner/docker-compose.server.yml up -d --build
+docker image prune -f
 ```
 
-It ships with the code (the workflow executes the checked-out copy), so the deploy logic
-can never be out of sync with the tree it deploys.
+The workflow pulls first and then runs the freshly checked-out script, so the deploy logic
+that runs is always the tree it deploys. `docker image prune -f` removes only the
+dangling images rebuilds leave behind - never named volumes or in-use images - keeping
+the 40 GB disk from filling across deploys.
 
 ### 7.2 Workflow (`.github/workflows/deploy.yml`)
 
@@ -298,8 +338,10 @@ can never be out of sync with the tree it deploys.
 - `concurrency: group deploy` with `cancel-in-progress: false`: deploys serialize, and a
   compose up is never killed mid-flight.
 - Steps: write the SSH key and the pinned known_hosts to temp files from secrets
-  (`install -m 600`, no `accept-new`), render the env files (5.2), scp them, then
-  `ssh ... 'bash /root/RAG/deploy/hetzner/deploy.sh'`.
+  (`install -m 600`, no `accept-new`), map the secrets into the step's `env:` block,
+  render the env files (5.2), scp them, then run one SSH session:
+  `cd /root/RAG && git pull --ff-only && bash deploy/hetzner/deploy.sh`. Pulling before
+  the script runs is what keeps `deploy.sh` itself current.
 - Plain OpenSSH on the runner, no third-party actions (decision 7).
 
 ## 8. Data persistence and failure modes
@@ -308,8 +350,10 @@ What survives every deploy: everything. All state lives in named volumes - `pgda
 (users, workspaces, projects, chunks, chat history), `rabbitmqdata`, `garagemeta` and
 `garagedata` (uploaded document bytes), `caddydata` (certificates). `up -d --build`
 rebuilds images and recreates changed containers only; named volumes are untouched.
-Schema changes ride along: a new migration re-runs `one-off-initialization` (its image
-changed) and applies forward-only, data-preserving migrations to the existing `pgdata`.
+Schema changes ride along: compose `up` starts the exited `one-off-initialization`
+container again, so migrations run on every deploy - harmless, because `alembic upgrade
+head` is a no-op on an up-to-date schema, and new revisions apply forward-only,
+data-preserving changes to the existing `pgdata`.
 
 The exhaustive list of destructive actions:
 
@@ -329,6 +373,9 @@ Other failure modes and mitigations:
   step; the runbook orders setup as console -> bootstrap -> secrets -> DNS -> first
   deploy.
 - Server reboot: `restart: unless-stopped` brings the stack back (section 4).
+- A request that lands during the seconds an api recreate takes, or on a stale keepalive
+  connection right after it (at most one, bounded by Caddy's ~2-minute keepalive): a
+  single 502; the next request succeeds.
 - Lost Groq key or rotated JWT secret: fixed by a `workflow_dispatch` re-render (5.4).
 
 ## 9. Runbook and docs
@@ -343,16 +390,24 @@ round:
    contains `down`/`down -v`.
 3. **Secrets transport**: section 5.3's content - encrypted in transit, plaintext at
    rest on the server by design, the rotation rules, and the host-key pinning procedure.
-4. **Prerequisites and setup order**: Hetzner console (CX22, Ubuntu 24.04, SSH key),
-   `bootstrap.sh`, the GitHub secrets table, the DNS A record, the first workflow
-   trigger.
+4. **Prerequisites and setup order**: Hetzner console (CX23 with the availability
+   caveat, Ubuntu 24.04, SSH key), `bootstrap.sh`, the GitHub secrets table, DNS (an A
+   record for the domain; any AAAA record points at the VPS or is absent), the first
+   workflow trigger.
 5. **Operations**: SSH tunnels for the now-unpublished RabbitMQ management UI and Garage
    admin, manual redeploys via `workflow_dispatch`, teardown (deleting the VPS deletes
    the data; snapshot first if wanted), and rebuilding the VPS (including re-populating
-   `HETZNER_KNOWN_HOSTS`).
+   `HETZNER_KNOWN_HOSTS`). It also states the pending-run rule: with serialized deploys
+   at most one run waits, a newer pending run replaces an older one, and that is
+   harmless because the pull always fetches the branch tip.
 
 The main `README.md` gets a short "Hetzner deployment" section pointing at the runbook.
-`docs/2026-10-19-system-overview.md` is updated at implementation end per the house rule.
+`docs/2026-10-19-system-overview.md` is updated at implementation end per the house rule,
+including its nginx references (the served-by line, the same-origin note, and the 60s
+`proxy_read_timeout` budget claim - Caddy has no default upstream read timeout). The
+`config.py` comment that bounds the router timeout by "nginx's 60s budget" is rewritten
+for Caddy, and the backlog's nginx watch items (bare `/api` fallthrough, `Cache-Control`
+on `index.html`, proxy timeouts) are re-anchored to the Caddyfile or closed.
 
 ## 10. Verification
 
@@ -364,8 +419,10 @@ The Playwright e2e suite does not cover the web tier (it drives the Vite dev ser
   the `${VAR:?}` guards pass.
 - With the local stack up (`SITE_ADDRESS=":8080"`): the UI serves at `localhost:8080`; a
   deep-link route returns the SPA; `/api/health` proxies through; an upload works; a
-  26 MB-plus body is rejected; and recreating `api` leaves the web tier functional (the
-  DNS re-resolution check, verification point 3.4a).
+  25.5 MB upload reaches the backend and gets its 422 "too large" copy while a 27 MB
+  upload gets Caddy's 413 (the house's established upload-limit smoke, now exercising the
+  `26MiB` cap); and recreating `api` leaves the web tier functional (the re-resolution
+  check, verification point 3.4a).
 - The pytest and Playwright suites stay green (the swap cannot touch them, but the gates
   run per `AGENTS.md`).
 - Server-side: the same smoke over `https://<demo-domain>` after the first deploy.
@@ -374,9 +431,10 @@ The Playwright e2e suite does not cover the web tier (it drives the Vite dev ser
 
 No zero-downtime deploys (seconds of recreate during a deploy), no backups or scheduled
 snapshots, no image registry, no staging environment, no multi-server story, no ACME
-account email (Caddy works without one; backlog candidate), no rotation automation.
-Preserving demo data across teardown is the snapshot button in the Hetzner console, not
-this system.
+account email (Caddy works without one; backlog candidate), no rotation automation, no
+HTTP/3 (its UDP port stays unpublished and browsers fall back silently; backlog
+candidate). Preserving demo data across teardown is the snapshot button in the Hetzner
+console, not this system.
 
 ## 12. Task dependency sketch (formalized in the implementation plan)
 
