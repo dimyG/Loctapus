@@ -44,9 +44,13 @@ exact deploy invocation) is available as hardening if that bothers you.
    to a Regular Performance CPX server (about EUR 20 per month).
 2. **Bootstrap**: run `bootstrap.sh` on the box (recipe above). It prints the
    host-key pin at the end.
-3. **GitHub secrets**: create all 17 secrets from the table below. Generate fresh
-   values with `openssl rand -hex 32`; keep usernames and passwords URL-safe (no
-   `: / @ # ?`) because they interpolate into `RAG_DATABASE_URL` and `RAG_BROKER_URL`.
+3. **GitHub secrets**: create all 17 secrets from the table below. Generate the
+   passwords, secrets, and tokens with `openssl rand -hex 32`; keep usernames and
+   passwords URL-safe (no `: / @ # ?`) because they interpolate into
+   `RAG_DATABASE_URL` and `RAG_BROKER_URL`. Two secrets are not random strings:
+   `STACK_GARAGE_DEFAULT_BUCKET` is a plain bucket name (lowercase, 3-63 characters,
+   e.g. `rag-demo` - Garage refuses invalid names and every upload would fail), and
+   `STACK_SITE_ADDRESS` is the demo domain.
 4. **DNS**: create an A record for the demo domain pointing at the VPS. Any AAAA
    record must also point at the VPS or be absent, or ACME validation can fail.
 5. **First deploy**: push to `master`, or trigger the workflow manually
