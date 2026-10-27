@@ -84,7 +84,7 @@ services:
     init: true
     restart: "no"
     environment:
-      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set in deploy/.env}:${POSTGRES_PASSWORD:?set in deploy/.env}@db:5432/${POSTGRES_DB:?set in deploy/.env}
     depends_on:
       db:
         condition: service_healthy
@@ -98,18 +98,20 @@ services:
     # App settings beyond the stack topology live in backend/.env (template:
     # backend/.env.example, copied gitignored): RAG_JWT_SECRET (token signing)
     # and the Groq opt-in. The file is required, so a stack can never boot with
-    # the public pydantic fallback secrets; the environment block below still
-    # wins over values injected from the file.
+    # no key source at all - but only its existence is enforced: a file lacking
+    # RAG_JWT_SECRET (any pre-branch copy) falls back to the public pydantic
+    # development secret, so re-copy the template or add the line. The
+    # environment block below still wins over values injected from the file.
     env_file:
       - path: ../backend/.env
         required: true
     environment:
-      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      RAG_BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
+      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set in deploy/.env}:${POSTGRES_PASSWORD:?set in deploy/.env}@db:5432/${POSTGRES_DB:?set in deploy/.env}
+      RAG_BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER:?set in deploy/.env}:${RABBITMQ_DEFAULT_PASS:?set in deploy/.env}@rabbitmq:5672//
       RAG_S3_ENDPOINT: http://garage:3900
-      RAG_S3_ACCESS_KEY: ${GARAGE_DEFAULT_ACCESS_KEY}
-      RAG_S3_SECRET_KEY: ${GARAGE_DEFAULT_SECRET_KEY}
-      RAG_S3_BUCKET: ${GARAGE_DEFAULT_BUCKET}
+      RAG_S3_ACCESS_KEY: ${GARAGE_DEFAULT_ACCESS_KEY:?set in deploy/.env}
+      RAG_S3_SECRET_KEY: ${GARAGE_DEFAULT_SECRET_KEY:?set in deploy/.env}
+      RAG_S3_BUCKET: ${GARAGE_DEFAULT_BUCKET:?set in deploy/.env}
     depends_on:
       db:
         condition: service_healthy
@@ -131,15 +133,15 @@ services:
     command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "ingestion,embed", "--concurrency", "2"]
     init: true
     environment:
-      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      RAG_BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
+      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set in deploy/.env}:${POSTGRES_PASSWORD:?set in deploy/.env}@db:5432/${POSTGRES_DB:?set in deploy/.env}
+      RAG_BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER:?set in deploy/.env}:${RABBITMQ_DEFAULT_PASS:?set in deploy/.env}@rabbitmq:5672//
       # The ingest tasks fetch the pinned bytes from Garage, so the S3
       # credentials ride along instead of falling back to the pydantic
       # development defaults.
       RAG_S3_ENDPOINT: http://garage:3900
-      RAG_S3_ACCESS_KEY: ${GARAGE_DEFAULT_ACCESS_KEY}
-      RAG_S3_SECRET_KEY: ${GARAGE_DEFAULT_SECRET_KEY}
-      RAG_S3_BUCKET: ${GARAGE_DEFAULT_BUCKET}
+      RAG_S3_ACCESS_KEY: ${GARAGE_DEFAULT_ACCESS_KEY:?set in deploy/.env}
+      RAG_S3_SECRET_KEY: ${GARAGE_DEFAULT_SECRET_KEY:?set in deploy/.env}
+      RAG_S3_BUCKET: ${GARAGE_DEFAULT_BUCKET:?set in deploy/.env}
     depends_on:
       db:
         condition: service_healthy
@@ -153,8 +155,8 @@ services:
     command: ["python", "-m", "app.workers.dispatcher"]
     init: true
     environment:
-      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      RAG_BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
+      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set in deploy/.env}:${POSTGRES_PASSWORD:?set in deploy/.env}@db:5432/${POSTGRES_DB:?set in deploy/.env}
+      RAG_BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER:?set in deploy/.env}:${RABBITMQ_DEFAULT_PASS:?set in deploy/.env}@rabbitmq:5672//
     depends_on:
       db:
         condition: service_healthy
