@@ -2,7 +2,7 @@
 
 Snapshot as of 2026-10-27, covering the service topology, the HTTP API, the
 web UI shell, and the database schema. Sources: `deploy/docker-compose.yml`,
-`backend/app/main.py` and the six routers it mounts, `web/nginx.conf`,
+`backend/app/main.py` and the six routers it mounts, `web/Caddyfile`,
 `web/src/app/api.ts`, the RTK Query feature APIs plus
 `web/src/features/uploads/useProjectUploads.ts`, the app shell and its
 project-scoped pages (`web/src/layouts/AppShell.tsx`,
@@ -17,7 +17,7 @@ flowchart TB
 
     subgraph compose["docker compose - deploy/docker-compose.yml"]
         init["one-off-initialization<br/>Alembic migrations, runs once"]
-        web["web - nginx :8080<br/>serves the built SPA,<br/>reverse-proxies /api"]
+        web["web - Caddy :8080<br/>serves the built SPA,<br/>reverse-proxies /api,<br/>automatic TLS on the server"]
         api["api - FastAPI / uvicorn :8000"]
         dispatcher["dispatcher<br/>outbox publisher loop"]
         worker["worker - Celery<br/>queues: ingestion, embed"]
@@ -91,10 +91,11 @@ starve the rows behind them.
 
 #### web
 
-Nginx serving the built SPA from the `rag-web` image. It reverse-proxies `/api`
+Caddy serving the built SPA from the `rag-web` image. It reverse-proxies `/api`
 to the api service so the browser path is same-origin (no CORS involved), falls
-back to `index.html` for SPA routes, and allows request bodies up to 26 MB so
-the 25 MB upload limit fits.
+back to `index.html` for SPA routes, allows request bodies up to 26 MiB so the
+25 MiB upload limit fits, and on the public server terminates TLS with
+automatically managed certificates.
 
 The SPA itself is the official-MUI-template UI rebuilt on 2026-10-21 (branch
 `ui-mui-templates`): every signed-in route renders inside one dashboard shell,
@@ -164,8 +165,8 @@ Runtime flow of one question:
 Notes:
 
 - The four app services (one-off-initialization, api, worker, dispatcher) share one
-  backend image (`rag-backend`); the web UI is a separate nginx image (`rag-web`).
-- The compose path is same-origin: nginx proxies `/api` to the api service, so no CORS
+  backend image (`rag-backend`); the web UI is a separate Caddy image (`rag-web`).
+- The compose path is same-origin: Caddy proxies `/api` to the api service, so no CORS
   is involved. The CORS middleware in `app/main.py` only matters for the ad-hoc Vite
   dev server (`VITE_API_BASE_URL`), which is not the runbook path.
 - The AI provider layer lives behind replaceable interfaces: `app/providers` ships a
@@ -652,8 +653,8 @@ deferred - the 2026-10-23 backlog entry).
   cap), and the router knobs `llm_route_max_tokens` plus
   `llm_route_timeout_seconds` (a tiny, fast completion), split from the
   answer call's `llm_max_tokens`/`llm_timeout_seconds` so a worst-case turn -
-  a 10s router call plus a 30s answer call plus embedding and search - stays
-  inside nginx's 60s `proxy_read_timeout` and failures surface as the
-  friendly 502, never an nginx 504.
+  a 10s router call plus a 30s answer call plus embedding and search - is bounded
+  by the provider timeouts (Caddy imposes no upstream read timeout) and failures
+  surface as the friendly 502.
 - `alembic_version` also exists in the database: one framework-managed row with
   the current migration revision, not an ORM model.
