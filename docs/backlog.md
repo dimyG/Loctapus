@@ -6,6 +6,22 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-27 - Public-deploy hardening deferred from the env extraction
+
+From the deploy-env-secrets task (branch `deploy-env-secrets`, commits `7847997`,
+`f10bf9b`): the stack credentials now interpolate from the gitignored `deploy/.env`,
+but a public deployment (the Hetzner demo) still needs two out-of-band pieces:
+
+- TLS termination in front of `web` (Caddy with automatic Let's Encrypt, replicating
+  nginx's `client_max_body_size 26m` for uploads): bearer tokens otherwise cross the
+  wire in cleartext and the SPA is served over plain HTTP.
+- A host firewall that forwards only 22/80/443 (Hetzner Cloud Firewall; UFW alone is
+  bypassed by Docker's iptables rules for published ports): `deploy/docker-compose.yml`
+  still publishes 5432/5672/15672/3900/8000 on 0.0.0.0, and every development
+  credential is public in the repository. The alternative is a gitignored
+  `docker-compose.override.yml` rebinding them to 127.0.0.1.
+
+
 ## 2026-10-23 - S6 multi-turn conversations follow-ups
 
 From the S6 slice (`superpowers/specs/2026-10-23-s6-multi-turn-conversations-design.md`; branch
