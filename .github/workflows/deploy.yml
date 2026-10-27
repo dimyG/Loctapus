@@ -63,8 +63,8 @@ jobs:
           if [ -n "$APP_RAG_GROQ_API_KEY" ]; then
             printf 'RAG_LLM_PROVIDER=groq\nRAG_GROQ_API_KEY=%s\n' "$APP_RAG_GROQ_API_KEY" >> app.env
           fi
-          scp "${ssh_opts[@]}" stack.env "$HETZNER_USER@$HETZNER_HOST:/root/RAG/deploy/.env"
-          scp "${ssh_opts[@]}" app.env "$HETZNER_USER@$HETZNER_HOST:/root/RAG/backend/.env"
+          scp "${ssh_opts[@]}" stack.env "$HETZNER_USER@$HETZNER_HOST:/root/Loctapus/deploy/.env"
+          scp "${ssh_opts[@]}" app.env "$HETZNER_USER@$HETZNER_HOST:/root/Loctapus/backend/.env"
           ssh "${ssh_opts[@]}" "$HETZNER_USER@$HETZNER_HOST" \
-            'cd /root/RAG && git pull --ff-only && bash deploy/hetzner/deploy.sh'
+            'cd /root/Loctapus && git pull --ff-only && bash deploy/hetzner/deploy.sh'
           rm -f key known_hosts stack.env app.env

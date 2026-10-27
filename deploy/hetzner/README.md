@@ -11,7 +11,7 @@ Two scripts with different lifecycles and duties:
 
 - **Bootstrap** (`deploy/hetzner/bootstrap.sh`) runs once per VPS, by hand, as root. It
   installs Docker, creates a 2 GB swapfile, configures the ufw firewall (22, 80, 443),
-  clones the repository to `/root/RAG`, installs the CI deploy key, pre-creates the two
+  clones the repository to `/root/Loctapus`, installs the CI deploy key, pre-creates the two
   env files with mode 600, and prints the `ssh-keyscan` host-key pin. It holds no
   secret values - every credential arrives via the first deploy.
 - **Deploy** (`.github/workflows/deploy.yml` -> `deploy/hetzner/deploy.sh`) runs on
@@ -26,7 +26,7 @@ not cloned yet when bootstrap runs, so fetch it from raw GitHub):
 ```
 ssh-keygen -t ed25519 -f ci_deploy -N ""   # local; the private half becomes HETZNER_SSH_KEY
 scp ci_deploy.pub root@<server-ip>:/root/ci_deploy.pub
-ssh root@<server-ip> 'curl -fsSL https://raw.githubusercontent.com/dimyG/RAG/master/deploy/hetzner/bootstrap.sh | bash -s /root/ci_deploy.pub'
+ssh root@<server-ip> 'curl -fsSL https://raw.githubusercontent.com/dimyG/Loctapus/master/deploy/hetzner/bootstrap.sh | bash -s /root/ci_deploy.pub'
 ```
 
 Honest privilege note: the CI key sits in root's `authorized_keys`, so it is a full

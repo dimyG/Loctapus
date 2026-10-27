@@ -29,7 +29,7 @@ ufw allow 443/tcp
 ufw --force enable
 
 # The application tree (public repository, no credentials needed).
-git clone https://github.com/dimyG/RAG.git /root/RAG
+git clone https://github.com/dimyG/Loctapus.git /root/Loctapus
 
 # The CI deploy key: its private half only ever lives in GitHub secrets.
 mkdir -p /root/.ssh
@@ -39,8 +39,8 @@ chmod 600 /root/.ssh/authorized_keys
 
 # Pre-create the env files the CI renders into, so the first scp writes into
 # 600-mode files instead of creating world-readable ones.
-install -m 600 /dev/null /root/RAG/deploy/.env
-install -m 600 /dev/null /root/RAG/backend/.env
+install -m 600 /dev/null /root/Loctapus/deploy/.env
+install -m 600 /dev/null /root/Loctapus/backend/.env
 
 # The host-key pin: keyed by the public IPv4 the CI connects to.
 public_ip="$(curl -fsS http://169.254.169.254/hetzner/v1/metadata/public-ipv4)"

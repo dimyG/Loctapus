@@ -15,7 +15,7 @@ the one-off migration step, the API, the Celery worker, the outbox dispatcher, a
 web tier. Stack credentials interpolate from the gitignored `deploy/.env` (template
 `deploy/.env.example`) with `${VAR:?...}` hard-fail guards; the app-level secrets live in
 the gitignored `backend/.env` (`RAG_JWT_SECRET`, plus the Groq opt-in). The repository is
-public on GitHub (`github.com/dimyG/RAG`, branch `master`).
+public on GitHub (`github.com/dimyG/Loctapus`, branch `master`).
 
 This round adds a demo deployment: a single cheap Hetzner VPS serving the system on HTTPS,
 with CI/CD such that every push to `master` updates the deployment automatically. It is
@@ -24,7 +24,7 @@ demo data (section 8 states exactly what survives what).
 
 Server assumptions: Hetzner CX23 (2 vCPU, 4 GB RAM, 40 GB disk; about EUR 6 per month with
 the primary IPv4 - the plan that replaced CX22 in late 2025), Ubuntu 24.04, root access,
-the repository cloned to `/root/RAG`, and DNS pointing at the VPS before the first
+the repository cloned to `/root/Loctapus`, and DNS pointing at the VPS before the first
 deploy (an A record for the demo domain; any AAAA record must also point at the VPS or be
 absent, or ACME validation can fail). Availability caveat: Hetzner's budget
 Cost-Optimized line (CX23, and the ARM alternative CAX11) has been cycling in and out of
@@ -264,9 +264,9 @@ if [ -n "$APP_RAG_GROQ_API_KEY" ]; then
   printf 'RAG_LLM_PROVIDER=groq\nRAG_GROQ_API_KEY=%s\n' "$APP_RAG_GROQ_API_KEY" >> app.env
 fi
 scp -i key -o UserKnownHostsFile=known_hosts -o StrictHostKeyChecking=yes \
-  stack.env "$HETZNER_USER@$HETZNER_HOST:/root/RAG/deploy/.env"
+  stack.env "$HETZNER_USER@$HETZNER_HOST:/root/Loctapus/deploy/.env"
 scp -i key -o UserKnownHostsFile=known_hosts -o StrictHostKeyChecking=yes \
-  app.env "$HETZNER_USER@$HETZNER_HOST:/root/RAG/backend/.env"
+  app.env "$HETZNER_USER@$HETZNER_HOST:/root/Loctapus/backend/.env"
 rm stack.env app.env
 ```
 
@@ -305,14 +305,14 @@ idempotent, but it is never meant to re-run. Steps, in order:
 2. Install Docker via the get.docker.com convenience script; enable the service.
 3. Create a 2 GB swapfile (build headroom on a 4 GB box).
 4. Allow 22, 80, and 443 through ufw; enable ufw.
-5. Clone the repository to `/root/RAG` (public repo, no credentials needed).
+5. Clone the repository to `/root/Loctapus` (public repo, no credentials needed).
 6. Install the CI deploy public key into `authorized_keys` (passed as a file argument;
    the private key only ever lives in the GitHub secret).
 7. Fetch the server's public IPv4 from the Hetzner metadata service and print
    `ssh-keyscan` output keyed by that IP, for the operator to paste into the
    `HETZNER_KNOWN_HOSTS` secret; the `HETZNER_HOST` secret must hold that same IP, or
    the pin never matches the address the runner connects to.
-8. Pre-create `/root/RAG/deploy/.env` and `/root/RAG/backend/.env` with
+8. Pre-create `/root/Loctapus/deploy/.env` and `/root/Loctapus/backend/.env` with
    `install -m 600 /dev/null <path>`, so the first scp writes into 600-mode files
    instead of creating world-readable ones.
 
@@ -329,7 +329,7 @@ equals a fully configured server.
 # Runs on the VPS, invoked by the CI workflow after the workflow's own git pull.
 # Never loses state: no down, no down -v, nothing beyond what up recreates.
 set -euo pipefail
-cd /root/RAG
+cd /root/Loctapus
 chmod 600 deploy/.env backend/.env
 docker compose -f deploy/docker-compose.yml -f deploy/hetzner/docker-compose.server.yml up -d --build
 docker image prune -f
@@ -349,7 +349,7 @@ the 40 GB disk from filling across deploys.
 - Steps: write the SSH key and the pinned known_hosts to temp files from secrets
   (`install -m 600`, no `accept-new`), map the secrets into the step's `env:` block,
   render the env files (5.2), scp them, then run one SSH session:
-  `cd /root/RAG && git pull --ff-only && bash deploy/hetzner/deploy.sh`. Pulling before
+  `cd /root/Loctapus && git pull --ff-only && bash deploy/hetzner/deploy.sh`. Pulling before
   the script runs is what keeps `deploy.sh` itself current.
 - Plain OpenSSH on the runner, no third-party actions (decision 7).
 
