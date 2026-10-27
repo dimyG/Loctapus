@@ -27,6 +27,14 @@ From the `hetzner-deployment` branch (spec
 - HTTP/3 stays off: its UDP port is unpublished, so browsers fall back silently to
   HTTP/2; a candidate is publishing the UDP port via the server override plus a
   `bootstrap.sh` firewall rule.
+- Fresh-review residuals (Opus 5.5 whole-branch review; its actionable findings
+  landed as `423428e`, `58bcded`, `828180d`): `bootstrap.sh` assumes ufw is
+  preinstalled (true on stock Ubuntu 24.04 cloud images; `apt-get install -y ufw`
+  would make it explicit); the deploy workflow carries no `permissions:` block
+  (least privilege would be `permissions: {}`, the token is unused) and no
+  `timeout-minutes` cap (GitHub defaults to 6 h); merging the branch to `master`
+  triggers one deploy run before any server or secrets exist, so expect one red
+  run on the first merge.
 
 ## 2026-10-27 - Public-deploy hardening deferred from the env extraction
 
