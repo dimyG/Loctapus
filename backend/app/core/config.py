@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     def _reject_default_secret_in_production(self) -> Self:
         """Reject the development secrets when running in production."""
 
+        # The compared literals are sentinels for "published in this public repository",
+        # not configurable defaults: a sentinel an environment variable could override
+        # could be pointed at the real secret, and the guard would validate nothing.
+        # Production must differ from a public string however it arrived - explicit or fallback.
         if self.environment == "production" and self.jwt_secret == "dev-secret-change-me":
             raise ValueError("jwt_secret must be set explicitly when environment is production")
         if self.environment == "production" and self.s3_secret_key == "rag-dev-secret-local":
