@@ -180,10 +180,12 @@ Notes:
   `backend/.env` (see `backend/.env.example`), which the compose `api` service
   injects as a required env file (its explicit environment still wins) and which
   local runs from `backend/` read directly; the file also carries
-  `RAG_JWT_SECRET`, the token-signing key. The pytest suite and the e2e webServers
-  pin `RAG_LLM_PROVIDER=stub` and `RAG_ENVIRONMENT=dev` as real environment
-  variables - which beat the file in pydantic precedence - so the suites stay
-  offline whatever it contains.
+  `RAG_JWT_SECRET`, the token-signing key. Only the file's existence is
+  enforced - a copy lacking `RAG_JWT_SECRET` (any pre-branch one) silently
+  signs with the public pydantic development secret. The pytest suite and
+  the e2e webServers pin `RAG_LLM_PROVIDER=stub` and `RAG_ENVIRONMENT=dev`
+  as real environment variables - which beat the file in pydantic
+  precedence - so the suites stay offline whatever it contains.
 - Since 2026-10-27 the stack credentials (Postgres user/password/db, the
   RabbitMQ user, Garage's rpc secret, admin token, and default
   key/bucket) interpolate into `deploy/docker-compose.yml` from the gitignored

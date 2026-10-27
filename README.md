@@ -48,9 +48,12 @@ starts - no deployment can silently boot with the development credentials that
 are public in this repository. `backend/.env` carries the app settings:
 `RAG_JWT_SECRET` (token signing) and the Groq opt-in below; the api service
 loads it as a required env file (the long `env_file` syntax needs Docker
-Compose 2.24+). Both templates' values reproduce the historical development
-credentials, so existing named volumes keep working unchanged; a public
-deployment must generate fresh values instead (`openssl rand -hex 32`).
+Compose 2.24+), though only its existence is enforced: a `backend/.env` from
+before this branch (or any copy missing `RAG_JWT_SECRET`) silently signs
+tokens with the public development secret, so add the line from the template.
+Both templates' values reproduce the historical development credentials, so
+existing named volumes keep working unchanged; a public deployment must
+generate fresh values instead (`openssl rand -hex 32`).
 
 This builds and starts all eight services: Postgres (pgvector, `localhost:5432`,
 `rag`/`rag`), RabbitMQ (management UI on `localhost:15672`), Garage (S3 API on
@@ -117,6 +120,11 @@ so this file never makes them call Groq.
 Tests need the compose services up: the real Postgres for every suite (never SQLite),
 plus RabbitMQ for the outbox/worker integration tests and Garage for the storage,
 uploads, and ingestion suites (the upload and ingest paths read and write real bytes).
+The suites target the template's development credentials - pytest's defaults, the
+Playwright config, and `backend/scripts/e2e_db.py` all pin `rag:rag` Postgres and
+`guest:guest` RabbitMQ on localhost - so on a checkout that generated fresh
+credentials (a public demo) run them with the documented overrides
+(`RAG_TEST_DATABASE_URL`, the Playwright env) or from a dev machine instead.
 The `engine` fixture creates a disposable `rag_test` database, applies all migrations,
 and drops it after the session; the `rag_test` broker vhost is created by the suite
 itself, so no manual broker setup is needed.

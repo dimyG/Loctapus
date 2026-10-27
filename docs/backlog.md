@@ -17,7 +17,7 @@ but a public deployment (the Hetzner demo) still needs two out-of-band pieces:
   wire in cleartext and the SPA is served over plain HTTP.
 - A host firewall that forwards only 22/80/443 (Hetzner Cloud Firewall; UFW alone is
   bypassed by Docker's iptables rules for published ports): `deploy/docker-compose.yml`
-  still publishes 5432/5672/15672/3900/8000 on 0.0.0.0, and every development
+  still publishes 5432/5672/15672/3900/3903/8000 on 0.0.0.0, and every development
   credential is public in the repository. The alternative is a gitignored
   `docker-compose.override.yml` rebinding them to 127.0.0.1.
 
@@ -179,10 +179,13 @@ Residuals from the fresh-context review of the backend/.env secret workflow
   dependency override in the `client` fixture.
 - `f0e10af` - the e2e webServer pin is verified by the identical pytest mechanism plus
   config inspection; the Playwright journey itself was not executed in this task.
-- `cc73faa` - the compose stack cannot run in production mode at all: Garage ships the
-  fixed development secret, and the production validator rejects it, so a real
-  deployment story (external Garage credentials or a different object store) needs
-  its own design.
+- `cc73faa` - resolved 2026-10-27 by the deploy-env-secrets branch (`7847997`,
+  `f10bf9b`): the stack credentials now interpolate from the gitignored
+  `deploy/.env`, so production mode is reachable - set `RAG_ENVIRONMENT=production`
+  in `backend/.env` with a real `RAG_JWT_SECRET`, and fresh Garage credentials on
+  fresh volumes in `deploy/.env`. Residuals: the named volumes keep the credentials
+  they were initialized with, and Garage binds its stored layout to
+  `GARAGE_DEFAULT_SECRET_KEY` (both caveats live in the runbook).
 
 
 ## 2026-10-20 - S5 answer and chat (`s5-answer-chat`)
