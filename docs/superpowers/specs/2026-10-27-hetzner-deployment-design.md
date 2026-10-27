@@ -100,11 +100,14 @@ back to a Regular Performance CPX server (about EUR 20 per month).
     credentials and topology and is read by no container. Only the api service mounts
     `backend/.env`, so the flag binds to the api container: deliberate, because the
     production validators demand a non-default `RAG_JWT_SECRET`, which only the api's
-    environment carries - threaded to the worker or dispatcher, the flag would crash
-    them on the default jwt secret. The api is the internet-facing service the guard
-    exists for: a mistaken render that ever fell back to the public development secrets
-    refuses to boot instead of serving with them. `backend/.env.example` already says
-    production is a deployment concern; this deployment takes it.
+    environment carries. Adding the bare flag to the worker's or dispatcher's
+    `environment:` block would crash them at startup on the default jwt secret, and
+    mounting the whole `backend/.env` into them instead would pass validation but spread
+    the JWT secret and the Groq key into services that never use them. The api is the
+    internet-facing service the guard exists for: a mistaken render that ever fell back
+    to the public development secrets refuses to boot instead of serving with them.
+    `backend/.env.example` already says production is a deployment concern; this
+    deployment takes it.
 
 ## 3. Web tier: nginx -> Caddy
 
