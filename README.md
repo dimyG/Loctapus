@@ -144,6 +144,11 @@ enforces LF). Clones made before that file exist need a one-time refresh -
 `git add --renormalize .` - or `prettier --check .` fails on identical
 committed content with CRLF working copies.
 
+## Hetzner deployment
+
+Every push to `master` auto-deploys the demo server via GitHub Actions. Bootstrap,
+secrets, rotation, and teardown live in the runbook: `deploy/hetzner/README.md`.
+
 ## Further reading
 
 - Slice design: `docs/superpowers/specs/2026-10-06-roadmap.md`

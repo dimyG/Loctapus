@@ -1,0 +1,70 @@
+name: Deploy to Hetzner
+
+# Every push to master updates the demo server; workflow_dispatch re-renders
+# the env files and redeploys without a code change (first deploy, rotation).
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Deploys serialize: a compose up is never killed mid-flight. At most one run
+# waits; a newer pending run replaces it, which is harmless because the pull
+# always fetches the branch tip.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Render env files and deploy over SSH
+        env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+          HETZNER_USER: ${{ secrets.HETZNER_USER }}
+          HETZNER_SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+          HETZNER_KNOWN_HOSTS: ${{ secrets.HETZNER_KNOWN_HOSTS }}
+          STACK_POSTGRES_USER: ${{ secrets.STACK_POSTGRES_USER }}
+          STACK_POSTGRES_PASSWORD: ${{ secrets.STACK_POSTGRES_PASSWORD }}
+          STACK_POSTGRES_DB: ${{ secrets.STACK_POSTGRES_DB }}
+          STACK_RABBITMQ_DEFAULT_USER: ${{ secrets.STACK_RABBITMQ_DEFAULT_USER }}
+          STACK_RABBITMQ_DEFAULT_PASS: ${{ secrets.STACK_RABBITMQ_DEFAULT_PASS }}
+          STACK_GARAGE_RPC_SECRET: ${{ secrets.STACK_GARAGE_RPC_SECRET }}
+          STACK_GARAGE_DEFAULT_ACCESS_KEY: ${{ secrets.STACK_GARAGE_DEFAULT_ACCESS_KEY }}
+          STACK_GARAGE_DEFAULT_SECRET_KEY: ${{ secrets.STACK_GARAGE_DEFAULT_SECRET_KEY }}
+          STACK_GARAGE_DEFAULT_BUCKET: ${{ secrets.STACK_GARAGE_DEFAULT_BUCKET }}
+          STACK_GARAGE_ADMIN_TOKEN: ${{ secrets.STACK_GARAGE_ADMIN_TOKEN }}
+          STACK_SITE_ADDRESS: ${{ secrets.STACK_SITE_ADDRESS }}
+          APP_RAG_JWT_SECRET: ${{ secrets.APP_RAG_JWT_SECRET }}
+          APP_RAG_GROQ_API_KEY: ${{ secrets.APP_RAG_GROQ_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Key material: the pinned known_hosts is what enforces the pin.
+          install -m 600 /dev/null key
+          printf '%s\n' "$HETZNER_SSH_KEY" > key
+          install -m 600 /dev/null known_hosts
+          printf '%s\n' "$HETZNER_KNOWN_HOSTS" > known_hosts
+          ssh_opts=(-i key -o UserKnownHostsFile=known_hosts -o StrictHostKeyChecking=yes)
+          # Render deploy/.env: STACK_* secrets, un-prefixed.
+          printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n' \
+            "$STACK_POSTGRES_USER" "$STACK_POSTGRES_PASSWORD" "$STACK_POSTGRES_DB" > stack.env
+          printf 'RABBITMQ_DEFAULT_USER=%s\nRABBITMQ_DEFAULT_PASS=%s\n' \
+            "$STACK_RABBITMQ_DEFAULT_USER" "$STACK_RABBITMQ_DEFAULT_PASS" >> stack.env
+          printf 'GARAGE_RPC_SECRET=%s\nGARAGE_DEFAULT_ACCESS_KEY=%s\nGARAGE_DEFAULT_SECRET_KEY=%s\n' \
+            "$STACK_GARAGE_RPC_SECRET" "$STACK_GARAGE_DEFAULT_ACCESS_KEY" "$STACK_GARAGE_DEFAULT_SECRET_KEY" >> stack.env
+          printf 'GARAGE_DEFAULT_BUCKET=%s\nGARAGE_ADMIN_TOKEN=%s\nSITE_ADDRESS=%s\n' \
+            "$STACK_GARAGE_DEFAULT_BUCKET" "$STACK_GARAGE_ADMIN_TOKEN" "$STACK_SITE_ADDRESS" >> stack.env
+          # The JWT secret has no compose-side ${VAR:?} guard, so fail loudly here;
+          # an empty key would boot the api and break every login (pyjwt rejects it).
+          : "${APP_RAG_JWT_SECRET:?APP_RAG_JWT_SECRET secret is empty}"
+          # Render backend/.env: APP_* stripped, production mode fixed, Groq
+          # lines only when the key is set (an empty provider line fails boot).
+          printf 'RAG_JWT_SECRET=%s\nRAG_ENVIRONMENT=production\n' "$APP_RAG_JWT_SECRET" > app.env
+          if [ -n "$APP_RAG_GROQ_API_KEY" ]; then
+            printf 'RAG_LLM_PROVIDER=groq\nRAG_GROQ_API_KEY=%s\n' "$APP_RAG_GROQ_API_KEY" >> app.env
+          fi
+          scp "${ssh_opts[@]}" stack.env "$HETZNER_USER@$HETZNER_HOST:/root/Loctapus/deploy/.env"
+          scp "${ssh_opts[@]}" app.env "$HETZNER_USER@$HETZNER_HOST:/root/Loctapus/backend/.env"
+          ssh "${ssh_opts[@]}" "$HETZNER_USER@$HETZNER_HOST" \
+            'cd /root/Loctapus && git pull --ff-only && bash deploy/hetzner/deploy.sh'
+          rm -f key known_hosts stack.env app.env

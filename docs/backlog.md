@@ -6,20 +6,50 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-27 - Hetzner deployment follow-ups
+
+From the `hetzner-deployment` branch (spec
+`../specs/2026-10-27-hetzner-deployment-design.md`, plan
+`../plans/2026-10-27-hetzner-deployment.md`, commits `b017873`..`a0a3c48`):
+
+- The test engine fixture creates `rag_test` only when absent and drops it at session
+  end, so an interrupted pytest session leaves a dirty `rag_test` that the next session
+  silently reuses (observed 2026-10-27 as `EmailAlreadyRegisteredError` after a
+  timeout-killed run); drop-and-recreate (or fail loudly) when the database already
+  exists at bootstrap.
+- `ruff format --check .` from the repo root reports pre-existing findings in 12
+  historical plan documents under `docs/superpowers/plans/` (a newer ruff also formats
+  Python blocks in markdown); the house gates run from `backend/` per `AGENTS.md`, and
+  reformatting historical plan docs stays out of scope until a batch pass is wanted.
+- No ACME account email is configured for Caddy (it works without one; an email would
+  add Let's Encrypt expiry notices and account recovery) - a candidate `email` global
+  option for `web/Caddyfile`.
+- HTTP/3 stays off: its UDP port is unpublished, so browsers fall back silently to
+  HTTP/2; a candidate is publishing the UDP port via the server override plus a
+  `bootstrap.sh` firewall rule.
+- Fresh-review residuals (Opus 5.5 whole-branch review; its actionable findings
+  landed as `423428e`, `58bcded`, `828180d`): `bootstrap.sh` assumes ufw is
+  preinstalled (true on stock Ubuntu 24.04 cloud images; `apt-get install -y ufw`
+  would make it explicit); the deploy workflow carries no `permissions:` block
+  (least privilege would be `permissions: {}`, the token is unused) and no
+  `timeout-minutes` cap (GitHub defaults to 6 h); merging the branch to `master`
+  triggers one deploy run before any server or secrets exist, so expect one red
+  run on the first merge.
+
 ## 2026-10-27 - Public-deploy hardening deferred from the env extraction
 
 From the deploy-env-secrets task (branch `deploy-env-secrets`, commits `7847997`,
-`f10bf9b`): the stack credentials now interpolate from the gitignored `deploy/.env`,
-but a public deployment (the Hetzner demo) still needs two out-of-band pieces:
+`f10bf9b`): the stack credentials now interpolate from the gitignored `deploy/.env`.
+The public deployment (the Hetzner demo) needed two out-of-band pieces, both
+resolved on 2026-10-27 in `hetzner-deployment`:
 
-- TLS termination in front of `web` (Caddy with automatic Let's Encrypt, replicating
-  nginx's `client_max_body_size 26m` for uploads): bearer tokens otherwise cross the
-  wire in cleartext and the SPA is served over plain HTTP.
-- A host firewall that forwards only 22/80/443 (Hetzner Cloud Firewall; UFW alone is
-  bypassed by Docker's iptables rules for published ports): `deploy/docker-compose.yml`
-  still publishes 5432/5672/15672/3900/3903/8000 on 0.0.0.0, and every development
-  credential is public in the repository. The alternative is a gitignored
-  `docker-compose.override.yml` rebinding them to 127.0.0.1.
+- TLS termination in front of `web`: resolved - the web image is now Caddy
+  (`web/Caddyfile` carries the `request_body 26MiB` upload window and manages the
+  Let's Encrypt certificates on the server; commit `b017873`).
+- A host firewall that forwards only 22/80/443: resolved - the server override
+  (`deploy/hetzner/docker-compose.server.yml`) unpublishes 5432/5672/15672/3900/
+  3903/8000 so only web's 80/443 publish (UFW's Docker bypass no longer applies),
+  and `bootstrap.sh` enforces ufw for 22/80/443 (commit `c7ae802`).
 
 
 ## 2026-10-23 - S6 multi-turn conversations follow-ups
@@ -226,8 +256,8 @@ Residuals from the 2026-10-20 whole-branch review of the S5 answer slice
 - `ce8b5aa` - the `Sources (0)` accordion used to render on a canned empty answer;
   fixed this wave: the Sources accordion renders only when `chunks.length > 0`.
 - `79335bc` - `llm_timeout_seconds` is a per-phase httpx timeout, not a total deadline
-  (a connect+read worst case can approach nginx's 60s `proxy_read_timeout`); revisit
-  if Groq latency grows.
+  (under Caddy there is no upstream read timeout to bound it, so only the provider
+  timeout applies); revisit if Groq latency grows.
 - `cd80537` - the e2e journey's `/tiny\.pdf/` and `/sample\.docx/` source-row selectors
   assume one chunk per file surfaces in Sources; if fixtures ever yield multiple rows
   per file, Playwright strict mode fails - switch to `.first()` or a count assertion.
@@ -254,15 +284,17 @@ From the spec (`../specs/2026-10-16-docker-compose-full-stack-design.md`, its se
 - `ece6266` - the migrate script's unreachable-database test asserts only a non-zero exit;
   asserting the connection-failure line in `stderr` would pin the actual failure mode (it
   would also pass on an import-time crash today).
-- `e9c748c` - a bare `/api` (no trailing slash) falls through nginx's `location /api/` to
-  the SPA fallback; harmless while no route exists at exactly `/api`, revisit if one appears.
-- `e9c748c` - `index.html` is served with no `Cache-Control: no-cache`; nginx's
-  ETag/Last-Modified validators mostly cover it, but a redeploy can leave a browser on a
-  stale bundle.
-- `e9c748c` - nginx carries no `proxy_read_timeout`/`proxy_send_timeout` overrides (60s
-  defaults); fine while API requests are short, a watch item for slow synchronous
-  endpoints. Resolved for `/answer` on 2026-10-20 in `s5-answer-chat` (spec decision 12):
-  `llm_timeout_seconds=30` keeps the provider call inside the 60s proxy budget.
+- `e9c748c` - a bare `/api` (no trailing slash) falls through Caddy's `handle /api/*` to
+  the SPA fallback (parity verified 2026-10-27 in `hetzner-deployment`); harmless while
+  no route exists at exactly `/api`, revisit if one appears.
+- `e9c748c` - `index.html` is served with no `Cache-Control: no-cache`; Caddy's
+  file_server ETag/Last-Modified validators mostly cover it, but a redeploy can leave a
+  browser on a stale bundle.
+- `e9c748c` - the reverse proxy carries no read/send timeout overrides; Caddy imposes
+  none by default (an upstream can hold a connection open indefinitely), fine while API
+  requests are short, a watch item for slow synchronous endpoints. Resolved for `/answer`
+  on 2026-10-20 in `s5-answer-chat` (spec decision 12): `llm_timeout_seconds=30` bounds
+  the provider call itself.
 
 From the 2026-10-16 whole-branch review:
 

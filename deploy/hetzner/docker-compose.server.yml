@@ -1,0 +1,37 @@
+# Server delta over deploy/docker-compose.yml for the Hetzner demo: only the
+# web tier is published (80/443), services survive reboots, and Caddy's
+# certificates survive container recreates. Run with:
+#   docker compose -f deploy/docker-compose.yml -f deploy/hetzner/docker-compose.server.yml
+# YAML anchors do not carry across files, so every service spells out its keys.
+
+services:
+  db:
+    ports: !override []
+    restart: unless-stopped
+
+  rabbitmq:
+    ports: !override []
+    restart: unless-stopped
+
+  garage:
+    ports: !override []
+    restart: unless-stopped
+
+  api:
+    ports: !override []
+    restart: unless-stopped
+
+  worker:
+    restart: unless-stopped
+
+  dispatcher:
+    restart: unless-stopped
+
+  web:
+    ports: !override ["80:80", "443:443"]
+    restart: unless-stopped
+    volumes:
+      - caddydata:/data
+
+volumes:
+  caddydata:
