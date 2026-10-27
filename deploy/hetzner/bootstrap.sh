@@ -6,8 +6,12 @@ set -euo pipefail
 
 public_key_file="${1:?usage: bootstrap.sh <ci-deploy-public-key-file>}"
 
+# The script runs as `curl ... | bash -s` over a non-interactive SSH session, so
+# its stdin is the script itself; a package prompt must never read that stdin.
+export DEBIAN_FRONTEND=noninteractive
+
 apt-get update
-apt-get upgrade -y
+apt-get upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
 curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
 
