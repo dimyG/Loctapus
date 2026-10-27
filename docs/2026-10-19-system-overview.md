@@ -1,6 +1,6 @@
 # System overview
 
-Snapshot as of 2026-10-23, covering the service topology, the HTTP API, the
+Snapshot as of 2026-10-27, covering the service topology, the HTTP API, the
 web UI shell, and the database schema. Sources: `deploy/docker-compose.yml`,
 `backend/app/main.py` and the six routers it mounts, `web/nginx.conf`,
 `web/src/app/api.ts`, the RTK Query feature APIs plus
@@ -178,11 +178,21 @@ Notes:
   message list - trimmed history plus the fresh question - instead of one user prompt.
   Both live in the gitignored
   `backend/.env` (see `backend/.env.example`), which the compose `api` service
-  injects as an optional env file (its explicit environment still wins) and which
-  local runs from `backend/` read directly. The pytest suite and the e2e webServers
+  injects as a required env file (its explicit environment still wins) and which
+  local runs from `backend/` read directly; the file also carries
+  `RAG_JWT_SECRET`, the token-signing key. The pytest suite and the e2e webServers
   pin `RAG_LLM_PROVIDER=stub` and `RAG_ENVIRONMENT=dev` as real environment
   variables - which beat the file in pydantic precedence - so the suites stay
   offline whatever it contains.
+- Since 2026-10-27 the stack credentials (Postgres user/password/db, the
+  RabbitMQ user, Garage's rpc secret, admin token, and default
+  key/bucket) interpolate into `deploy/docker-compose.yml` from the gitignored
+  `deploy/.env` (template `deploy/.env.example`). Every reference is
+  `${VAR:?...}`, so a missing file or value aborts `up` before any container
+  starts - no deployment can silently run the development credentials that are
+  public in this repository. `deploy/garage.toml` carries no secrets:
+  `rpc_secret` and the admin token reach Garage through the official
+  `GARAGE_RPC_SECRET` / `GARAGE_ADMIN_TOKEN` environment overrides.
 
 ## API routes
 

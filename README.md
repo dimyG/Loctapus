@@ -26,13 +26,31 @@ Configuration comes from `RAG_`-prefixed environment variables (see
 `backend/app/core/config.py`), with a `.env` file supported in `backend/`
 (`backend/.env.example` lists the commonly set ones; the copy is gitignored).
 The defaults target the compose services below, as seen from the host (the test
-suites); the containers get their own addresses from the compose file.
+suites); the containers get their own addresses from the compose file. The
+stack credentials (Postgres, RabbitMQ, Garage) interpolate into the compose file
+from `deploy/.env` (`deploy/.env.example` is the template; the copy is
+gitignored).
 
 ## Run the whole system
 
+Two gitignored copies seed the stack, and both abort `up` when missing:
+
 ```powershell
+copy deploy\.env.example deploy\.env
+copy backend\.env.example backend\.env
 docker compose -f deploy/docker-compose.yml up -d
 ```
+
+`deploy/.env` carries every stack credential (Postgres, RabbitMQ, Garage);
+`docker-compose.yml` interpolates each one as `${VAR:?...}`, so a missing file
+or value stops `up` with an error naming the variable before any container
+starts - no deployment can silently boot with the development credentials that
+are public in this repository. `backend/.env` carries the app settings:
+`RAG_JWT_SECRET` (token signing) and the Groq opt-in below; the api service
+loads it as a required env file (the long `env_file` syntax needs Docker
+Compose 2.24+). Both templates' values reproduce the historical development
+credentials, so existing named volumes keep working unchanged; a public
+deployment must generate fresh values instead (`openssl rand -hex 32`).
 
 This builds and starts all eight services: Postgres (pgvector, `localhost:5432`,
 `rag`/`rag`), RabbitMQ (management UI on `localhost:15672`), Garage (S3 API on
@@ -73,9 +91,9 @@ A Vite dev server (`npm run dev` in `web/` with
 `VITE_API_BASE_URL=http://localhost:8000/api`) still works against the compose API for
 ad-hoc UI work, but it is not the runbook path.
 
-Do not change `GARAGE_DEFAULT_SECRET_KEY` after first start: Garage binds its stored
-layout to the secret it was created with, startup fails with a different one, and the
-metadata volume must be wiped to recover.
+Do not change `GARAGE_DEFAULT_SECRET_KEY` (in `deploy/.env`) after first start: Garage binds
+its stored layout to the secret it was created with, startup fails with a different one,
+and the metadata volume must be wiped to recover.
 
 RabbitMQ state lives on the named `rabbitmqdata` volume, so queues and vhosts survive a
 `docker compose up -d --force-recreate rabbitmq`. This volume was introduced after the
@@ -88,7 +106,7 @@ The default stack stays offline: `llm_provider` defaults to `stub`, so `/answer`
 a fixed stub sentence grounded in the retrieved chunks. Copy `backend/.env.example` to
 `backend/.env`, uncomment `RAG_LLM_PROVIDER=groq`, and paste your key into
 `RAG_GROQ_API_KEY`. The compose `api` service reads that file when it starts (recreate
-it with `docker compose up -d` to pick up changes; the optional env-file syntax needs
+it with `docker compose up -d` to pick up changes; the long env-file syntax needs
 Docker Compose 2.24+), as do local runs started from `backend/`; the compose-fixed
 service addresses are unaffected. Answers then route through `openai/gpt-oss-20b` on
 Groq; a provider failure answers 502. The pytest and e2e suites pin the stub provider,
