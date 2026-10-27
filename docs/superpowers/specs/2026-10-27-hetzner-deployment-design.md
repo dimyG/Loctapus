@@ -94,10 +94,16 @@ back to a Regular Performance CPX server (about EUR 20 per month).
     suite drives the Vite dev server (:5173) against a native uvicorn (:8001) and never
     touches the web container, so the nginx-to-Caddy swap adds its own verification list
     (section 10).
-12. **The server runs in production mode.** The render writes `RAG_ENVIRONMENT=production`
-    into `backend/.env`: the rendered secrets are non-default, so the config validators
-    pass, and a mistaken render that ever fell back to the public development secrets
-    would refuse to boot instead of serving with them. `backend/.env.example` already says
+12. **The api service runs in production mode.** The render writes
+    `RAG_ENVIRONMENT=production` into `backend/.env` - the application-settings file,
+    distinct from `deploy/.env`, which is compose's interpolation file for stack
+    credentials and topology and is read by no container. Only the api service mounts
+    `backend/.env`, so the flag binds to the api container: deliberate, because the
+    production validators demand a non-default `RAG_JWT_SECRET`, which only the api's
+    environment carries - threaded to the worker or dispatcher, the flag would crash
+    them on the default jwt secret. The api is the internet-facing service the guard
+    exists for: a mistaken render that ever fell back to the public development secrets
+    refuses to boot instead of serving with them. `backend/.env.example` already says
     production is a deployment concern; this deployment takes it.
 
 ## 3. Web tier: nginx -> Caddy
