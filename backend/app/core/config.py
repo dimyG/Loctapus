@@ -56,7 +56,8 @@ class Settings(BaseSettings):
     answer_reuse_max_chunks: int = Field(default=10, ge=1)
     # Router cost guard: routing only emits one JSON line, so the completion stays tiny.
     llm_route_max_tokens: int = Field(default=128, gt=0)
-    # Router timeout sits inside nginx's 60s budget next to the 30s answer call.
+    # Router timeout guards the routing call; Caddy imposes no upstream read timeout, so
+    # the 30s answer call is bounded only by llm_timeout_seconds.
     llm_route_timeout_seconds: float = Field(default=10.0, gt=0)
 
     @model_validator(mode="after")
