@@ -1,7 +1,7 @@
 # Hetzner demo deployment - Design
 
 Date: 2026-10-27
-Status: Design round complete (2026-10-27); implementation pending.
+Status: Design round complete (2026-10-27); implemented (2026-10-27).
 Source of truth: the 2026-10-27 design conversation, on top of the compose stack as it
 stands (`deploy/docker-compose.yml` with its `deploy/.env.example` credentials contract)
 and `2026-10-16-docker-compose-full-stack-design.md`. Where those disagree with this
