@@ -5,19 +5,27 @@ x-backend: &backend
   build: ../backend
   image: rag-backend
 
+# Every stack credential interpolates from deploy/.env (template:
+# deploy/.env.example, copied gitignored). ${VAR:?...} makes `docker compose
+# up` abort before anything starts when the file or a value is missing, so no
+# deployment can silently boot with the development credentials that are
+# public in this repository. The app services additionally carry RAG_S3_* and
+# the connection URLs threaded from the same values, so a real deploy/.env
+# cannot drift from what the app connects with.
+
 services:
   db:
     image: pgvector/pgvector:0.8.7-pg17
     environment:
-      POSTGRES_USER: rag
-      POSTGRES_PASSWORD: rag
-      POSTGRES_DB: rag
+      POSTGRES_USER: ${POSTGRES_USER:?set in deploy/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in deploy/.env}
+      POSTGRES_DB: ${POSTGRES_DB:?set in deploy/.env}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rag"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -28,6 +36,9 @@ services:
     # RabbitMQ names its node after the container hostname, and a changed hostname
     # makes it refuse the existing mnesia directory.
     hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?set in deploy/.env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?set in deploy/.env}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -44,9 +55,14 @@ services:
     image: dxflrs/garage:v2.3.0
     command: /garage server --single-node --default-bucket
     environment:
-      GARAGE_DEFAULT_ACCESS_KEY: rag-dev-key
-      GARAGE_DEFAULT_SECRET_KEY: rag-dev-secret-local
-      GARAGE_DEFAULT_BUCKET: rag-dev
+      GARAGE_DEFAULT_ACCESS_KEY: ${GARAGE_DEFAULT_ACCESS_KEY:?set in deploy/.env}
+      GARAGE_DEFAULT_SECRET_KEY: ${GARAGE_DEFAULT_SECRET_KEY:?set in deploy/.env}
+      GARAGE_DEFAULT_BUCKET: ${GARAGE_DEFAULT_BUCKET:?set in deploy/.env}
+      # Official env overrides of deploy/garage.toml keys, which carries
+      # neither secret: rpc_secret authenticates node-to-node RPC (required
+      # even single-node) and admin_token guards the :3903 admin API.
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set in deploy/.env}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set in deploy/.env}
     ports:
       - "3900:3900"
       - "3903:3903"
@@ -68,7 +84,7 @@ services:
     init: true
     restart: "no"
     environment:
-      RAG_DATABASE_URL: postgresql+psycopg://rag:rag@db:5432/rag
+      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
       db:
         condition: service_healthy
@@ -79,16 +95,21 @@ services:
     init: true
     ports:
       - "8000:8000"
-    # Local secrets/overrides from backend/.env (the Groq key when answers opt
-    # in); optional so the offline default stack boots with no file. The
-    # environment block below wins over values injected from the file.
+    # App settings beyond the stack topology live in backend/.env (template:
+    # backend/.env.example, copied gitignored): RAG_JWT_SECRET (token signing)
+    # and the Groq opt-in. The file is required, so a stack can never boot with
+    # the public pydantic fallback secrets; the environment block below still
+    # wins over values injected from the file.
     env_file:
       - path: ../backend/.env
-        required: false
+        required: true
     environment:
-      RAG_DATABASE_URL: postgresql+psycopg://rag:rag@db:5432/rag
-      RAG_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      RAG_BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
       RAG_S3_ENDPOINT: http://garage:3900
+      RAG_S3_ACCESS_KEY: ${GARAGE_DEFAULT_ACCESS_KEY}
+      RAG_S3_SECRET_KEY: ${GARAGE_DEFAULT_SECRET_KEY}
+      RAG_S3_BUCKET: ${GARAGE_DEFAULT_BUCKET}
     depends_on:
       db:
         condition: service_healthy
@@ -110,9 +131,15 @@ services:
     command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "ingestion,embed", "--concurrency", "2"]
     init: true
     environment:
-      RAG_DATABASE_URL: postgresql+psycopg://rag:rag@db:5432/rag
-      RAG_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      RAG_BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
+      # The ingest tasks fetch the pinned bytes from Garage, so the S3
+      # credentials ride along instead of falling back to the pydantic
+      # development defaults.
       RAG_S3_ENDPOINT: http://garage:3900
+      RAG_S3_ACCESS_KEY: ${GARAGE_DEFAULT_ACCESS_KEY}
+      RAG_S3_SECRET_KEY: ${GARAGE_DEFAULT_SECRET_KEY}
+      RAG_S3_BUCKET: ${GARAGE_DEFAULT_BUCKET}
     depends_on:
       db:
         condition: service_healthy
@@ -126,9 +153,8 @@ services:
     command: ["python", "-m", "app.workers.dispatcher"]
     init: true
     environment:
-      RAG_DATABASE_URL: postgresql+psycopg://rag:rag@db:5432/rag
-      RAG_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
-      RAG_S3_ENDPOINT: http://garage:3900
+      RAG_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      RAG_BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
     depends_on:
       db:
         condition: service_healthy

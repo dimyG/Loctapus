@@ -6,8 +6,10 @@ replication_factor = 1
 metadata_dir = "/var/lib/garage/meta"
 data_dir = "/var/lib/garage/data"
 
-# Required even for a single node; a fixed dev-only value, like the compose credentials.
-rpc_secret = "bbd3b04a3fdd8c2c276f17a8b58a251313142d00e1c709fb1bc21e86994f7ff2"
+# rpc_secret is required even for a single node, but it is not here: compose
+# injects it from deploy/.env as GARAGE_RPC_SECRET (an official env override),
+# keeping the secret out of the repository. The admin API token likewise rides
+# the GARAGE_ADMIN_TOKEN env override.
 rpc_bind_addr = "[::]:3901"
 
 [s3_api]
