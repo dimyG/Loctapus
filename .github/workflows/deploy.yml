@@ -54,6 +54,9 @@ jobs:
             "$STACK_GARAGE_RPC_SECRET" "$STACK_GARAGE_DEFAULT_ACCESS_KEY" "$STACK_GARAGE_DEFAULT_SECRET_KEY" >> stack.env
           printf 'GARAGE_DEFAULT_BUCKET=%s\nGARAGE_ADMIN_TOKEN=%s\nSITE_ADDRESS=%s\n' \
             "$STACK_GARAGE_DEFAULT_BUCKET" "$STACK_GARAGE_ADMIN_TOKEN" "$STACK_SITE_ADDRESS" >> stack.env
+          # The JWT secret has no compose-side ${VAR:?} guard, so fail loudly here;
+          # an empty key would boot the api and break every login (pyjwt rejects it).
+          : "${APP_RAG_JWT_SECRET:?APP_RAG_JWT_SECRET secret is empty}"
           # Render backend/.env: APP_* stripped, production mode fixed, Groq
           # lines only when the key is set (an empty provider line fails boot).
           printf 'RAG_JWT_SECRET=%s\nRAG_ENVIRONMENT=production\n' "$APP_RAG_JWT_SECRET" > app.env
