@@ -4,10 +4,10 @@ import { api } from "../../app/api";
 /**
  * How long one upload request may run before the client gives up. A connection
  * that stalls mid-body never errors on its own, so without this cap the upload
- * button would stay disabled forever; 300s still fits the 25 MB maximum on a
- * ~0.7 Mbps uplink, the slowest link worth serving.
+ * button would stay disabled forever; 360s still fits the 25 MB maximum on a
+ * ~0.6 Mbps uplink, the slowest link worth serving.
  */
-export const UPLOAD_TIMEOUT_MS = 300_000;
+export const UPLOAD_TIMEOUT_MS = 360_000;
 
 /** The statuses an upload's latest pipeline run can report. */
 export type UploadStatus = "queued" | "fetching" | "processing" | "indexing" | "ready" | "failed";
