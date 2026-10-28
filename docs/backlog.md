@@ -469,3 +469,24 @@ New deferrals from the 2026-10-14 review fixes:
   SQL suppresses violations of every unique constraint on `revoked_tokens` while the
   comment names only the jti primary key; pass `index_elements=[RevokedToken.jti]`
   (from commit `c9942f7`).
+## 2026-10-28 - Hetzner deployment-session follow-ups
+
+From the live deployment of https://loctapus.com (CX23 in hel1, Ubuntu 24.04.4,
+master at `63747fe`, deploy runs `40560944690` red-as-expected and `40699445842`
+green):
+
+- `www.loctapus.com` CNAMEs to the apex, but the Caddy site (and certificate)
+  covers only `loctapus.com` per `STACK_SITE_ADDRESS`, so www fails TLS by
+  design; remove the record or extend the site address if www should work.
+- The `HETZNER_SSH_KEY` secret must carry the key file's trailing newline; a
+  paste without it makes the runner fail to load the key ("invalid format").
+  The runbook secrets table could call this out.
+- Hetzner Cloud API observation: the server `rebuild` action silently ignores
+  its `ssh_keys` parameter (the action succeeds, no key is injected), while
+  `enable_rescue` honors it; the runbook's rebuild guidance should note that key
+  injection after a rebuild takes a rescue-mode pass (observed 2026-10-28).
+- The pytest suite needs `db` + `rabbitmq` + `garage` live from the compose
+  project, not just `db`: observed 31 failed / 10 errors when only the database
+  was up, all connection-refused (Garage :3900, RabbitMQ :5672/:15672); a line
+  documenting the required services next to the AGENTS.md verification block
+  would prevent it.
