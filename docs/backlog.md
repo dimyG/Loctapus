@@ -28,6 +28,19 @@ and any request body past the initial congestion window stalled forever):
 - The live-site diagnosis registered a throwaway account (`diag-<random>@example.com`)
   holding two uploaded PDFs in its default project; the demo data is throwaway
   by design, so this needs no action, just awareness.
+- Post-deploy verification (2026-10-28 evening): the clamp is live and advertised
+  (a WSL capture shows `mss 1400` in the server's SYN-ACK) and unaffected paths
+  work (mobile network, WSL), but the owner's Windows machine still stalled at a
+  byte-identical point (163,341) - its stack never applied the server-advertised
+  MSS, so the working fix was local: interface MTU 1492 on the dev box
+  (`netsh ... mtu=1492`, `store=active`). The local culprit (Killer E2500 suite,
+  Avast stream filter, or a NIC offload quirk) stays unidentified and out of repo
+  scope; a packet capture on that box is the next step if it is ever pursued
+  (Wireshark there currently lists only loopback - Npcap is not installed).
+- The clamp is hardening for reduced-MTU visitors, not a fix the demo requires:
+  a WSL client uploaded 5 MB against the unclamped server (15:36, before the
+  first clamp deploy), so any sender whose segments already fit the path was
+  never affected.
 
 ## 2026-10-27 - Hetzner deployment follow-ups
 
