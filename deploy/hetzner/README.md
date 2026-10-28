@@ -135,6 +135,20 @@ Rotation rules:
 
 ## Operations
 
+- **TCP MSS clamp (upload stalls otherwise)**: `deploy.sh` clamps the MSS the
+  stack advertises on 80/443 SYN packets to 1400 bytes (mangle-table
+  `TCPMSS` rules on `INPUT`/`OUTPUT`/`FORWARD`, persisted in a marked block
+  appended to `/etc/ufw/before.rules` so reboots reload it). Why: a client whose
+  router is PPPoE or a tunnel and drops the fragmentation-needed ICMP never
+  learns the true path MTU (1492 or lower), so request bodies past the initial
+  congestion window - any PDF upload - stall mid-transfer with no error on
+  either side; observed 2026-10-28 as uploads hanging on the live site for a
+  Vodafone Greece PPPoE visitor while small requests kept working. Advertising
+  1400 caps every client's segments below every common reduced-MTU path, at a
+  few percent of packet overhead. Verify after a deploy with
+  `iptables -t mangle -S | grep TCPMSS` (four rules) and a real multi-MB PDF
+  upload. IPv6 caveat: the clamp is IPv4-only (`iptables`, not `ip6tables`);
+  add the `ip6tables` twin before ever adding an AAAA record for the domain.
 - **Redeploys**: push to `master`, or run the workflow manually via
   `workflow_dispatch` (also the way to re-render the env files after rotating a
   secret, with no code change).
