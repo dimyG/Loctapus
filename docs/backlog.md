@@ -29,7 +29,7 @@ and any request body past the initial congestion window stalled forever):
   holding two uploaded PDFs in its default project; the demo data is throwaway
   by design, so this needs no action, just awareness.
 
-
+## 2026-10-27 - Hetzner deployment follow-ups
 
 From the `hetzner-deployment` branch (spec
 `../specs/2026-10-27-hetzner-deployment-design.md`, plan
