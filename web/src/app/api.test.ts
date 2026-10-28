@@ -26,6 +26,13 @@ describe("getErrorMessage", () => {
     );
   });
 
+  it("maps request timeouts to retryable network copy", () => {
+    const error = { status: "TIMEOUT_ERROR", data: undefined, error: "Request timed out" };
+    expect(getErrorMessage(error)).toBe(
+      "Could not reach the server. Check your connection and try again.",
+    );
+  });
+
   it("falls back to a generic message for unknown shapes", () => {
     expect(getErrorMessage("nope")).toBe("Something went wrong. Please try again.");
   });

@@ -42,14 +42,15 @@ type ErrorLike = { status?: number | string; data?: unknown };
 /**
  * Maps an RTK Query error to user-facing copy. FastAPI errors carry
  * `{detail}` bodies; validation failures carry an array; network failures
- * carry FETCH_ERROR. Nothing raw from the payload is ever shown.
+ * carry FETCH_ERROR and stalled requests carry TIMEOUT_ERROR, which both
+ * mean retrying may help. Nothing raw from the payload is ever shown.
  */
 export function getErrorMessage(error: unknown): string {
   if (typeof error !== "object" || error === null) {
     return GENERIC_COPY;
   }
   const apiError = error as ErrorLike;
-  if (apiError.status === "FETCH_ERROR") {
+  if (apiError.status === "FETCH_ERROR" || apiError.status === "TIMEOUT_ERROR") {
     return NETWORK_COPY;
   }
   const data = apiError.data;
