@@ -30,8 +30,11 @@ services:
   web:
     ports: !override ["80:80", "443:443"]
     restart: unless-stopped
+    environment:
+      SITE_REDIRECT_FROM: www.loctapus.com
     volumes:
       - caddydata:/data
+      - ./hetzner/redirect.conf:/etc/caddy/redirect.conf:ro
 
 volumes:
   caddydata:

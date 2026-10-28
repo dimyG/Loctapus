@@ -1,4 +1,4 @@
-{$SITE_ADDRESS}
+{$SITE_ADDRESS} {
 
 request_body {
     # max_upload_mb (25) with headroom; the 1 MB default would reject uploads.
@@ -18,3 +18,8 @@ handle {
     try_files {path} /index.html
     file_server
 }
+}
+
+# Server-only redirect block, loaded from a fragment because a site label cannot
+# be empty: local dev ships an empty redirect.conf, the server mounts one.
+import redirect.conf

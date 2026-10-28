@@ -478,6 +478,9 @@ green):
 - `www.loctapus.com` CNAMEs to the apex, but the Caddy site (and certificate)
   covers only `loctapus.com` per `STACK_SITE_ADDRESS`, so www fails TLS by
   design; remove the record or extend the site address if www should work.
+  Resolved 2026-10-28 on master: the web tier gained a server-only redirect
+  fragment (empty `web/redirect.conf` locally, `deploy/hetzner/redirect.conf`
+  mounted by the override) that 301s `www.loctapus.com` to the apex.
 - The `HETZNER_SSH_KEY` secret must carry the key file's trailing newline; a
   paste without it makes the runner fail to load the key ("invalid format").
   The runbook secrets table could call this out.

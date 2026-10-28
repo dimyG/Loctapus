@@ -7,4 +7,5 @@ RUN npm run build
 
 FROM caddy:2-alpine
 COPY Caddyfile /etc/caddy/Caddyfile
+COPY redirect.conf /etc/caddy/redirect.conf
 COPY --from=build /app/dist /srv
