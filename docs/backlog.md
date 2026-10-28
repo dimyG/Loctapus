@@ -6,7 +6,30 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
-## 2026-10-27 - Hetzner deployment follow-ups
+## 2026-10-28 - Upload PMTUD fix follow-ups (`upload-pmtud-fix`)
+
+From the uploads-hang-on-Hetzner investigation (branch `upload-pmtud-fix`, commits
+`c87eae1` server-side MSS clamp, `595eb4f` upload stall timeout; root cause: the
+visitor's PPPoE path MTU of 1492 plus a router that rate-limits the
+fragmentation-needed ICMP, so full-size upstream TCP segments silently vanished
+and any request body past the initial congestion window stalled forever):
+
+- The MSS clamp is IPv4-only (`iptables`, not `ip6tables`); add the ip6tables
+  twin before the domain ever gets an AAAA record (also in the runbook's
+  Operations section).
+- The vitest suite's load-induced flakiness re-confirmed while baselining this
+  branch (5-8 failures, a different set each run, user-event typing arriving
+  scrambled under CPU starvation); this is the pre-existing 2026-10-12
+  "extreme parallel load" entry below, whose `pool: "vmThreads"` candidate fix
+  remains the tracking note.
+- `npm ci` in `web/` reports 2 high-severity vulnerabilities in dev
+  dependencies, present at the branch point and untouched by this task; a
+  `npm audit` triage pass is pending.
+- The live-site diagnosis registered a throwaway account (`diag-<random>@example.com`)
+  holding two uploaded PDFs in its default project; the demo data is throwaway
+  by design, so this needs no action, just awareness.
+
+
 
 From the `hetzner-deployment` branch (spec
 `../specs/2026-10-27-hetzner-deployment-design.md`, plan

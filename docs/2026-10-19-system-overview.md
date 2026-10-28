@@ -1,6 +1,6 @@
 # System overview
 
-Snapshot as of 2026-10-27, covering the service topology, the HTTP API, the
+Snapshot as of 2026-10-28, covering the service topology, the HTTP API, the
 web UI shell, and the database schema. Sources: `deploy/docker-compose.yml`,
 `backend/app/main.py` and the six routers it mounts, `web/Caddyfile`,
 `web/src/app/api.ts`, the RTK Query feature APIs plus
@@ -95,7 +95,14 @@ Caddy serving the built SPA from the `rag-web` image. It reverse-proxies `/api`
 to the api service so the browser path is same-origin (no CORS involved), falls
 back to `index.html` for SPA routes, allows request bodies up to 26 MiB so the
 25 MiB upload limit fits, and on the public server terminates TLS with
-automatically managed certificates.
+automatically managed certificates. The public VPS additionally clamps the TCP
+MSS it advertises on 80/443 down to 1400 bytes (`deploy/hetzner/deploy.sh`
+asserts the mangle-table rules and persists them in ufw's `before.rules`): a
+client on a PPPoE or tunnel path whose router drops the fragmentation-needed
+ICMP never learns the real path MTU, and any request body past the initial
+congestion window would stall forever - observed 2026-10-28 as PDF uploads
+hanging on the live site while working on localhost - so the small advertised
+MSS caps client segments below every common reduced-MTU path instead.
 
 The SPA itself is the official-MUI-template UI rebuilt on 2026-10-21 (branch
 `ui-mui-templates`): every signed-in route renders inside one dashboard shell,
@@ -123,7 +130,10 @@ source chips.
 
 Runtime flow of one upload:
 
-1. The UI POSTs the file to `/api/projects/{project_id}/uploads`. The API PUTs the
+1. The UI POSTs the file to `/api/projects/{project_id}/uploads` under a 300s
+   stall timeout (`UPLOAD_TIMEOUT_MS` in `web/src/features/uploads/uploadsApi.ts`),
+   so a hung connection surfaces retryable network copy instead of leaving the
+   upload button disabled forever. The API PUTs the
    bytes into Garage and records the upload, a queued ingestion run, and an outbox
    event in Postgres.
 2. The dispatcher polls the outbox table and publishes due events to RabbitMQ
