@@ -130,7 +130,7 @@ source chips.
 
 Runtime flow of one upload:
 
-1. The UI POSTs the file to `/api/projects/{project_id}/uploads` under a 300s
+1. The UI POSTs the file to `/api/projects/{project_id}/uploads` under a 360s
    stall timeout (`UPLOAD_TIMEOUT_MS` in `web/src/features/uploads/uploadsApi.ts`),
    so a hung connection surfaces retryable network copy instead of leaving the
    upload button disabled forever. The API PUTs the
