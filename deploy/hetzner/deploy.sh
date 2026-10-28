@@ -29,7 +29,10 @@ clamp_mss OUTPUT -p tcp --tcp-flags SYN,RST SYN -m multiport --sports 80,443
 # iptables-restore at every enable, and the block below carries the same four
 # rules in restore syntax. The marker makes the append idempotent.
 if ! grep -q "BEGIN Loctapus MSS clamp" /etc/ufw/before.rules; then
+  # The leading blank line keeps the marker off the last line when the file
+  # lost its trailing newline, which would splice the comment onto COMMIT.
   cat >> /etc/ufw/before.rules <<'EOF'
+
 # BEGIN Loctapus MSS clamp (added by deploy/hetzner/deploy.sh)
 *mangle
 -A FORWARD -p tcp --tcp-flags SYN,RST SYN -m multiport --dports 80,443 -j TCPMSS --set-mss 1400

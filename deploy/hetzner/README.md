@@ -17,8 +17,9 @@ Two scripts with different lifecycles and duties:
 - **Deploy** (`.github/workflows/deploy.yml` -> `deploy/hetzner/deploy.sh`) runs on
   every push to `master`, automatically. It renders `deploy/.env` and `backend/.env`
   from the GitHub secrets, copies them to the server, pulls the branch, and runs
-  `docker compose up -d --build` with the server override. It only ever touches the
-  checkout and the Docker images.
+  `docker compose up -d --build` with the server override. Beyond the checkout and
+  the Docker images it also re-asserts the TCP MSS clamp (host firewall state,
+  see Operations).
 
 Bootstrap ever runs again only on a rebuilt VPS. Invocation recipe (the repository is
 not cloned yet when bootstrap runs, so fetch it from raw GitHub):
