@@ -1,6 +1,6 @@
 # Server delta over deploy/docker-compose.yml for the Hetzner demo: only the
-# web tier is published (80/443), services survive reboots, and Caddy's
-# certificates survive container recreates. Run with:
+# web tier is published (80, 443 tcp, and 443 udp for HTTP/3), services survive
+# reboots, and Caddy's certificates survive container recreates. Run with:
 #   docker compose -f deploy/docker-compose.yml -f deploy/hetzner/docker-compose.server.yml
 # YAML anchors do not carry across files, so every service spells out its keys.
 
@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
 
   web:
-    ports: !override ["80:80", "443:443"]
+    ports: !override ["80:80", "443:443", "443:443/udp"]
     restart: unless-stopped
     environment:
       SITE_REDIRECT_FROM: www.loctapus.com

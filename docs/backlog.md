@@ -51,9 +51,10 @@ From the `hetzner-deployment` branch (spec
 - No ACME account email is configured for Caddy (it works without one; an email would
   add Let's Encrypt expiry notices and account recovery) - a candidate `email` global
   option for `web/Caddyfile`.
-- HTTP/3 stays off: its UDP port is unpublished, so browsers fall back silently to
-  HTTP/2; a candidate is publishing the UDP port via the server override plus a
-  `bootstrap.sh` firewall rule.
+- HTTP/3 is now on: resolved 2026-10-29 (branch `enable-http3-udp`) by publishing
+  443/udp in the server override and adding the ufw rule to `bootstrap.sh`; the live
+  box got the rule once by hand (bootstrap never re-runs). QUIC lets browsers bypass
+  flaky TCP-offload paths - the motivation is the 2026-10-29 close-out above.
 - Fresh-review residuals (Opus 5.5 whole-branch review; its actionable findings
   landed as `423428e`, `58bcded`, `828180d`): `bootstrap.sh` assumes ufw is
   preinstalled (true on stock Ubuntu 24.04 cloud images; `apt-get install -y ufw`

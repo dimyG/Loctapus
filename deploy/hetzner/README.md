@@ -10,8 +10,9 @@ platform: no backups, no zero-downtime, throwaway demo data.
 Two scripts with different lifecycles and duties:
 
 - **Bootstrap** (`deploy/hetzner/bootstrap.sh`) runs once per VPS, by hand, as root. It
-  installs Docker, creates a 2 GB swapfile, configures the ufw firewall (22, 80, 443),
-  clones the repository to `/root/Loctapus`, installs the CI deploy key, pre-creates the two
+  installs Docker, creates a 2 GB swapfile, configures the ufw firewall (22, 80,
+  443 tcp, 443 udp for HTTP/3), clones the repository to `/root/Loctapus`, installs
+  the CI deploy key, pre-creates the two
   env files with mode 600, and prints the `ssh-keyscan` host-key pin. It holds no
   secret values - every credential arrives via the first deploy.
 - **Deploy** (`.github/workflows/deploy.yml` -> `deploy/hetzner/deploy.sh`) runs on
@@ -141,6 +142,10 @@ Rotation rules:
 - **Pending runs**: deploys serialize (a compose up is never killed mid-flight). At
   most one run waits; a newer pending run replaces an older one, which is harmless
   because the pull always fetches the branch tip.
+- **HTTP/3 (UDP 443)**: the server override publishes 443/udp and bootstrap opens it
+  in ufw. The running VPS predates the UDP rule, so it was opened there once by hand
+  (`ufw allow 443/udp`, 2026-10-29) - bootstrap never re-runs on a live box; a
+  rebuilt VPS gets the rule from bootstrap automatically.
 - **Admin UIs**: the RabbitMQ management UI and the Garage admin API are not
   published on the server (only web's 80/443 are). Reach them through SSH with a
   loopback-only socat forward on the box:
