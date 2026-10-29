@@ -210,14 +210,19 @@ def delete_upload(*, db: Session, project_id: UUID, upload_id: UUID, storage: St
     item = get_upload_item(db=db, project_id=project_id, upload_id=upload_id)
     if item is None:
         return False
-    keys = set(
+    current_key = item.raw_object_key
+    superseded_keys = set(
         db.scalars(select(IngestionRun.raw_object_key).where(IngestionRun.source_item_id == item.id)).all()
     )
-    keys.add(item.raw_object_key)
+    superseded_keys.discard(current_key)
     # End the read transaction: no transaction may span the storage DELETEs.
     db.commit()
-    for key in keys:
+    # The current version's key goes last: a mid-loop storage failure then
+    # leaves the live row pointing at its actual bytes, and the 503's retry
+    # re-attempts every key (S3 deletes are idempotent).
+    for key in superseded_keys:
         storage.delete_object(key=key)
+    storage.delete_object(key=current_key)
     db.execute(delete(SourceItem).where(SourceItem.id == item.id))
     db.commit()
     return True

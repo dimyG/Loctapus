@@ -8,14 +8,26 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 
 ## 2026-10-29 - Minor review findings (`source-item-delete-uploading-state`)
 
-Left over from the branch's code review, all cosmetic-leaning:
+Left over from the branch's code reviews, all narrow or cosmetic:
 
 - The sources table's two snackbars (open-failure and delete-failure) share
   the default anchor and can overlap if both kinds of failure are open at
   once; consolidate or offset if it ever bites.
-- Upload retries racing a delete of the same item between the delete's read
-  and its row delete can orphan the retry's freshly stored object; a narrow
-  two-user race, noted here until deletes get a lock or a sweeper.
+- An upload retry racing a delete of the same item between the delete's key
+  collection and its row delete can orphan the retry's freshly stored object,
+  and the retry then dies with a 500 (`NoResultFound` from its locked re-read)
+  instead of a clean 404; a narrow two-user race, noted here until deletes
+  get a lock or storage gets a sweeper.
+- Re-uploading the name of an already-ready row flips that row to the inert
+  "uploading" status until the server's 409 comes back; the overlay matches
+  by filename, not by retryability. Cosmetic and self-correcting.
+- A poll response requested just before a delete (or upload) commits can
+  still land after it and briefly resurrect the row; the delayed invalidation
+  refetch corrects it one round-trip later. Pausing polling covers the POST
+  window but cannot cancel a request already in flight.
+- A re-delete fired inside that resurrected window gets a 404 and shows the
+  "Could not delete the file." snackbar; it self-heals on the next refetch.
+  Treating a delete 404 as success would paper over it.
 
 
 ## 2026-10-29 - README/env-template credential drift (noticed on `source-item-delete-uploading-state`)

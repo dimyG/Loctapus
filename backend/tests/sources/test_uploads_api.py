@@ -798,7 +798,7 @@ def test_delete_upload_without_stored_object_succeeds(*, client: TestClient, db_
 
 
 def test_delete_upload_storage_failure_returns_503(
-    *, client: TestClient, db_session: Session, settings: Settings
+    *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
     """Check that a storage failure during delete yields a 503 and leaves every row."""
 
@@ -824,6 +824,50 @@ def test_delete_upload_storage_failure_returns_503(
     assert r.json()["detail"] == "Could not delete the file. Please try again."
     assert db_session.query(SourceItem).count() == 1
     assert db_session.query(IngestionRun).count() == 1
+    item = db_session.query(SourceItem).one()
+    assert storage.get_object(key=item.raw_object_key) == b"bytes"
+
+
+def test_delete_upload_partial_storage_failure_keeps_the_current_object(
+    *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
+) -> None:
+    """Check that a failed superseded-key delete leaves the row's current bytes in place."""
+
+    headers = _auth(client=client, email="delete-partial@example.com")
+    project_id = _create_project(client=client, headers=headers, name="delete-partial")
+    first = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=b"first bytes"
+    )
+    assert first.status_code == 201
+    superseded_key = db_session.query(SourceItem).one().raw_object_key
+
+    run = db_session.query(IngestionRun).one()
+    assert claim_run(db=db_session, run_id=run.id) is True
+    mark_failed(db=db_session, run_id=run.id, expected=RunStatus.FETCHING, error="boom")
+    db_session.commit()
+    second = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=b"second bytes"
+    )
+    assert second.status_code == 201
+    current_key = db_session.query(SourceItem).one().raw_object_key
+
+    class FailingStorageService(StorageService):
+        """Storage service failing only the superseded key's delete."""
+
+        def delete_object(self, *, key: str) -> None:
+            """Fail the superseded key; delete everything else for real."""
+
+            if key == superseded_key:
+                raise StorageUnavailableError("backend down")
+            super().delete_object(key=key)
+
+    app.dependency_overrides[get_storage] = lambda: FailingStorageService(settings=settings)
+
+    r = client.delete(f"/api/projects/{project_id}/uploads/{second.json()['id']}", headers=headers)
+    assert r.status_code == 503
+    assert db_session.query(SourceItem).count() == 1
+    # The current version's bytes survive: the live row is never left keyless.
+    assert storage.get_object(key=current_key) == b"second bytes"
 
 
 def test_delete_upload_removes_every_version_of_the_object(

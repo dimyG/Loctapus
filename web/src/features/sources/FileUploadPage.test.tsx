@@ -306,6 +306,8 @@ describe("FileUploadPage", () => {
   it("marks the existing failed row as Uploading while its retry posts", async () => {
     // A retry reuses the item id and filename, so the row itself must flip
     // to Uploading for the transfer and land on Queued when it completes.
+    // The post-upload refetch fails: only the mutation's own cache upsert can
+    // deliver the Queued row, so the handoff is pinned without a fetch.
     const retriedRow: Upload = { ...failedUpload, status: "queued" };
     let posted = false;
     let release!: () => void;
@@ -313,9 +315,12 @@ describe("FileUploadPage", () => {
       release = resolve;
     });
     server.use(
-      http.get("*/projects/p-1/uploads", () =>
-        HttpResponse.json(posted ? [retriedRow] : [failedUpload]),
-      ),
+      http.get("*/projects/p-1/uploads", () => {
+        if (posted) {
+          return HttpResponse.json({ detail: "boom" }, { status: 500 });
+        }
+        return HttpResponse.json([failedUpload]);
+      }),
       http.post("*/projects/p-1/uploads", async () => {
         await gate;
         posted = true;
