@@ -22,11 +22,10 @@ mkswap /swapfile
 swapon /swapfile
 grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
-# Firewall: SSH plus the published web ports (443/udp carries HTTP/3).
+# Firewall: SSH plus the two published web ports.
 ufw allow 22/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
-ufw allow 443/udp
 ufw --force enable
 
 # The application tree (public repository, no credentials needed).

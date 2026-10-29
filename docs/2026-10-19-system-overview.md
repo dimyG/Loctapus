@@ -95,13 +95,7 @@ Caddy serving the built SPA from the `rag-web` image. It reverse-proxies `/api`
 to the api service so the browser path is same-origin (no CORS involved), falls
 back to `index.html` for SPA routes, allows request bodies up to 26 MiB so the
 25 MiB upload limit fits, and on the public server terminates TLS with
-automatically managed certificates. There Caddy also serves HTTP/3 (QUIC over
-UDP 443, published by the server compose override): browsers adopt it per-origin
-once the first HTTPS response advertises it via Alt-Svc and fall back to TCP
-transparently when UDP is unavailable, so clients with TCP-side path quirks can
-ride QUIC instead. (The one known doubly-broken client - the owner's wired NIC
-defeats both transports - is tracked in `docs/backlog.md`'s paused
-investigation.)
+automatically managed certificates.
 
 The SPA itself is the official-MUI-template UI rebuilt on 2026-10-21 (branch
 `ui-mui-templates`): every signed-in route renders inside one dashboard shell,

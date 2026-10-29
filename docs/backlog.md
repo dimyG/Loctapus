@@ -80,11 +80,11 @@ From the `hetzner-deployment` branch (spec
 - No ACME account email is configured for Caddy (it works without one; an email would
   add Let's Encrypt expiry notices and account recovery) - a candidate `email` global
   option for `web/Caddyfile`.
-- HTTP/3 is now on: resolved 2026-10-29 (branch `enable-http3-udp`) by publishing
-  443/udp in the server override and adding the ufw rule to `bootstrap.sh`; the live
-  box got the rule once by hand (bootstrap never re-runs). HTTP/3 lets UDP-capable
-  clients bypass flaky TCP paths; the motivation and the owner's wired-box limitation
-  are recorded in the paused 2026-10-29 investigation section above.
+- HTTP/3 over UDP 443: tried 2026-10-29 and reverted the same day (`2c6f20a`,
+  then its revert). The server side worked, but the owner's machines break
+  sustained UDP transfers (large h3 requests die without a clean fallback, on
+  wired and WiFi alike), so the site stays TCP-only; the full story is in the
+  paused 2026-10-29 investigation section above.
 - Fresh-review residuals (Opus 5.5 whole-branch review; its actionable findings
   landed as `423428e`, `58bcded`, `828180d`): `bootstrap.sh` assumes ufw is
   preinstalled (true on stock Ubuntu 24.04 cloud images; `apt-get install -y ufw`
