@@ -8,12 +8,12 @@ from datetime import datetime
 from types import MappingProxyType
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.ingestion.models import Document
+from app.ingestion.models import Document, IngestionRun
 from app.ingestion.runs import latest_run_status, request_ingestion
 from app.ingestion.status import RunStatus
 from app.sources.models import Source, SourceItem
@@ -196,21 +196,29 @@ def delete_upload(*, db: Session, project_id: UUID, upload_id: UUID, storage: St
     """Delete one upload item with its pipeline rows and stored bytes, returning whether it existed.
 
     The database cascade removes the item's documents, chunks, and runs in the same
-    transaction, and conversation citations settle to NULL by their own FK. The object
-    delete runs first and outside any transaction, so a storage failure leaves every
-    row untouched; S3's idempotent delete keeps an item whose bytes are already gone
-    deletable. A queued or running ingestion survives as a no-op: the worker's guarded
-    transitions treat the vanished run row as a stale delivery.
+    transaction, and conversation citations settle to NULL by their own FK. Every
+    version's object goes: a retry stores new bytes under a new content-hashed key
+    while the run rows pin the superseded keys, so the keys come from the item and
+    its runs. The object deletes run first and outside any transaction, so a storage
+    failure leaves every row untouched; S3's idempotent delete keeps an item whose
+    bytes are already gone deletable. A queued or running ingestion survives as a
+    no-op: the worker's guarded transitions treat the vanished run row as a stale
+    delivery. The row delete is a plain statement so a concurrent delete loses
+    cleanly instead of failing the request.
     """
 
     item = get_upload_item(db=db, project_id=project_id, upload_id=upload_id)
     if item is None:
         return False
-    raw_object_key = item.raw_object_key
-    # End the read transaction: no transaction may span the storage DELETE.
+    keys = set(
+        db.scalars(select(IngestionRun.raw_object_key).where(IngestionRun.source_item_id == item.id)).all()
+    )
+    keys.add(item.raw_object_key)
+    # End the read transaction: no transaction may span the storage DELETEs.
     db.commit()
-    storage.delete_object(key=raw_object_key)
-    db.delete(item)
+    for key in keys:
+        storage.delete_object(key=key)
+    db.execute(delete(SourceItem).where(SourceItem.id == item.id))
     db.commit()
     return True
 

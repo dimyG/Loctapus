@@ -824,3 +824,108 @@ def test_delete_upload_storage_failure_returns_503(
     assert r.json()["detail"] == "Could not delete the file. Please try again."
     assert db_session.query(SourceItem).count() == 1
     assert db_session.query(IngestionRun).count() == 1
+
+
+def test_delete_upload_removes_every_version_of_the_object(
+    *, client: TestClient, db_session: Session, storage: StorageService
+) -> None:
+    """Check that deleting a retried upload removes both the current and the superseded bytes."""
+
+    headers = _auth(client=client, email="delete-versions@example.com")
+    project_id = _create_project(client=client, headers=headers, name="delete-versions")
+    first = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=b"first bytes"
+    )
+    assert first.status_code == 201
+    first_key = db_session.query(SourceItem).one().raw_object_key
+
+    run = db_session.query(IngestionRun).one()
+    assert claim_run(db=db_session, run_id=run.id) is True
+    mark_failed(db=db_session, run_id=run.id, expected=RunStatus.FETCHING, error="boom")
+    db_session.commit()
+
+    # The retry's different content lands under a new content-hashed key.
+    second = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=b"second bytes"
+    )
+    assert second.status_code == 201
+    second_key = db_session.query(SourceItem).one().raw_object_key
+    assert first_key != second_key
+
+    r = client.delete(f"/api/projects/{project_id}/uploads/{second.json()['id']}", headers=headers)
+    assert r.status_code == 204
+    with pytest.raises(ObjectNotFoundError):
+        storage.get_object(key=first_key)
+    with pytest.raises(ObjectNotFoundError):
+        storage.get_object(key=second_key)
+
+
+def test_delete_queued_upload_leaves_the_ingest_task_a_clean_noop(
+    *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
+) -> None:
+    """Check that ingesting a deleted item's run returns cleanly instead of crashing."""
+
+    headers = _auth(client=client, email="delete-queued@example.com")
+    project_id = _create_project(client=client, headers=headers, name="delete-queued")
+    content = (FIXTURES_DIR / "tiny.pdf").read_bytes()
+    upload = _upload(
+        client=client, headers=headers, project_id=project_id, filename="tiny.pdf", content=content
+    )
+    assert upload.status_code == 201
+    run_id = db_session.query(IngestionRun).one().id
+
+    r = client.delete(f"/api/projects/{project_id}/uploads/{upload.json()['id']}", headers=headers)
+    assert r.status_code == 204
+
+    # The dispatcher publishes the queued event after the delete: a no-op.
+    ingest_source_item(
+        db=db_session,
+        ingestion_run_id=run_id,
+        storage=storage,
+        parser=get_parser(settings=settings),
+        settings=settings,
+    )
+    assert db_session.query(SourceItem).count() == 0
+    assert db_session.query(IngestionRun).count() == 0
+    assert db_session.query(Document).count() == 0
+
+
+def test_delete_after_ingest_leaves_the_embed_task_a_clean_noop(
+    *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
+) -> None:
+    """Check that embedding a deleted item's document returns cleanly instead of crashing."""
+
+    headers = _auth(client=client, email="delete-embed@example.com")
+    project_id = _create_project(client=client, headers=headers, name="delete-embed")
+    content = (FIXTURES_DIR / "tiny.pdf").read_bytes()
+    upload = _upload(
+        client=client, headers=headers, project_id=project_id, filename="tiny.pdf", content=content
+    )
+    assert upload.status_code == 201
+
+    run = db_session.query(IngestionRun).one()
+    ingest_source_item(
+        db=db_session,
+        ingestion_run_id=run.id,
+        storage=storage,
+        parser=get_parser(settings=settings),
+        settings=settings,
+    )
+    db_session.refresh(run)
+    document_id = run.document_id
+    assert document_id is not None
+
+    r = client.delete(f"/api/projects/{project_id}/uploads/{upload.json()['id']}", headers=headers)
+    assert r.status_code == 204
+
+    # The document's embed event is published after the delete: a no-op.
+    embed_document(
+        db=db_session,
+        document_id=document_id,
+        ingestion_run_id=run.id,
+        embedding_provider=get_embedding_provider(settings=settings),
+        settings=settings,
+    )
+    assert db_session.query(SourceItem).count() == 0
+    assert db_session.query(Document).count() == 0
+    assert db_session.query(Chunk).count() == 0
