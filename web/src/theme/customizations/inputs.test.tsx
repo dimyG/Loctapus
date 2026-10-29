@@ -92,12 +92,14 @@ describe("inputsCustomizations", () => {
   it("skins dark-scheme primary contained buttons in the Loctapus brand blue", () => {
     const { dark } = resolveButtonVariant("primary", "contained");
     expect(dark.color).toBe("white");
-    // Every surface the white label can rest on keeps WCAG AA contrast
-    // (>= 4.5:1): brand[500] is 5.2:1 and brand[700]/[800] are darker still;
-    // the brighter brand[400]/[600] stops fall short.
+    // The skin is flat: no gradient, no inset shadows, one uniform border.
+    // The flat brand[500] fill keeps the white label at WCAG AA contrast
+    // (5.2:1) where the logo's brighter brand[400]/[600] fall short.
     expect(dark.backgroundColor).toBe(brand[500]);
-    expect(dark.backgroundImage).toBe(`linear-gradient(to bottom, ${brand[500]}, ${brand[700]})`);
-    expect(dark["&:hover"]).toMatchObject({ backgroundColor: brand[700] });
+    expect(dark.backgroundImage).toBe("none");
+    expect(dark.boxShadow).toBe("none");
+    expect(dark.border).toBe(`1px solid ${brand[600]}`);
+    expect(dark["&:hover"]).toMatchObject({ backgroundColor: brand[700], boxShadow: "none" });
     expect(dark["&:active"]).toMatchObject({ backgroundColor: brand[800] });
   });
 });
