@@ -41,8 +41,12 @@ describe("MarketingFrame", () => {
         <div>marketing-content</div>
       </MarketingFrame>,
     );
-    await user.click(screen.getByRole("button", { name: "menu" }));
+    const trigger = screen.getByRole("button", { name: "menu" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(trigger);
     const menu = await screen.findByRole("navigation", { name: "Mobile menu" });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(trigger).toHaveAttribute("aria-controls", "mobile-menu");
     expect(within(menu).getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
     expect(within(menu).getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
     expect(await within(menu).findByRole("button", { name: "color mode" })).toBeInTheDocument();

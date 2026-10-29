@@ -10,6 +10,7 @@ import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { alpha, styled } from "@mui/material/styles";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -43,6 +44,11 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const openMenu = () => setMenuOpen(true);
   const closeMenu = () => setMenuOpen(false);
+  // The trigger hides at md and up, so the drawer must not outlive the mobile
+  // layout: an open sheet would keep its backdrop and scroll lock over the
+  // desktop bar after a resize or rotation.
+  const desktopUp = useMediaQuery((theme) => theme.breakpoints.up("md"));
+  const drawerOpen = menuOpen && !desktopUp;
   // Below md the bar only keeps the brand and the primary CTA; the rest moves
   // into the drawer so the pill cannot wrap on narrow screens.
   const desktopOnly = { display: { xs: "none", md: "inline-flex" } };
@@ -106,6 +112,8 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
               </Box>
               <IconButton
                 aria-label="menu"
+                aria-expanded={drawerOpen}
+                aria-controls={drawerOpen ? "mobile-menu" : undefined}
                 size="small"
                 onClick={openMenu}
                 sx={{ display: { xs: "inline-flex", md: "none" } }}
@@ -116,9 +124,10 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
           </StyledToolbar>
         </Container>
       </AppBar>
-      <Drawer anchor="top" open={menuOpen} onClose={closeMenu}>
+      <Drawer anchor="top" open={drawerOpen} onClose={closeMenu}>
         <Box
           component="nav"
+          id="mobile-menu"
           aria-label="Mobile menu"
           sx={{ p: 2, display: "grid", gap: 1, backgroundColor: "background.default" }}
         >
