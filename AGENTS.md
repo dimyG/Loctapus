@@ -15,8 +15,9 @@
 This is the list of allowed models: 
   1. GLM 5.3 flash 
   2. GLM 5.3
-  3. Kimi K3 
-  4. Claude Opus 5.5 
+  3. Kimi K3
+  4. Kimi K3.1 Pro 
+  5. Claude Opus 5.5 
 Use Claude Opus 5.5 only for fresh context reviews. Use Kimi K3 as an alternative to GLM 5.3 when the second one is stuck
 
 ## Generic 
