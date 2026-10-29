@@ -6,6 +6,15 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-29 - Light-scheme contained buttons keep MUI's default state shadows (`mobile-navbar-dark-buttons`)
+
+The 5e30230 review noticed the light scheme's primary-contained variant never
+resets MUI's default `&:active`/`.Mui-focusVisible` drop shadows (only `:hover`
+resets `boxShadow`), so a light-theme primary button can flash a shadow on
+keyboard activation or click. Pre-existing, cosmetic; reset `boxShadow` in
+those states if the light skin ever goes flat like the dark one did.
+
+
 ## 2026-10-29 - Marketing navbar e2e has not run under the canonical config (`mobile-navbar-dark-buttons`)
 
 `web/e2e/marketing-navbar.spec.ts` (commit `a0383f9`) was verified 3/3 locally
