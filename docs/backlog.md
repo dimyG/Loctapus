@@ -6,20 +6,48 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
-## 2026-10-29 - Upload-stall investigation close-out (`upload-pmtud-fix`)
+## 2026-10-29 - Upload-stall investigation (paused) (`upload-pmtud-fix`, `enable-http3-udp`)
 
-From the uploads-hang-on-Hetzner investigation (branch `upload-pmtud-fix`): the
-server-side TCP MSS clamp (`c87eae1`, deployed 2026-10-28) was rolled back on
-2026-10-29 at the owner's request (`f96ff5b`, plus stripping the live mangle
-rules and the `before.rules` block on the VPS); only the client-side stall
-timeout survives (`595eb4f`, `961a03a`). Close-out picture: the owner's home
-path MTU is 1492 (PPPoE), and the return path already advertises a PPPoE-safe
-MSS of 1452 to clients, so the observed stall was local to the owner's machine -
-its Killer E2500 wired NIC (offload/driver) sends 1500-byte packets regardless
-of the peer-advertised MSS, and they die at the 1492 link; the same box on WiFi
-or through WSL, and any phone on the same network, honors the advertised MSS and
-uploads fine. The clamp commits survive in history should reduced-MTU hardening
-ever be wanted again.
+The bug: uploads from the owner's wired PC stall forever on the live site (the
+body stops at a fixed ~163 KB), while the same box on WiFi or via WSL, and any
+other network, works. The investigation stopped 2026-10-29 at the owner's
+request; the server was exonerated and both deployed fixes are correct and stay:
+
+- Client-side 360 s stall timeout with retryable error copy (`595eb4f`,
+  `961a03a`): a stalled upload now surfaces an error instead of hanging.
+- HTTP/3 over UDP 443 (`2c6f20a`, branch `enable-http3-udp`): the server
+  override publishes the port and ufw allows it (bootstrap rule plus one manual
+  command on the live box). Verified end-to-end through the owner's own home
+  path with an aioquic client: a small GET, a 693 KB download, and a 3 MB
+  upload all succeed at line speed.
+- The server-side TCP MSS clamp shipped first (`c87eae1`) was permanently
+  rolled back (`f96ff5b`, live rules stripped): the owner's return path
+  (Fritz!Box/ISP, PPPoE) already advertises a PPPoE-safe MSS of 1452 to clients,
+  so the clamp protected nobody who needed it. The commits survive in history.
+
+Root cause, twice over - both local to the owner's machine:
+
+- TCP: the wired Killer E2500 ignores the peer-advertised MSS and sends
+  1500-byte packets that die at the home link's 1492-byte PPPoE MTU (the stall
+  byte count was identical with and without the clamp; WiFi/WSL/mobile honor
+  the MSS and work; interface MTU 1492 fixes wired).
+- UDP/QUIC: Chrome on the wired box completes small h3 requests but sustained
+  h3 flows die at ~6.6 s with Chrome error 85 (QUIC_TOO_MANY_RTOS, "Network
+  blackhole detected"); Chrome then pins the origin to h2 and the TCP fallback
+  re-triggers the stall (Caddy's logs hold the matching server-side errors).
+  A 3 MB h3 upload and a 693 KB h3 download through the same wire from WSL
+  succeed, so the sustained-UDP blackout is Windows-local too.
+
+Resume ladder for the wired PC (~10 min, in order): (1) pause Avast entirely
+and retry - its stream filter is a documented QUIC breaker and runs on the box;
+(2) disable UDP Checksum Offload (IPv4/IPv6) on "Ethernet 2" via
+`Set-NetAdapterAdvancedProperty -Name "Ethernet 2" -DisplayName "UDP Checksum
+Offload (IPv4)" -DisplayValue "Disabled"` and retry - Large Send Offload v2 is
+the parallel suspect for the TCP half; (3) cross-check speed.cloudflare.com on
+wired (isolates the machine from the site), then update or replace the Killer
+driver suite. Workarounds until then: WiFi or mobile, or interface MTU 1492 on
+the wired NIC (`netsh interface ipv4 set subinterface "Ethernet 2" mtu=1492
+store=active`).
 
 - The vitest suite's load-induced flakiness re-confirmed while baselining this
   branch (5-8 failures, a different set each run, user-event typing arriving
@@ -30,8 +58,9 @@ ever be wanted again.
   dependencies, present at the branch point and untouched by this task; a
   `npm audit` triage pass is pending.
 - The live-site diagnosis registered a throwaway account (`diag-<random>@example.com`)
-  holding two uploaded PDFs in its default project; the demo data is throwaway
-  by design, so this needs no action, just awareness.
+  holding several throwaway PDFs in its default project (including the QUIC
+  verification's 3 MB probe); the demo data is throwaway by design, so this
+  needs no action, just awareness.
 
 ## 2026-10-27 - Hetzner deployment follow-ups
 
@@ -53,8 +82,9 @@ From the `hetzner-deployment` branch (spec
   option for `web/Caddyfile`.
 - HTTP/3 is now on: resolved 2026-10-29 (branch `enable-http3-udp`) by publishing
   443/udp in the server override and adding the ufw rule to `bootstrap.sh`; the live
-  box got the rule once by hand (bootstrap never re-runs). QUIC lets browsers bypass
-  flaky TCP-offload paths - the motivation is the 2026-10-29 close-out above.
+  box got the rule once by hand (bootstrap never re-runs). HTTP/3 lets UDP-capable
+  clients bypass flaky TCP paths; the motivation and the owner's wired-box limitation
+  are recorded in the paused 2026-10-29 investigation section above.
 - Fresh-review residuals (Opus 5.5 whole-branch review; its actionable findings
   landed as `423428e`, `58bcded`, `828180d`): `bootstrap.sh` assumes ufw is
   preinstalled (true on stock Ubuntu 24.04 cloud images; `apt-get install -y ufw`
