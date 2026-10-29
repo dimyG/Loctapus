@@ -17,7 +17,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import UploadStatusChip from "../uploads/UploadStatusChip";
-import type { Upload } from "../uploads/uploadsApi";
+import type { SourceRow } from "../uploads/uploadsApi";
 import { useDeleteUploadMutation, useLazyGetUploadRawQuery } from "../uploads/uploadsApi";
 
 /**
@@ -27,23 +27,25 @@ import { useDeleteUploadMutation, useLazyGetUploadRawQuery } from "../uploads/up
  * second source type exists. Rows delete through a confirm dialog; a failed
  * delete surfaces in a snackbar whose action retries it.
  */
-export default function SourceItemsTable({ items }: { items: Upload[] }) {
+export default function SourceItemsTable({ items }: { items: SourceRow[] }) {
   const [getRaw] = useLazyGetUploadRawQuery();
   const [deleteUpload] = useDeleteUploadMutation();
   // One open at a time across the table: the row whose fetch is in flight,
   // so a second click anywhere is ignored instead of double-opening.
   const [pendingId, setPendingId] = useState<string | null>(null);
   // The row whose open failed, kept so the snackbar's action can retry it.
-  const [failedUpload, setFailedUpload] = useState<Upload | null>(null);
+  const [failedUpload, setFailedUpload] = useState<SourceRow | null>(null);
   // The row the confirm dialog is armed on; null keeps the dialog closed.
-  const [deleteCandidate, setDeleteCandidate] = useState<Upload | null>(null);
-  // The row whose delete request is in flight, so it cannot be fired twice.
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<SourceRow | null>(null);
+  // The rows whose delete request is in flight, each unrepeatable mid-delete.
+  const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(new Set());
   // The row whose delete failed, kept so the snackbar's action can retry it.
-  const [failedDelete, setFailedDelete] = useState<Upload | null>(null);
+  const [failedDelete, setFailedDelete] = useState<SourceRow | null>(null);
+  // Outlives the armed row so the closing dialog's text survives its exit transition.
+  const [shownCandidate, setShownCandidate] = useState<SourceRow | null>(null);
 
   /** Fetches the upload's raw bytes and opens them as a blob in a new tab. */
-  async function openUpload(item: Upload) {
+  async function openUpload(item: SourceRow) {
     if (pendingId !== null) {
       return;
     }
@@ -62,17 +64,21 @@ export default function SourceItemsTable({ items }: { items: Upload[] }) {
   }
 
   /** Fires the delete for one row; a failure keeps the row and offers a retry. */
-  async function deleteItem(item: Upload) {
-    if (deletingId !== null) {
+  async function deleteItem(item: SourceRow) {
+    if (deletingIds.has(item.id)) {
       return;
     }
-    setDeletingId(item.id);
+    setDeletingIds((current) => new Set(current).add(item.id));
     try {
       await deleteUpload({ projectId: item.project_id, uploadId: item.id }).unwrap();
     } catch {
       setFailedDelete(item);
     } finally {
-      setDeletingId(null);
+      setDeletingIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
     }
   }
 
@@ -121,8 +127,11 @@ export default function SourceItemsTable({ items }: { items: Upload[] }) {
                   {item.status !== "uploading" && (
                     <IconButton
                       aria-label={`Delete ${item.filename}`}
-                      disabled={deletingId === item.id}
-                      onClick={() => setDeleteCandidate(item)}
+                      disabled={deletingIds.has(item.id)}
+                      onClick={() => {
+                        setShownCandidate(item);
+                        setDeleteCandidate(item);
+                      }}
                     >
                       <DeleteOutlineRoundedIcon />
                     </IconButton>
@@ -138,12 +147,16 @@ export default function SourceItemsTable({ items }: { items: Upload[] }) {
           </Typography>
         )}
       </Card>
-      <Dialog open={deleteCandidate !== null} onClose={() => setDeleteCandidate(null)}>
+      <Dialog
+        open={deleteCandidate !== null}
+        onClose={() => setDeleteCandidate(null)}
+        slotProps={{ transition: { onExited: () => setShownCandidate(null) } }}
+      >
         <DialogTitle>Delete source item?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {deleteCandidate !== null &&
-              `"${deleteCandidate.filename}" and its indexed content will be permanently deleted.`}
+            {shownCandidate !== null &&
+              `"${shownCandidate.filename}" and its indexed content will be permanently deleted.`}
           </DialogContentText>
         </DialogContent>
         <DialogActions>

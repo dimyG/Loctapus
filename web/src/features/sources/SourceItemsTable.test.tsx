@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import { server } from "../../test/server";
 import { renderWithProviders } from "../../test/test-utils";
-import type { Upload } from "../uploads/uploadsApi";
+import type { SourceRow, Upload } from "../uploads/uploadsApi";
 import SourceItemsTable from "./SourceItemsTable";
 
 const queuedUpload: Upload = {
@@ -95,7 +95,7 @@ describe("SourceItemsTable", () => {
   });
 
   it("renders an uploading row as inert: no open button and no delete action", () => {
-    const uploadingRow: Upload = {
+    const uploadingRow: SourceRow = {
       ...queuedUpload,
       id: "pending-incoming.pdf",
       status: "uploading",
@@ -207,6 +207,40 @@ describe("SourceItemsTable", () => {
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(deletes).toBe(0);
+  });
+
+  it("runs a second row's delete while the first is still in flight", async () => {
+    const deletes: string[] = [];
+    let releaseFirst!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    server.use(
+      http.delete("*/api/projects/p-1/uploads/s-1", async () => {
+        deletes.push("s-1");
+        await gate;
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.delete("*/api/projects/p-1/uploads/s-2", () => {
+        deletes.push("s-2");
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithProviders(<SourceItemsTable items={uploadRows} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete brief.pdf" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete" }),
+    );
+    await waitFor(() => expect(deletes).toEqual(["s-1"]));
+    // The closing dialog keeps the page aria-hidden until its exit transition ends.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    // The first delete is still in flight; the second row's delete must fire too.
+    await user.click(screen.getByRole("button", { name: "Delete report.docx" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(deletes).toEqual(["s-1", "s-2"]));
+    releaseFirst();
   });
 
   it("shows a retryable snackbar when the delete fails", async () => {

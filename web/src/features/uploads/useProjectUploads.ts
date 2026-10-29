@@ -21,13 +21,15 @@ function selectUploads(projectId: string) {
 /**
  * A project's uploads with their query state, owning the poll period: 2s
  * while any row is non-terminal, 0 once every row is terminal or an
- * uncached fetch failed. The cached reads happen through store selectors
- * memoized per projectId, so they are created once per project and never
- * on every store update.
+ * uncached fetch failed. `pausePolling` suspends the poll while an upload
+ * POST is in flight, so a stale pre-commit response can never overwrite the
+ * row the mutation inserts on completion. The cached reads happen through
+ * store selectors memoized per projectId, so they are created once per
+ * project and never on every store update.
  */
 export function useProjectUploads(
   projectId: string | undefined,
-  options: { skip: boolean },
+  options: { skip: boolean; pausePolling?: boolean },
 ): {
   uploads: Upload[] | undefined;
   isLoading: boolean;
@@ -68,7 +70,7 @@ export function useProjectUploads(
     error,
     refetch,
   } = useGetUploadsQuery(options.skip || projectId === undefined ? skipToken : projectId, {
-    pollingInterval: uploadsPending ? POLL_INTERVAL_MS : 0,
+    pollingInterval: uploadsPending && options.pausePolling !== true ? POLL_INTERVAL_MS : 0,
   });
   return { uploads, isLoading, error, refetch };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { UploadStatus } from "./uploadsApi";
+import type { RowStatus } from "./uploadsApi";
 import { isTerminal, statusChip } from "./uploadStatus";
 
 describe("isTerminal", () => {
@@ -12,7 +12,7 @@ describe("isTerminal", () => {
   });
 
   it("keeps every in-flight stage non-terminal", () => {
-    const inFlight: UploadStatus[] = ["uploading", "queued", "fetching", "processing", "indexing"];
+    const inFlight: RowStatus[] = ["uploading", "queued", "fetching", "processing", "indexing"];
     for (const status of inFlight) {
       expect(isTerminal(status)).toBe(false);
     }
@@ -21,7 +21,7 @@ describe("isTerminal", () => {
 
 describe("statusChip", () => {
   it("labels every status with its capitalized name", () => {
-    const statuses: UploadStatus[] = [
+    const statuses: RowStatus[] = [
       "uploading",
       "queued",
       "fetching",
@@ -42,7 +42,7 @@ describe("statusChip", () => {
   });
 
   it("colors every in-flight stage primary", () => {
-    const inFlight: UploadStatus[] = ["uploading", "queued", "fetching", "processing", "indexing"];
+    const inFlight: RowStatus[] = ["uploading", "queued", "fetching", "processing", "indexing"];
     for (const status of inFlight) {
       expect(statusChip(status).color).toBe("primary");
     }

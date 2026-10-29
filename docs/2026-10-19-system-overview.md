@@ -238,13 +238,15 @@ All routes are served under the `/api` prefix (`app.include_router(..., prefix="
 | --- | --- | --- | --- |
 | POST | `/api/projects/{project_id}/uploads` | Store one uploaded file (PDF/DOCX, size-gated), queues an ingestion run | UploadDropzone (file-upload page) |
 | GET | `/api/projects/{project_id}/uploads` (polled by the UI: every 2s while any upload row is non-terminal; stops when all rows are terminal or an uncached fetch fails) | List a project's uploads newest first, status derived from the latest run | The sources and file-upload pages' tables and the chat page's readiness (`useProjectUploads`); the `/app` resolver's chattable walk (direct `uploadsApi.endpoints.getUploads.initiate` dispatches, not the hook) |
-| DELETE | `/api/projects/{project_id}/uploads/{upload_id}` | Delete one upload item (editor role): documents, chunks, and runs cascade with the row, conversation citations settle to NULL, and the stored bytes are removed from Garage first so a storage failure leaves every row untouched | SourceItemsTable's per-row delete action |
+| DELETE | `/api/projects/{project_id}/uploads/{upload_id}` | Delete one upload item (editor role): documents, chunks, and runs cascade with the row, conversation citations settle to NULL, and every stored version of the bytes (the item's current key plus each run's pinned key) is removed from Garage first, so a storage failure leaves every row untouched | SourceItemsTable's per-row delete action |
 | GET | `/api/projects/{project_id}/uploads/{upload_id}/raw` | Return an upload's stored bytes for in-browser viewing | SourceItemsTable's filename links |
 
 The polling lives in `web/src/features/uploads/useProjectUploads.ts`: the
 `getUploads` RTK Query hook runs with `pollingInterval: 2000` while any cached row
 is still queued, fetching, processing, or indexing, and `pollingInterval: 0` once
-every row is ready or failed. The hook powers the pages; the `/app` resolver's
+every row is ready or failed - and also while the page reports an upload POST in
+flight (`pausePolling`), so a pre-commit poll response cannot overwrite the row the
+completed POST just inserted. The hook powers the pages; the `/app` resolver's
 chattable walk instead dispatches `uploadsApi.endpoints.getUploads.initiate`
 directly - one forced refetch per project, newest-first - so it borrows the
 uploads cache without ever starting a poll. No other endpoint is polled - the
@@ -254,12 +256,16 @@ and no refetch-on-focus or refetch-on-reconnect is configured.
 One table status is client-side only: `uploading`. While a file's POST is
 still streaming, the file-upload page (`web/src/features/sources/FileUploadPage.tsx`)
 lists it as an optimistic, inert row (no open, no delete) ahead of the server
-rows, so the transfer window between the upload gesture and the queued row is
-visible. The `uploadFile` mutation inserts the server's row into the `getUploads`
-cache the moment the POST completes (`onQueryStarted`), so the stand-in's
-handoff to the real queued row has no gap and survives the invalidation
-refetch failing; a failed POST drops the stand-in and surfaces the dropzone's
-error alert.
+rows - a filename the server already has (a retry) instead flips its existing
+row to that status - so the transfer window between the upload gesture and the
+queued row is visible. The `uploadFile` mutation upserts the server's row into
+the `getUploads` cache the moment the POST completes (`onQueryStarted`), and
+the page suspends polling while any POST is in flight, so no stale pre-commit
+poll response can overwrite the inserted row; the handoff has no gap and
+survives the invalidation refetch failing. A failed POST drops the stand-in
+and surfaces the dropzone's error alert. The row statuses therefore compose
+`RowStatus` (the server vocabulary plus `uploading`); the API's `Upload` type
+keeps the server's vocabulary only.
 
 ### Retrieval (backend/app/retrieval/router.py)
 

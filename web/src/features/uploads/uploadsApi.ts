@@ -9,13 +9,15 @@ import { api } from "../../app/api";
  */
 export const UPLOAD_TIMEOUT_MS = 360_000;
 
+/** The statuses an upload's latest pipeline run can report. */
+export type UploadStatus = "queued" | "fetching" | "processing" | "indexing" | "ready" | "failed";
+
 /**
- * The statuses an upload's latest pipeline run can report, plus "uploading":
- * the client-side state of a file whose bytes are still being posted, which
- * the server never returns because it only learns of the upload at the end.
+ * A sources-table row's status: the server's vocabulary plus the client-side
+ * "uploading", for a file whose bytes are still being posted - the server only
+ * learns of the upload when the POST completes.
  */
-export type UploadStatus =
-  "uploading" | "queued" | "fetching" | "processing" | "indexing" | "ready" | "failed";
+export type RowStatus = UploadStatus | "uploading";
 
 /** One uploaded file as the uploads endpoints return it. */
 export type Upload = {
@@ -25,6 +27,9 @@ export type Upload = {
   status: UploadStatus;
   created_at: string;
 };
+
+/** One row of the sources table: a server upload, or an optimistic stand-in. */
+export type SourceRow = Omit<Upload, "status"> & { status: RowStatus };
 
 /** Builds the fetch args for one file upload, capping the request at the stall timeout. */
 export function uploadFileArgs({ projectId, file }: { projectId: string; file: File }): FetchArgs {
@@ -47,17 +52,20 @@ export const uploadsApi = api.injectEndpoints({
     }),
     uploadFile: build.mutation<Upload, { projectId: string; file: File }>({
       query: uploadFileArgs,
-      // Insert the created row the moment the server answers, so the table
+      // Upsert the created row the moment the server answers, so the table
       // swaps the client's "uploading" stand-in for the real row without
       // waiting for the invalidation refetch - and survives that refetch
-      // failing. The refetch still follows as the authoritative backstop.
+      // failing. A retry reuses the item id, so an existing row is replaced.
       onQueryStarted: async ({ projectId }, { dispatch, queryFulfilled }) => {
         try {
           const { data: upload } = await queryFulfilled;
           dispatch(
             uploadsApi.util.updateQueryData("getUploads", projectId, (draft) => {
-              if (!draft.some((row) => row.id === upload.id)) {
+              const index = draft.findIndex((row) => row.id === upload.id);
+              if (index === -1) {
                 draft.unshift(upload);
+              } else {
+                draft[index] = upload;
               }
             }),
           );
@@ -72,6 +80,21 @@ export const uploadsApi = api.injectEndpoints({
         url: `/projects/${projectId}/uploads/${uploadId}`,
         method: "DELETE",
       }),
+      // The row is gone server-side once the 204 lands: drop it from the cache
+      // at once instead of letting a slow invalidation refetch invite a second
+      // delete of it. The refetch still follows as the authoritative backstop.
+      onQueryStarted: async ({ projectId, uploadId }, { dispatch, queryFulfilled }) => {
+        try {
+          await queryFulfilled;
+          dispatch(
+            uploadsApi.util.updateQueryData("getUploads", projectId, (draft) =>
+              draft.filter((row) => row.id !== uploadId),
+            ),
+          );
+        } catch {
+          // A failed delete changes nothing; the caller surfaces the error.
+        }
+      },
       invalidatesTags: (_result, _error, { projectId }) => [{ type: "Upload", id: projectId }],
     }),
     getUploadRaw: build.query<Blob, { projectId: string; uploadId: string }>({

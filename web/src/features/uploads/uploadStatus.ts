@@ -1,12 +1,12 @@
-import type { UploadStatus } from "./uploadsApi";
+import type { RowStatus } from "./uploadsApi";
 
 /** The status is terminal once the pipeline decided an outcome for it. */
-export function isTerminal(status: UploadStatus): boolean {
+export function isTerminal(status: RowStatus): boolean {
   return status === "ready" || status === "failed";
 }
 
 /** Maps a status to its chip: primary while in flight, colored once decided. */
-export function statusChip(status: UploadStatus): {
+export function statusChip(status: RowStatus): {
   label: string;
   color: "primary" | "success" | "error";
 } {

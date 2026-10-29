@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { Route, Routes } from "react-router";
@@ -204,6 +204,37 @@ describe("FileUploadPage", () => {
     expect(screen.getByText("report.docx")).toBeInTheDocument();
   });
 
+  it("drops the deleted row from the table before the refetch lands", async () => {
+    // The refetch after the delete is held open: the optimistic removal must
+    // make the row vanish right after the 204, not when the GET completes.
+    let releaseRefetch!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseRefetch = resolve;
+    });
+    let deletes = 0;
+    server.use(
+      http.get("*/projects/p-1/uploads", async () => {
+        if (deletes > 0) {
+          await gate;
+          return HttpResponse.json([readyUpload, failedUpload]);
+        }
+        return HttpResponse.json([queuedUpload, readyUpload, failedUpload]);
+      }),
+      http.delete("*/projects/p-1/uploads/s-1", () => {
+        deletes += 1;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderUploadPage();
+    expect(await screen.findByText("brief.pdf")).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete brief.pdf" }));
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByText("brief.pdf")).not.toBeInTheDocument());
+    expect(screen.getByText("report.docx")).toBeInTheDocument();
+    releaseRefetch();
+  });
+
   it("shows an Uploading row while the file is posting and hands off to the queued row", async () => {
     const uploadedRow: Upload = {
       ...queuedUpload,
@@ -270,6 +301,78 @@ describe("FileUploadPage", () => {
     );
     await waitFor(() => expect(screen.queryByText("Uploading")).not.toBeInTheDocument());
     expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
+  });
+
+  it("marks the existing failed row as Uploading while its retry posts", async () => {
+    // A retry reuses the item id and filename, so the row itself must flip
+    // to Uploading for the transfer and land on Queued when it completes.
+    const retriedRow: Upload = { ...failedUpload, status: "queued" };
+    let posted = false;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get("*/projects/p-1/uploads", () =>
+        HttpResponse.json(posted ? [retriedRow] : [failedUpload]),
+      ),
+      http.post("*/projects/p-1/uploads", async () => {
+        await gate;
+        posted = true;
+        return HttpResponse.json(retriedRow, { status: 201 });
+      }),
+    );
+    renderUploadPage();
+    expect(await screen.findByText("Failed")).toBeInTheDocument();
+    await userEvent.setup().upload(screen.getByLabelText("Upload"), pdfFile("broken.pdf"));
+    expect(await screen.findByText("Uploading")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+    expect(screen.getAllByText("broken.pdf")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "broken.pdf" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete broken.pdf" })).not.toBeInTheDocument();
+    release();
+    expect(await screen.findByText("Queued")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Uploading")).not.toBeInTheDocument());
+    expect(screen.getAllByText("broken.pdf")).toHaveLength(1);
+  });
+
+  it("stops polling while an upload posts, and resumes once it settles", async () => {
+    let gets = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get("*/projects/p-1/uploads", () => {
+        gets += 1;
+        return HttpResponse.json([queuedUpload]);
+      }),
+      http.post("*/projects/p-1/uploads", async () => {
+        await gate;
+        return HttpResponse.json(queuedUpload, { status: 201 });
+      }),
+    );
+    vi.useFakeTimers();
+    try {
+      renderUploadPage();
+      await advance(0);
+      expect(gets).toBe(1);
+      // The queued row keeps the poll alive; a mid-flight POST suspends it so
+      // no stale pre-commit response can overwrite the freshly inserted row.
+      fireEvent.change(screen.getByLabelText("Upload"), {
+        target: { files: [pdfFile("brief.pdf")] },
+      });
+      await advance(0);
+      await advance(4000);
+      expect(gets).toBe(1);
+      release();
+      await advance(0);
+      const settled = gets;
+      await advance(4000);
+      expect(gets).toBeGreaterThan(settled);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("invalidates the list on upload, so the new row appears without a reload", async () => {

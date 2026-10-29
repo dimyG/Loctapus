@@ -1,10 +1,10 @@
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import { isTerminal, statusChip } from "./uploadStatus";
-import type { UploadStatus } from "./uploadsApi";
+import type { RowStatus } from "./uploadsApi";
 
 /** The upload's status chip; spins while the ingestion pipeline can still move it. */
-export default function UploadStatusChip({ status }: { status: UploadStatus }) {
+export default function UploadStatusChip({ status }: { status: RowStatus }) {
   // Terminal statuses decided an outcome, so only in-flight ones earn a spinner.
   const icon = isTerminal(status) ? undefined : <CircularProgress color="inherit" size={12} />;
   // Pin the width to the widest combo ("Processing" plus spinner) so status

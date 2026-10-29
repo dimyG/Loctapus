@@ -6,6 +6,18 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-29 - Minor review findings (`source-item-delete-uploading-state`)
+
+Left over from the branch's code review, all cosmetic-leaning:
+
+- The sources table's two snackbars (open-failure and delete-failure) share
+  the default anchor and can overlap if both kinds of failure are open at
+  once; consolidate or offset if it ever bites.
+- Upload retries racing a delete of the same item between the delete's read
+  and its row delete can orphan the retry's freshly stored object; a narrow
+  two-user race, noted here until deletes get a lock or a sweeper.
+
+
 ## 2026-10-29 - README/env-template credential drift (noticed on `source-item-delete-uploading-state`)
 
 `d7bc329` turned `deploy/.env.example`'s values into placeholders (`abc`) and

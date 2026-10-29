@@ -12,7 +12,7 @@ import { Link as RouterLink, useParams } from "react-router";
 import { sectionPath } from "../../app/sectionPaths";
 import { useProjectGuard } from "../projects/useProjectGuard";
 import { useProjectUploads } from "../uploads/useProjectUploads";
-import type { Upload } from "../uploads/uploadsApi";
+import type { SourceRow } from "../uploads/uploadsApi";
 import SourceItemsTable from "./SourceItemsTable";
 import UploadDropzone from "./UploadDropzone";
 
@@ -39,17 +39,22 @@ export default function FileUploadPage() {
     projectUncacheableError,
     refetch: refetchProject,
   } = useProjectGuard(projectId);
-  const {
-    uploads,
-    isLoading: uploadsLoading,
-    error: uploadsError,
-    refetch: refetchUploads,
-  } = useProjectUploads(projectId, { skip: projectMissing });
   // Files whose POST is still streaming; they render as "uploading" rows so
   // the seconds between the upload gesture and the queued row are visible.
   // The dropzone settles each one: on success the mutation has already put
   // the real row in the cache, on failure the dropzone's alert says why.
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const {
+    uploads,
+    isLoading: uploadsLoading,
+    error: uploadsError,
+    refetch: refetchUploads,
+  } = useProjectUploads(projectId, {
+    skip: projectMissing,
+    // A poll response requested before the POST commits would overwrite the
+    // freshly inserted row with a pre-commit list; the poll waits it out.
+    pausePolling: pendingUploads.length > 0,
+  });
 
   if (projectMissing) {
     return (
@@ -73,11 +78,15 @@ export default function FileUploadPage() {
     );
   }
 
-  // Pending rows lead the list, deduped by filename so a pending row never
-  // doubles the real row that replaced it.
-  const serverFilenames = new Set((uploads ?? []).map((upload) => upload.filename));
-  const pendingRows: Upload[] = pendingUploads
-    .filter((pending) => !serverFilenames.has(pending.filename))
+  // Pending uploads lead the list as stand-in rows; a filename the server
+  // already has (a retry) instead flips its existing row to the inert
+  // "uploading" status, so one file always shows as exactly one row.
+  const pendingFilenames = new Set(pendingUploads.map((pending) => pending.filename));
+  const serverRows: SourceRow[] = (uploads ?? []).map((upload) =>
+    pendingFilenames.has(upload.filename) ? { ...upload, status: "uploading" } : upload,
+  );
+  const pendingRows: SourceRow[] = pendingUploads
+    .filter((pending) => !(uploads ?? []).some((upload) => upload.filename === pending.filename))
     .map((pending) => ({
       id: `pending-${pending.filename}`,
       project_id: projectId ?? "",
@@ -85,7 +94,7 @@ export default function FileUploadPage() {
       status: "uploading",
       created_at: pending.createdAt,
     }));
-  const items = [...pendingRows, ...(uploads ?? [])];
+  const items = [...pendingRows, ...serverRows];
 
   return (
     <>
