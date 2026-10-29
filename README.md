@@ -1,5 +1,12 @@
 # RAG MVP
 
+RAG MVP is a self-hosted "chat with your documents" system. Teams upload PDF and
+DOCX files into shared projects, where they are parsed and indexed automatically;
+users then ask questions in a per-project chat and get answers grounded in - and
+citing - the uploaded documents. Everything runs on one machine (or a single
+server) via Docker Compose, with no external service required beyond an optional
+LLM provider key.
+
 FastAPI + SQLAlchemy 2.0 + pgvector backend for a RAG MVP, sliced into incremental
 deliverables. Identity (users, workspaces, teams), projects, the upload+ingestion
 pipeline (upload -> parse -> chunk -> embed), retrieval (vector + full-text search
