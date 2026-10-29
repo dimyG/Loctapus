@@ -85,18 +85,21 @@ export const inputsCustomizations: Components<Theme> = {
               ...theme.applyStyles("dark", {
                 // The dark scheme flips the light scheme's near-black skin to
                 // the brand blue of the logo so primary actions stay on-brand.
+                // The gradient stops stay at brand[500] or darker because the
+                // logo's brighter brand[400]/[600] fall short of WCAG AA
+                // contrast under the white label.
                 color: "white",
                 backgroundColor: brand[500],
-                backgroundImage: `linear-gradient(to bottom, ${brand[600]}, ${brand[400]})`,
+                backgroundImage: `linear-gradient(to bottom, ${brand[500]}, ${brand[700]})`,
                 boxShadow: `inset 0 1px 0 ${alpha(brand[300], 0.4)}, inset 0 -1px 0 1px ${brand[800]}`,
                 border: `1px solid ${brand[600]}`,
                 "&:hover": {
                   backgroundImage: "none",
-                  backgroundColor: brand[600],
+                  backgroundColor: brand[700],
                   boxShadow: "none",
                 },
                 "&:active": {
-                  backgroundColor: brand[700],
+                  backgroundColor: brand[800],
                 },
                 "&.Mui-disabled": {
                   color: gray[300],
