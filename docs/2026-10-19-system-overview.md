@@ -122,7 +122,9 @@ exists), threads every ask through the served `conversation_id`, offers a
 source chips. A 2026-10-29 round (branch `mobile-navbar-dark-buttons`) collapsed
 the marketing navbar below the md breakpoint into a hamburger drawer holding
 About, Sign in, and the color-mode switcher, keeping the Loctapus brand and the
-Get started CTA always visible.
+Get started CTA always visible. The same round switched the dark scheme's
+primary contained buttons (Get started, Create project, the auth submits, Add
+source) from near-white to the logo's brand blue.
 
 Runtime flow of one upload:
 

@@ -2,7 +2,7 @@ import { outlinedInputClasses } from "@mui/material/OutlinedInput";
 import { createTheme } from "@mui/material/styles";
 import type { Theme } from "@mui/material/styles";
 import { describe, expect, it } from "vitest";
-import { gray } from "../themePrimitives";
+import { brand, gray } from "../themePrimitives";
 import { inputsCustomizations } from "./inputs";
 
 /** Resolves a style override to a plain object, invoking callbacks with a default theme. */
@@ -12,6 +12,42 @@ function resolveOverride(override: unknown): Record<string, unknown> {
     return callback({ theme: createTheme() });
   }
   return (override ?? {}) as Record<string, unknown>;
+}
+
+/**
+ * Resolves one MuiButton variant block against a dual-scheme theme, returning
+ * the light styles and the nested dark-scheme styles.
+ */
+function resolveButtonVariant(color: string, variant: string) {
+  const root = inputsCustomizations.MuiButton?.styleOverrides?.root;
+  if (typeof root !== "function") {
+    throw new Error("MuiButton root override is not a callback");
+  }
+  const callback = root as (props: { theme: Theme }) => Record<string, unknown>;
+  const result = callback({
+    theme: createTheme({
+      // Mirrors AppTheme's css-variables setup so applyStyles emits the
+      // data-attribute dark selector the runtime theme uses.
+      cssVariables: { colorSchemeSelector: "data-mui-color-scheme" },
+      colorSchemes: { light: {}, dark: {} },
+    }),
+  });
+  const variants = result.variants as Array<{
+    props: { color?: string; variant?: string };
+    style: Record<string, unknown>;
+  }>;
+  const match = variants.find((v) => v.props.color === color && v.props.variant === variant);
+  if (match === undefined) {
+    throw new Error(`No MuiButton variant for color=${color} variant=${variant}`);
+  }
+  const darkKey = Object.keys(match.style).find((key) => key.includes("dark"));
+  if (darkKey === undefined) {
+    throw new Error(`Variant color=${color} variant=${variant} has no dark-scheme block`);
+  }
+  return {
+    light: match.style,
+    dark: match.style[darkKey] as Record<string, unknown>,
+  };
 }
 
 const outlinedInput = inputsCustomizations.MuiOutlinedInput?.styleOverrides;
@@ -36,47 +72,28 @@ describe("inputsCustomizations", () => {
   });
 
   it("gives disabled primary buttons a readable muted skin in both schemes", () => {
-    const root = inputsCustomizations.MuiButton?.styleOverrides?.root;
-    expect(typeof root).toBe("function");
-    const callback = root as (props: { theme: Theme }) => Record<string, unknown>;
-    const result = callback({
-      theme: createTheme({
-        // Mirrors AppTheme's css-variables setup so applyStyles emits the
-        // data-attribute dark selector the runtime theme uses.
-        cssVariables: { colorSchemeSelector: "data-mui-color-scheme" },
-        colorSchemes: { light: {}, dark: {} },
-      }),
-    });
-    const variants = result.variants as Array<{
-      props: { color?: string; variant?: string };
-      style: Record<string, Record<string, unknown>>;
-    }>;
-    const primaryContained = variants.find(
-      (v) => v.props.color === "primary" && v.props.variant === "contained",
-    );
-    expect(primaryContained).toBeDefined();
-    if (primaryContained === undefined) {
-      return;
-    }
+    const { light, dark } = resolveButtonVariant("primary", "contained");
     // The default disabled skin is a washed-out overlay that can match the
     // surrounding surface, so both schemes pin their own flat muted pair.
-    expect(primaryContained.style["&.Mui-disabled"]).toMatchObject({
+    expect(light["&.Mui-disabled"]).toMatchObject({
       color: gray[600],
       backgroundColor: gray[200],
       backgroundImage: "none",
       boxShadow: "none",
     });
-    const darkKey = Object.keys(primaryContained.style).find((key) => key.includes("dark"));
-    expect(darkKey).toBeDefined();
-    if (darkKey === undefined) {
-      return;
-    }
-    const dark = primaryContained.style[darkKey];
     expect(dark["&.Mui-disabled"]).toMatchObject({
       color: gray[300],
       backgroundColor: gray[700],
       backgroundImage: "none",
       boxShadow: "none",
     });
+  });
+
+  it("skins dark-scheme primary contained buttons in the Loctapus brand blue", () => {
+    const { dark } = resolveButtonVariant("primary", "contained");
+    expect(dark.color).toBe("white");
+    expect(dark.backgroundColor).toBe(brand[500]);
+    expect(dark["&:hover"]).toMatchObject({ backgroundColor: brand[600] });
+    expect(dark["&:active"]).toMatchObject({ backgroundColor: brand[700] });
   });
 });
