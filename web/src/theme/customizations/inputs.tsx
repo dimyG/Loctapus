@@ -83,18 +83,22 @@ export const inputsCustomizations: Components<Theme> = {
                 border: `1px solid ${gray[300]}`,
               },
               ...theme.applyStyles("dark", {
-                color: "black",
-                backgroundColor: gray[50],
-                backgroundImage: `linear-gradient(to bottom, ${gray[100]}, ${gray[50]})`,
-                boxShadow: "inset 0 -1px 0  hsl(220, 30%, 80%)",
-                border: `1px solid ${gray[50]}`,
+                // The dark scheme flips the light scheme's near-black skin to
+                // a flat brand blue so primary actions stay on-brand. The flat
+                // brand[500] fill keeps the white label at WCAG AA contrast;
+                // the logo's brighter brand[400]/[600] would fall short.
+                color: "white",
+                backgroundColor: brand[500],
+                backgroundImage: "none",
+                boxShadow: "none",
+                border: `1px solid ${brand[600]}`,
                 "&:hover": {
                   backgroundImage: "none",
-                  backgroundColor: gray[300],
+                  backgroundColor: brand[700],
                   boxShadow: "none",
                 },
                 "&:active": {
-                  backgroundColor: gray[400],
+                  backgroundColor: brand[800],
                 },
                 "&.Mui-disabled": {
                   color: gray[300],

@@ -1,12 +1,18 @@
+import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Container from "@mui/material/Container";
+import Divider from "@mui/material/Divider";
+import Drawer from "@mui/material/Drawer";
+import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { alpha, styled } from "@mui/material/styles";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { Link as RouterLink } from "react-router";
 import ColorModeIconDropdown from "../theme/ColorModeIconDropdown";
@@ -35,6 +41,17 @@ const StyledToolbar = styled(Toolbar)(({ theme }) => ({
  * bring their own sections and containers.
  */
 export default function MarketingFrame({ children }: { children: ReactNode }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const openMenu = () => setMenuOpen(true);
+  const closeMenu = () => setMenuOpen(false);
+  // The trigger hides at md and up, so the drawer must not outlive the mobile
+  // layout: an open sheet would keep its backdrop and scroll lock over the
+  // desktop bar after a resize or rotation.
+  const desktopUp = useMediaQuery((theme) => theme.breakpoints.up("md"));
+  const drawerOpen = menuOpen && !desktopUp;
+  // Below md the bar only keeps the brand and the primary CTA; the rest moves
+  // into the drawer so the pill cannot wrap on narrow screens.
+  const desktopOnly = { display: { xs: "none", md: "inline-flex" } };
   return (
     <Box sx={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
       <AppBar
@@ -59,7 +76,14 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
               >
                 <BrandMark />
               </Link>
-              <Button variant="text" color="info" size="small" component={RouterLink} to="/about">
+              <Button
+                variant="text"
+                color="info"
+                size="small"
+                component={RouterLink}
+                to="/about"
+                sx={desktopOnly}
+              >
                 About
               </Button>
             </Box>
@@ -70,6 +94,7 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
                 size="small"
                 component={RouterLink}
                 to="/login"
+                sx={desktopOnly}
               >
                 Sign in
               </Button>
@@ -82,11 +107,59 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
               >
                 Get started
               </Button>
-              <ColorModeIconDropdown />
+              <Box sx={desktopOnly}>
+                <ColorModeIconDropdown />
+              </Box>
+              <IconButton
+                aria-label="menu"
+                aria-expanded={drawerOpen}
+                aria-controls={drawerOpen ? "mobile-menu" : undefined}
+                size="small"
+                onClick={openMenu}
+                sx={{ display: { xs: "inline-flex", md: "none" } }}
+              >
+                <MenuRoundedIcon />
+              </IconButton>
             </Stack>
           </StyledToolbar>
         </Container>
       </AppBar>
+      <Drawer anchor="top" open={drawerOpen} onClose={closeMenu}>
+        <Box
+          component="nav"
+          id="mobile-menu"
+          aria-label="Mobile menu"
+          sx={{ p: 2, display: "grid", gap: 1, backgroundColor: "background.default" }}
+        >
+          <Button
+            variant="text"
+            color="info"
+            component={RouterLink}
+            to="/about"
+            onClick={closeMenu}
+            sx={{ justifyContent: "flex-start" }}
+          >
+            About
+          </Button>
+          <Button
+            variant="text"
+            color="primary"
+            component={RouterLink}
+            to="/login"
+            onClick={closeMenu}
+            sx={{ justifyContent: "flex-start" }}
+          >
+            Sign in
+          </Button>
+          <Divider />
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Typography variant="body2" color="text.secondary">
+              Theme
+            </Typography>
+            <ColorModeIconDropdown />
+          </Box>
+        </Box>
+      </Drawer>
       <Box sx={{ flexGrow: 1 }}>{children}</Box>
       <Box component="footer" sx={{ borderTop: "1px solid", borderColor: "divider" }}>
         <Container maxWidth="lg" sx={{ py: 4 }}>
