@@ -6,6 +6,21 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-29 - README/env-template credential drift (noticed on `source-item-delete-uploading-state`)
+
+`d7bc329` turned `deploy/.env.example`'s values into placeholders (`abc`) and
+corrected the template's own header, but the README still claims "Both templates'
+values reproduce the historical development credentials". A fresh checkout that
+follows the README (copy the templates, `docker compose up`, run pytest) now
+initializes Postgres, RabbitMQ, and Garage with `abc` credentials while the test
+suites keep pinning `rag:rag` - the suites fail against the stack the README
+just had them boot. Observed in practice when a worktree booted the stack from
+the template: the migration step died with `FATAL: password authentication
+failed for user "abc"` until the real env files were copied over. The README's
+setup and test sections need rewriting around the placeholder reality (copy the
+templates, then fill in working credentials - or document the test overrides).
+
+
 ## 2026-10-29 - Upload-stall investigation (paused) (`upload-pmtud-fix`, `enable-http3-udp`)
 
 The bug: from the owner's home network, PDF uploads to the live site hang

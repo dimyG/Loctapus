@@ -73,7 +73,9 @@ default key and bucket on first start.
 The UI is at `http://localhost:8080` and the API docs at
 `http://localhost:8000/api/docs`. Uploads POST to `/api/projects/{project_id}/uploads`
 and land as a queued ingestion run; the `GET` listing on the same path derives each
-row's status from its latest run. Retrieval POSTs to
+row's status from its latest run, and `DELETE` on
+`/api/projects/{project_id}/uploads/{upload_id}` removes an upload with its indexed
+content and stored bytes. Retrieval POSTs to
 `/api/projects/{project_id}/retrieve` with `{"query": "...", "top_k": 10}` and answers
 with fused, diversity-selected chunks from the project's indexed documents. The chat
 (Ask tab on a project page) POSTs to `/api/projects/{project_id}/answer` with

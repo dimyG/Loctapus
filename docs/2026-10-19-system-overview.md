@@ -30,7 +30,7 @@ flowchart TB
     web -->|"/api reverse proxy"| api
     init -->|"migrate schema before the app services start"| db
     api -->|"SQLAlchemy: users, workspaces, teams, projects,<br/>uploads, ingestion runs, outbox rows,<br/>retrieve logs, conversations"| db
-    api -->|"S3 PUT: uploaded file bytes"| garage
+    api -->|"S3 PUT/DELETE: uploaded file bytes"| garage
     dispatcher -->|"poll due outbox events"| db
     dispatcher -->|"publish ingest_source_item / embed_document"| rabbitmq
     worker -->|"consume ingestion and embed queues"| rabbitmq
@@ -238,6 +238,7 @@ All routes are served under the `/api` prefix (`app.include_router(..., prefix="
 | --- | --- | --- | --- |
 | POST | `/api/projects/{project_id}/uploads` | Store one uploaded file (PDF/DOCX, size-gated), queues an ingestion run | UploadDropzone (file-upload page) |
 | GET | `/api/projects/{project_id}/uploads` (polled by the UI: every 2s while any upload row is non-terminal; stops when all rows are terminal or an uncached fetch fails) | List a project's uploads newest first, status derived from the latest run | The sources and file-upload pages' tables and the chat page's readiness (`useProjectUploads`); the `/app` resolver's chattable walk (direct `uploadsApi.endpoints.getUploads.initiate` dispatches, not the hook) |
+| DELETE | `/api/projects/{project_id}/uploads/{upload_id}` | Delete one upload item (editor role): documents, chunks, and runs cascade with the row, conversation citations settle to NULL, and the stored bytes are removed from Garage first so a storage failure leaves every row untouched | SourceItemsTable's per-row delete action |
 | GET | `/api/projects/{project_id}/uploads/{upload_id}/raw` | Return an upload's stored bytes for in-browser viewing | SourceItemsTable's filename links |
 
 The polling lives in `web/src/features/uploads/useProjectUploads.ts`: the
@@ -249,6 +250,16 @@ directly - one forced refetch per project, newest-first - so it borrows the
 uploads cache without ever starting a poll. No other endpoint is polled - the
 other list endpoints are fetched on mount and on RTK cache invalidation only,
 and no refetch-on-focus or refetch-on-reconnect is configured.
+
+One table status is client-side only: `uploading`. While a file's POST is
+still streaming, the file-upload page (`web/src/features/sources/FileUploadPage.tsx`)
+lists it as an optimistic, inert row (no open, no delete) ahead of the server
+rows, so the transfer window between the upload gesture and the queued row is
+visible. The `uploadFile` mutation inserts the server's row into the `getUploads`
+cache the moment the POST completes (`onQueryStarted`), so the stand-in's
+handoff to the real queued row has no gap and survives the invalidation
+refetch failing; a failed POST drops the stand-in and surfaces the dropzone's
+error alert.
 
 ### Retrieval (backend/app/retrieval/router.py)
 
