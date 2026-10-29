@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy.orm import Session
@@ -20,7 +21,13 @@ from app.outbox.models import OutboxEvent
 from app.projects.models import ProjectTeamRole
 from app.providers import get_embedding_provider, get_parser
 from app.sources.models import Source, SourceItem
-from app.storage.service import StorageService, StorageUnavailableError, build_raw_object_key, get_storage
+from app.storage.service import (
+    ObjectNotFoundError,
+    StorageService,
+    StorageUnavailableError,
+    build_raw_object_key,
+    get_storage,
+)
 from tests.factories import seed_upload
 from tests.helpers import _auth, _default_team_id
 
@@ -652,3 +659,168 @@ def test_upload_raw_storage_failure_returns_503(
     r = client.get(f"/api/projects/{project_id}/uploads/{seeded.source_item_id}/raw", headers=headers)
     assert r.status_code == 503
     assert r.json()["detail"] == "Could not load the file. Please try again."
+
+
+def test_delete_upload_removes_rows_and_the_stored_object(
+    *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
+) -> None:
+    """Check the delete happy path: 204, every pipeline row gone, and the object gone."""
+
+    headers = _auth(client=client, email="delete@example.com")
+    project_id = _create_project(client=client, headers=headers, name="delete")
+    content = (FIXTURES_DIR / "tiny.pdf").read_bytes()
+    upload = _upload(
+        client=client, headers=headers, project_id=project_id, filename="tiny.pdf", content=content
+    )
+    assert upload.status_code == 201
+    upload_id = upload.json()["id"]
+
+    run = db_session.query(IngestionRun).one()
+    ingest_source_item(
+        db=db_session,
+        ingestion_run_id=run.id,
+        storage=storage,
+        parser=get_parser(settings=settings),
+        settings=settings,
+    )
+    db_session.refresh(run)
+    document_id = run.document_id
+    assert document_id is not None
+    embed_document(
+        db=db_session,
+        document_id=document_id,
+        ingestion_run_id=run.id,
+        embedding_provider=get_embedding_provider(settings=settings),
+        settings=settings,
+    )
+    assert db_session.query(Chunk).count() == 1
+    raw_object_key = db_session.query(SourceItem).one().raw_object_key
+
+    r = client.delete(f"/api/projects/{project_id}/uploads/{upload_id}", headers=headers)
+    assert r.status_code == 204
+    assert r.content == b""
+    assert db_session.query(SourceItem).count() == 0
+    assert db_session.query(Document).count() == 0
+    assert db_session.query(Chunk).count() == 0
+    assert db_session.query(IngestionRun).count() == 0
+    # The project's one upload source row stays; the project delete owns its removal.
+    assert db_session.query(Source).count() == 1
+    # Outbox rows for deleted aggregates linger by design (no FK); later tasks no-op on them.
+    assert db_session.query(OutboxEvent).count() == 2
+    with pytest.raises(ObjectNotFoundError):
+        storage.get_object(key=raw_object_key)
+
+
+def test_delete_upload_frees_the_filename_for_reupload(*, client: TestClient, db_session: Session) -> None:
+    """Check that a deleted upload's filename can be uploaded again immediately."""
+
+    headers = _auth(client=client, email="delete-reupload@example.com")
+    project_id = _create_project(client=client, headers=headers, name="delete-reupload")
+    first = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=b"first bytes"
+    )
+    assert first.status_code == 201
+
+    deleted = client.delete(f"/api/projects/{project_id}/uploads/{first.json()['id']}", headers=headers)
+    assert deleted.status_code == 204
+
+    second = _upload(
+        client=client, headers=headers, project_id=project_id, filename="report.pdf", content=b"second bytes"
+    )
+    assert second.status_code == 201
+    assert second.json()["status"] == "queued"
+    assert db_session.query(SourceItem).count() == 1
+
+
+def test_delete_upload_requires_editor_role(*, client: TestClient, db_session: Session) -> None:
+    """Check that a viewer-role member cannot delete, and a stranger sees 404."""
+
+    owner = _auth(client=client, email="delete-owner@example.com")
+    viewer = _auth(client=client, email="delete-viewer@example.com")
+    stranger = _auth(client=client, email="delete-stranger@example.com")
+    project_id = _create_project(client=client, headers=owner, name="delete-roles")
+    upload = _upload(
+        client=client, headers=owner, project_id=project_id, filename="notes.pdf", content=b"bytes"
+    )
+    assert upload.status_code == 201
+    upload_id = upload.json()["id"]
+
+    viewer_team_id = _default_team_id(client=client, headers=viewer)
+    db_session.add(ProjectTeamRole(project_id=UUID(project_id), team_id=UUID(viewer_team_id), role="viewer"))
+    db_session.flush()
+
+    r = client.delete(f"/api/projects/{project_id}/uploads/{upload_id}", headers=viewer)
+    assert r.status_code == 404
+    assert r.json() == {"detail": "project not found"}
+
+    stranger_delete = client.delete(f"/api/projects/{project_id}/uploads/{upload_id}", headers=stranger)
+    assert stranger_delete.status_code == 404
+    assert db_session.query(SourceItem).count() == 1
+
+
+def test_delete_upload_unknown_or_other_project_item_returns_404(*, client: TestClient) -> None:
+    """Check that a random item id and another project's item id are both a 404."""
+
+    headers = _auth(client=client, email="delete-missing@example.com")
+    project_id = _create_project(client=client, headers=headers, name="delete-one")
+    upload = _upload(
+        client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=b"bytes"
+    )
+    assert upload.status_code == 201
+
+    unknown = client.delete(f"/api/projects/{project_id}/uploads/{uuid4()}", headers=headers)
+    assert unknown.status_code == 404
+    assert unknown.json() == {"detail": "upload not found"}
+
+    other_project_id = _create_project(client=client, headers=headers, name="delete-two")
+    other_upload = _upload(
+        client=client, headers=headers, project_id=other_project_id, filename="other.pdf", content=b"other"
+    )
+    assert other_upload.status_code == 201
+
+    other = client.delete(f"/api/projects/{project_id}/uploads/{other_upload.json()['id']}", headers=headers)
+    assert other.status_code == 404
+    assert other.json() == {"detail": "upload not found"}
+
+
+def test_delete_upload_without_stored_object_succeeds(*, client: TestClient, db_session: Session) -> None:
+    """Check that an item whose bytes never reached Garage still deletes: the row is the truth."""
+
+    headers = _auth(client=client, email="delete-ghost@example.com")
+    project_id = _create_project(client=client, headers=headers, name="delete-ghost")
+    # The factory writes only the rows, so the raw object is absent from Garage.
+    seeded = seed_upload(db=db_session, project_id=UUID(project_id), filename="ghost.pdf")
+
+    r = client.delete(f"/api/projects/{project_id}/uploads/{seeded.source_item_id}", headers=headers)
+    assert r.status_code == 204
+    assert db_session.query(SourceItem).count() == 0
+    assert db_session.query(IngestionRun).count() == 0
+
+
+def test_delete_upload_storage_failure_returns_503(
+    *, client: TestClient, db_session: Session, settings: Settings
+) -> None:
+    """Check that a storage failure during delete yields a 503 and leaves every row."""
+
+    headers = _auth(client=client, email="delete-storage@example.com")
+    project_id = _create_project(client=client, headers=headers, name="delete-storage")
+    upload = _upload(
+        client=client, headers=headers, project_id=project_id, filename="notes.pdf", content=b"bytes"
+    )
+    assert upload.status_code == 201
+
+    class FailingStorageService(StorageService):
+        """Storage service whose deletes fail as if the backend were down."""
+
+        def delete_object(self, *, key: str) -> None:
+            """Refuse the delete with the unavailable error."""
+
+            raise StorageUnavailableError("backend down")
+
+    app.dependency_overrides[get_storage] = lambda: FailingStorageService(settings=settings)
+
+    r = client.delete(f"/api/projects/{project_id}/uploads/{upload.json()['id']}", headers=headers)
+    assert r.status_code == 503
+    assert r.json()["detail"] == "Could not delete the file. Please try again."
+    assert db_session.query(SourceItem).count() == 1
+    assert db_session.query(IngestionRun).count() == 1

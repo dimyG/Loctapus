@@ -15,6 +15,7 @@ from app.sources.schemas import UploadOut
 from app.sources.service import (
     DuplicateUploadError,
     UploadListing,
+    delete_upload,
     get_upload_item,
     list_uploads,
     sanitize_filename,
@@ -115,6 +116,28 @@ def list_all(
     if project is None:
         raise HTTPException(404, "project not found")
     return [_to_out(listing=listing) for listing in list_uploads(db=db, project_id=project.id)]
+
+
+@router.delete("/projects/{project_id}/uploads/{upload_id}", status_code=204)
+def delete(
+    *,
+    project_id: UUID,
+    upload_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage),
+) -> None:
+    """Delete one upload item with its pipeline rows and stored bytes, raising 404 or 503."""
+
+    project = get_project_for_user_with_role(db=db, user=user, project_id=project_id, minimum_role="editor")
+    if project is None:
+        raise HTTPException(404, "project not found")
+    try:
+        deleted = delete_upload(db=db, project_id=project.id, upload_id=upload_id, storage=storage)
+    except StorageUnavailableError:
+        raise HTTPException(503, "Could not delete the file. Please try again.") from None
+    if not deleted:
+        raise HTTPException(404, "upload not found")
 
 
 @router.get("/projects/{project_id}/uploads/{upload_id}/raw")

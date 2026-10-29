@@ -192,6 +192,29 @@ def upload_file(
     )
 
 
+def delete_upload(*, db: Session, project_id: UUID, upload_id: UUID, storage: StorageService) -> bool:
+    """Delete one upload item with its pipeline rows and stored bytes, returning whether it existed.
+
+    The database cascade removes the item's documents, chunks, and runs in the same
+    transaction, and conversation citations settle to NULL by their own FK. The object
+    delete runs first and outside any transaction, so a storage failure leaves every
+    row untouched; S3's idempotent delete keeps an item whose bytes are already gone
+    deletable. A queued or running ingestion survives as a no-op: the worker's guarded
+    transitions treat the vanished run row as a stale delivery.
+    """
+
+    item = get_upload_item(db=db, project_id=project_id, upload_id=upload_id)
+    if item is None:
+        return False
+    raw_object_key = item.raw_object_key
+    # End the read transaction: no transaction may span the storage DELETE.
+    db.commit()
+    storage.delete_object(key=raw_object_key)
+    db.delete(item)
+    db.commit()
+    return True
+
+
 def list_uploads(*, db: Session, project_id: UUID) -> list[UploadListing]:
     """List a project's uploads newest first by item creation, deriving the latest status."""
 

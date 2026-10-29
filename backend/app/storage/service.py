@@ -81,6 +81,14 @@ class StorageService:
         except BotoCoreError as exc:
             raise StorageUnavailableError(f"get failed for key {key!r}: {exc}") from exc
 
+    def delete_object(self, *, key: str) -> None:
+        """Delete the object under ``key``; S3 deletes are idempotent, so a missing key is a no-op."""
+
+        try:
+            self._client.delete_object(Bucket=self._bucket, Key=key)
+        except (ClientError, BotoCoreError) as exc:
+            raise StorageUnavailableError(f"delete failed for key {key!r}: {exc}") from exc
+
 
 @lru_cache
 def get_storage() -> StorageService:

@@ -67,6 +67,35 @@ def test_get_missing_key_raises_object_not_found() -> None:
         service.get_object(key=key)
 
 
+def test_delete_object_removes_the_stored_bytes() -> None:
+    """Check that a deleted object no longer reads back."""
+
+    service = _service()
+    key = build_raw_object_key(
+        project_id=PROJECT_ID,
+        source_item_id=uuid4(),
+        content_hash=CONTENT_HASH,
+        filename="delete-me.bin",
+    )
+    service.put_object(key=key, content=b"goodbye")
+    service.delete_object(key=key)
+    with pytest.raises(ObjectNotFoundError):
+        service.get_object(key=key)
+
+
+def test_delete_missing_key_is_a_noop() -> None:
+    """Check that deleting an absent key does not raise, so partial state stays deletable."""
+
+    service = _service()
+    key = build_raw_object_key(
+        project_id=uuid4(),
+        source_item_id=uuid4(),
+        content_hash=CONTENT_HASH,
+        filename="absent.bin",
+    )
+    service.delete_object(key=key)
+
+
 def test_unreachable_endpoint_raises_unavailable() -> None:
     """Check that an unreachable storage endpoint raises StorageUnavailableError."""
 
