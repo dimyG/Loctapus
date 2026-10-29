@@ -6,17 +6,21 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
-## 2026-10-28 - Upload PMTUD fix follow-ups (`upload-pmtud-fix`)
+## 2026-10-29 - Upload-stall investigation close-out (`upload-pmtud-fix`)
 
-From the uploads-hang-on-Hetzner investigation (branch `upload-pmtud-fix`, commits
-`c87eae1` server-side MSS clamp, `595eb4f` upload stall timeout; root cause: the
-visitor's PPPoE path MTU of 1492 plus a router that rate-limits the
-fragmentation-needed ICMP, so full-size upstream TCP segments silently vanished
-and any request body past the initial congestion window stalled forever):
+From the uploads-hang-on-Hetzner investigation (branch `upload-pmtud-fix`): the
+server-side TCP MSS clamp (`c87eae1`, deployed 2026-10-28) was rolled back on
+2026-10-29 at the owner's request (`f96ff5b`, plus stripping the live mangle
+rules and the `before.rules` block on the VPS); only the client-side stall
+timeout survives (`595eb4f`, `961a03a`). Close-out picture: the owner's home
+path MTU is 1492 (PPPoE), and the return path already advertises a PPPoE-safe
+MSS of 1452 to clients, so the observed stall was local to the owner's machine -
+its Killer E2500 wired NIC (offload/driver) sends 1500-byte packets regardless
+of the peer-advertised MSS, and they die at the 1492 link; the same box on WiFi
+or through WSL, and any phone on the same network, honors the advertised MSS and
+uploads fine. The clamp commits survive in history should reduced-MTU hardening
+ever be wanted again.
 
-- The MSS clamp is IPv4-only (`iptables`, not `ip6tables`); add the ip6tables
-  twin before the domain ever gets an AAAA record (also in the runbook's
-  Operations section).
 - The vitest suite's load-induced flakiness re-confirmed while baselining this
   branch (5-8 failures, a different set each run, user-event typing arriving
   scrambled under CPU starvation); this is the pre-existing 2026-10-12
@@ -28,19 +32,6 @@ and any request body past the initial congestion window stalled forever):
 - The live-site diagnosis registered a throwaway account (`diag-<random>@example.com`)
   holding two uploaded PDFs in its default project; the demo data is throwaway
   by design, so this needs no action, just awareness.
-- Post-deploy verification (2026-10-28 evening): the clamp is live and advertised
-  (a WSL capture shows `mss 1400` in the server's SYN-ACK) and unaffected paths
-  work (mobile network, WSL), but the owner's Windows machine still stalled at a
-  byte-identical point (163,341) - its stack never applied the server-advertised
-  MSS, so the working fix was local: interface MTU 1492 on the dev box
-  (`netsh ... mtu=1492`, `store=active`). The local culprit (Killer E2500 suite,
-  Avast stream filter, or a NIC offload quirk) stays unidentified and out of repo
-  scope; a packet capture on that box is the next step if it is ever pursued
-  (Wireshark there currently lists only loopback - Npcap is not installed).
-- The clamp is hardening for reduced-MTU visitors, not a fix the demo requires:
-  a WSL client uploaded 5 MB against the unclamped server (15:36, before the
-  first clamp deploy), so any sender whose segments already fit the path was
-  never affected.
 
 ## 2026-10-27 - Hetzner deployment follow-ups
 
