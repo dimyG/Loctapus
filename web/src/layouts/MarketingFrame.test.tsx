@@ -1,4 +1,5 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitForElementToBeRemoved, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { renderWithProviders } from "../test/test-utils";
 import MarketingFrame from "./MarketingFrame";
@@ -31,5 +32,34 @@ describe("MarketingFrame", () => {
     expect(
       within(footer).getByText(/© \d{4} Loctapus\. All rights reserved\./),
     ).toBeInTheDocument();
+  });
+
+  it("opens a mobile menu with About, Sign in, and the mode switcher", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MarketingFrame>
+        <div>marketing-content</div>
+      </MarketingFrame>,
+    );
+    await user.click(screen.getByRole("button", { name: "menu" }));
+    const menu = await screen.findByRole("navigation", { name: "Mobile menu" });
+    expect(within(menu).getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
+    expect(within(menu).getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
+    expect(await within(menu).findByRole("button", { name: "color mode" })).toBeInTheDocument();
+  });
+
+  it("closes the mobile menu after a destination is chosen", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MarketingFrame>
+        <div>marketing-content</div>
+      </MarketingFrame>,
+    );
+    await user.click(screen.getByRole("button", { name: "menu" }));
+    const menu = await screen.findByRole("navigation", { name: "Mobile menu" });
+    await user.click(within(menu).getByRole("link", { name: "About" }));
+    await waitForElementToBeRemoved(() =>
+      screen.queryByRole("navigation", { name: "Mobile menu" }),
+    );
   });
 });

@@ -119,7 +119,10 @@ gave the chat page a server-backed conversation: the panel hydrates the signed-i
 owner's latest conversation in the project on mount (an empty thread while none
 exists), threads every ask through the served `conversation_id`, offers a
 "New chat" action, and renders each answer's persisted evidence snapshots as
-source chips.
+source chips. A 2026-10-29 round (branch `mobile-navbar-dark-buttons`) collapsed
+the marketing navbar below the md breakpoint into a hamburger drawer holding
+About, Sign in, and the color-mode switcher, keeping the Loctapus brand and the
+Get started CTA always visible.
 
 Runtime flow of one upload:
 
