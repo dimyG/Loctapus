@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -157,5 +157,65 @@ describe("SourceItemsTable", () => {
       expect(windowOpenMock).toHaveBeenCalledWith("blob:mock", "_blank", "noopener"),
     );
     expect(requestCount).toBe(2);
+  });
+
+  it("asks for confirmation and deletes the item on confirm", async () => {
+    let deletes = 0;
+    server.use(
+      http.delete("*/api/projects/p-1/uploads/s-1", () => {
+        deletes += 1;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithProviders(<SourceItemsTable items={uploadRows} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete brief.pdf" }));
+    // The confirm dialog names the file so the deletion target is unambiguous.
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("brief.pdf");
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(deletes).toBe(1));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("keeps the item when the deletion is cancelled", async () => {
+    let deletes = 0;
+    server.use(
+      http.delete("*/api/projects/p-1/uploads/s-1", () => {
+        deletes += 1;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithProviders(<SourceItemsTable items={uploadRows} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete brief.pdf" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(deletes).toBe(0);
+  });
+
+  it("shows a retryable snackbar when the delete fails", async () => {
+    let deletes = 0;
+    server.use(
+      http.delete("*/api/projects/p-1/uploads/s-1", () => {
+        deletes += 1;
+        // The first delete fails; the snackbar's retry then succeeds.
+        if (deletes === 1) {
+          return HttpResponse.json({ detail: "backend down" }, { status: 503 });
+        }
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithProviders(<SourceItemsTable items={uploadRows} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete brief.pdf" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("Could not delete the file.")).toBeInTheDocument();
+    // The closing dialog keeps the page aria-hidden until its exit transition ends.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(deletes).toBe(2));
   });
 });

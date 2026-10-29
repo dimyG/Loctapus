@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { Route, Routes } from "react-router";
@@ -183,6 +183,25 @@ describe("FileUploadPage", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("removes the row once the delete completes", async () => {
+    let uploads = [queuedUpload, readyUpload, failedUpload];
+    server.use(
+      http.get("*/projects/p-1/uploads", () => HttpResponse.json(uploads)),
+      http.delete("*/projects/p-1/uploads/s-1", () => {
+        uploads = uploads.filter((upload) => upload.id !== "s-1");
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderUploadPage();
+    expect(await screen.findByText("brief.pdf")).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete brief.pdf" }));
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    // The mutation invalidates the list, so the deleted row vanishes without a reload.
+    await waitFor(() => expect(screen.queryByText("brief.pdf")).not.toBeInTheDocument());
+    expect(screen.getByText("report.docx")).toBeInTheDocument();
   });
 
   it("invalidates the list on upload, so the new row appears without a reload", async () => {
