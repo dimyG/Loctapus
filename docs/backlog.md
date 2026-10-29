@@ -8,46 +8,43 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 
 ## 2026-10-29 - Upload-stall investigation (paused) (`upload-pmtud-fix`, `enable-http3-udp`)
 
-The bug: uploads from the owner's wired PC stall forever on the live site (the
-body stops at a fixed ~163 KB), while the same box on WiFi or via WSL, and any
-other network, works. The investigation stopped 2026-10-29 at the owner's
-request; the server was exonerated and both deployed fixes are correct and stay:
+The bug: from the owner's home network, PDF uploads to the live site hang
+forever on the wired connection (the transfer dies about 163 KB in). The same
+PC on WiFi, and phones on mobile networks, work fine. The server was tested at
+every layer and is healthy; the problem is the owner's PC.
 
-- Client-side 360 s stall timeout with retryable error copy (`595eb4f`,
-  `961a03a`): a stalled upload now surfaces an error instead of hanging.
-- HTTP/3 over UDP 443 (`2c6f20a`, branch `enable-http3-udp`): the server
-  override publishes the port and ufw allows it (bootstrap rule plus one manual
-  command on the live box). Verified end-to-end through the owner's own home
-  path with an aioquic client: a small GET, a 693 KB download, and a 3 MB
-  upload all succeed at line speed.
-- The server-side TCP MSS clamp shipped first (`c87eae1`) was permanently
-  rolled back (`f96ff5b`, live rules stripped): the owner's return path
-  (Fritz!Box/ISP, PPPoE) already advertises a PPPoE-safe MSS of 1452 to clients,
-  so the clamp protected nobody who needed it. The commits survive in history.
+What is actually wrong (verified by experiment): the home internet line is
+PPPoE and carries at most 1492-byte packets, and the router already tells
+every client to send smaller ones. The PC's wired network card (Killer E2500)
+ignores that advice and sends 1500-byte packets, which are too big for the
+line and vanish - that is the stall. Well-behaved clients (the same PC on
+WiFi, WSL, phones) upload fine against the unmodified server, so no server
+change can fix this.
 
-Root cause, twice over - both local to the owner's machine:
+What was tried, and where it stands:
 
-- TCP: the wired Killer E2500 ignores the peer-advertised MSS and sends
-  1500-byte packets that die at the home link's 1492-byte PPPoE MTU (the stall
-  byte count was identical with and without the clamp; WiFi/WSL/mobile honor
-  the MSS and work; interface MTU 1492 fixes wired).
-- UDP/QUIC: Chrome on the wired box completes small h3 requests but sustained
-  h3 flows die at ~6.6 s with Chrome error 85 (QUIC_TOO_MANY_RTOS, "Network
-  blackhole detected"); Chrome then pins the origin to h2 and the TCP fallback
-  re-triggers the stall (Caddy's logs hold the matching server-side errors).
-  A 3 MB h3 upload and a 693 KB h3 download through the same wire from WSL
-  succeed, so the sustained-UDP blackout is Windows-local too.
+- Frontend upload timeout (`595eb4f`, `961a03a`) - KEPT: a stalled upload shows
+  an error after 6 minutes instead of spinning forever.
+- Server-side packet-size clamp, MSS (`c87eae1`) - rolled back (`f96ff5b`):
+  the line already advertises a safe size, and a clamp cannot help a card
+  that ignores it.
+- HTTP/3 over UDP 443 (`2c6f20a`) - tried and reverted the same day
+  (`747a36f`). The server side worked perfectly (an independent test client
+  pushed 3 MB and pulled the site's biggest assets at full speed over the
+  owner's line), but the PC also breaks sustained UDP: large QUIC transfers
+  die mid-flight - on WiFi as well, so the culprit sits above the network
+  card (Avast is the prime suspect) - and Chrome does not retry them over TCP
+  cleanly, leaving the page visibly broken. The site is TCP-only again,
+  exactly as before.
 
-Resume ladder for the wired PC (~10 min, in order): (1) pause Avast entirely
-and retry - its stream filter is a documented QUIC breaker and runs on the box;
-(2) disable UDP Checksum Offload (IPv4/IPv6) on "Ethernet 2" via
-`Set-NetAdapterAdvancedProperty -Name "Ethernet 2" -DisplayName "UDP Checksum
-Offload (IPv4)" -DisplayValue "Disabled"` and retry - Large Send Offload v2 is
-the parallel suspect for the TCP half; (3) cross-check speed.cloudflare.com on
-wired (isolates the machine from the site), then update or replace the Killer
-driver suite. Workarounds until then: WiFi or mobile, or interface MTU 1492 on
-the wired NIC (`netsh interface ipv4 set subinterface "Ethernet 2" mtu=1492
-store=active`).
+How to resume, when wanted (fix the PC; the server then needs nothing): pause
+Avast and retry on wired; if still broken, disable the offload features on the
+"Ethernet 2" adapter (UDP/TCP checksum offload, large send offload) and retry;
+then update or replace the Killer driver suite. If the PC is ever fixed and
+HTTP/3 is wanted back, it is one revert away (`git revert 747a36f`).
+Workaround meanwhile: interface MTU 1492 on the wired NIC (`netsh interface
+ipv4 set subinterface "Ethernet 2" mtu=1492 store=active`), or upload over
+WiFi.
 
 - The vitest suite's load-induced flakiness re-confirmed while baselining this
   branch (5-8 failures, a different set each run, user-event typing arriving
