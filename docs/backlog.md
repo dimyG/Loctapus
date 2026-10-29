@@ -6,6 +6,17 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-10-29 - Marketing navbar e2e has not run under the canonical config (`mobile-navbar-dark-buttons`)
+
+`web/e2e/marketing-navbar.spec.ts` (commit `a0383f9`) was verified 3/3 locally
+through a throwaway vite-only Playwright config because the canonical
+`playwright.config.ts` webServer array boots Postgres, RabbitMQ, and Celery,
+none of which were running locally; the spec itself is anonymous-only. Its
+first canonical-config run happens in CI (or any full local stack) - if it
+fails there, suspect environment differences, not the selectors, which a
+follow-up review cross-checked against the source.
+
+
 ## 2026-10-29 - Minor review findings (`source-item-delete-uploading-state`)
 
 Left over from the branch's code reviews, all narrow or cosmetic:
