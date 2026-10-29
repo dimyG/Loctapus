@@ -12,7 +12,7 @@ describe("isTerminal", () => {
   });
 
   it("keeps every in-flight stage non-terminal", () => {
-    const inFlight: UploadStatus[] = ["queued", "fetching", "processing", "indexing"];
+    const inFlight: UploadStatus[] = ["uploading", "queued", "fetching", "processing", "indexing"];
     for (const status of inFlight) {
       expect(isTerminal(status)).toBe(false);
     }
@@ -22,6 +22,7 @@ describe("isTerminal", () => {
 describe("statusChip", () => {
   it("labels every status with its capitalized name", () => {
     const statuses: UploadStatus[] = [
+      "uploading",
       "queued",
       "fetching",
       "processing",
@@ -41,7 +42,7 @@ describe("statusChip", () => {
   });
 
   it("colors every in-flight stage primary", () => {
-    const inFlight: UploadStatus[] = ["queued", "fetching", "processing", "indexing"];
+    const inFlight: UploadStatus[] = ["uploading", "queued", "fetching", "processing", "indexing"];
     for (const status of inFlight) {
       expect(statusChip(status).color).toBe("primary");
     }

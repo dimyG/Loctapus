@@ -102,9 +102,15 @@ export default function SourceItemsTable({ items }: { items: Upload[] }) {
             {items.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
-                  <Link component="button" type="button" onClick={() => void openUpload(item)}>
-                    {item.filename}
-                  </Link>
+                  {item.status === "uploading" ? (
+                    // The stand-in row's id is client-side, so it can neither
+                    // be opened nor deleted until the real row replaces it.
+                    item.filename
+                  ) : (
+                    <Link component="button" type="button" onClick={() => void openUpload(item)}>
+                      {item.filename}
+                    </Link>
+                  )}
                 </TableCell>
                 <TableCell>File upload</TableCell>
                 <TableCell>
@@ -112,13 +118,15 @@ export default function SourceItemsTable({ items }: { items: Upload[] }) {
                 </TableCell>
                 <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
                 <TableCell align="right">
-                  <IconButton
-                    aria-label={`Delete ${item.filename}`}
-                    disabled={deletingId === item.id}
-                    onClick={() => setDeleteCandidate(item)}
-                  >
-                    <DeleteOutlineRoundedIcon />
-                  </IconButton>
+                  {item.status !== "uploading" && (
+                    <IconButton
+                      aria-label={`Delete ${item.filename}`}
+                      disabled={deletingId === item.id}
+                      onClick={() => setDeleteCandidate(item)}
+                    >
+                      <DeleteOutlineRoundedIcon />
+                    </IconButton>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

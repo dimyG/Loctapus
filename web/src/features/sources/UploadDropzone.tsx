@@ -28,9 +28,22 @@ const visuallyHiddenInputSx = {
  * with drag-and-drop next to the picker. A batch uploads strictly in order
  * and the first failure - a client rejection or a server error - stops it,
  * so later files are never sent. Gestures that arrive while a batch is
- * running are ignored, so two batches can never interleave.
+ * running are ignored, so two batches can never interleave. Each accepted
+ * file is reported to the page when its POST starts (for the "uploading"
+ * row) and when its mutation settles either way: on success the real row is
+ * already cached by the mutation, on failure the alert carries the error.
  */
-export default function UploadDropzone({ projectId }: { projectId: string }) {
+export default function UploadDropzone({
+  projectId,
+  onUploadStart,
+  onUploadSettled,
+}: {
+  projectId: string;
+  /** Fires when one accepted file's POST begins. */
+  onUploadStart: (file: File) => void;
+  /** Fires after one file's POST succeeds or fails; client-rejected files never start. */
+  onUploadSettled: (file: File) => void;
+}) {
   const [uploadFile] = useUploadFileMutation();
   const [uploadError, setUploadError] = useState<string | null>(null);
   // Spans the whole batch, not each single mutation: between two files the
@@ -55,10 +68,13 @@ export default function UploadDropzone({ projectId }: { projectId: string }) {
           return;
         }
         try {
+          onUploadStart(file);
           await uploadFile({ projectId, file }).unwrap();
         } catch (e) {
           setUploadError(getErrorMessage(e));
           return;
+        } finally {
+          onUploadSettled(file);
         }
       }
     } finally {

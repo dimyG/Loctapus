@@ -204,6 +204,74 @@ describe("FileUploadPage", () => {
     expect(screen.getByText("report.docx")).toBeInTheDocument();
   });
 
+  it("shows an Uploading row while the file is posting and hands off to the queued row", async () => {
+    const uploadedRow: Upload = {
+      ...queuedUpload,
+      id: "s-new",
+      filename: "report.pdf",
+      created_at: "2026-10-13T09:00:00Z",
+    };
+    const terminalRows = [readyUpload, failedUpload];
+    let posted = false;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get("*/projects/p-1/uploads", () =>
+        HttpResponse.json(posted ? [uploadedRow, ...terminalRows] : terminalRows),
+      ),
+      http.post("*/projects/p-1/uploads", async () => {
+        await gate;
+        posted = true;
+        return HttpResponse.json(uploadedRow, { status: 201 });
+      }),
+    );
+    renderUploadPage();
+    // The initial list is fully terminal, so no poll interferes with the window.
+    expect(await screen.findByText("report.docx")).toBeInTheDocument();
+    await userEvent.setup().upload(screen.getByLabelText("Upload"), pdfFile("report.pdf"));
+    // While the POST streams the bytes, the row is already there, marked
+    // Uploading, and inert: no open button and no delete action yet.
+    expect(await screen.findByText("Uploading")).toBeInTheDocument();
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "report.pdf" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete report.pdf" })).not.toBeInTheDocument();
+    release();
+    // The handoff is seamless: one report.pdf row throughout, chip swapped to Queued.
+    expect(await screen.findByText("Queued")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Uploading")).not.toBeInTheDocument());
+    expect(screen.getAllByText("report.pdf")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "report.pdf" })).toBeInTheDocument();
+  });
+
+  it("drops the Uploading row and shows the alert when the post fails", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get("*/projects/p-1/uploads", () => HttpResponse.json([readyUpload, failedUpload])),
+      http.post("*/projects/p-1/uploads", async () => {
+        await gate;
+        return HttpResponse.json(
+          { detail: "Could not store the file. Please try again." },
+          { status: 503 },
+        );
+      }),
+    );
+    renderUploadPage();
+    expect(await screen.findByText("report.docx")).toBeInTheDocument();
+    await userEvent.setup().upload(screen.getByLabelText("Upload"), pdfFile("report.pdf"));
+    expect(await screen.findByText("Uploading")).toBeInTheDocument();
+    release();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not store the file. Please try again.",
+    );
+    await waitFor(() => expect(screen.queryByText("Uploading")).not.toBeInTheDocument());
+    expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
+  });
+
   it("invalidates the list on upload, so the new row appears without a reload", async () => {
     let gets = 0;
     const uploadedRow: Upload = {

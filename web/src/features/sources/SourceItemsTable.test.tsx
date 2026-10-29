@@ -94,6 +94,20 @@ describe("SourceItemsTable", () => {
     expect(screen.getByText("No source items yet.")).toBeInTheDocument();
   });
 
+  it("renders an uploading row as inert: no open button and no delete action", () => {
+    const uploadingRow: Upload = {
+      ...queuedUpload,
+      id: "pending-incoming.pdf",
+      status: "uploading",
+      filename: "incoming.pdf",
+    };
+    renderWithProviders(<SourceItemsTable items={[uploadingRow]} />);
+    expect(screen.getByText("Uploading")).toBeInTheDocument();
+    expect(screen.getByText("incoming.pdf")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "incoming.pdf" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete incoming.pdf" })).not.toBeInTheDocument();
+  });
+
   it("opens the file in a new tab when the filename is clicked", async () => {
     serveRawBytes();
     renderWithProviders(<SourceItemsTable items={uploadRows} />);

@@ -20,7 +20,10 @@ const authed = () => ({
 
 /** Renders the dropzone standalone; the mutation only needs the api middleware. */
 function renderDropzone() {
-  return renderWithProviders(<UploadDropzone projectId="p-1" />, { preloadedState: authed() });
+  return renderWithProviders(
+    <UploadDropzone projectId="p-1" onUploadStart={() => {}} onUploadSettled={() => {}} />,
+    { preloadedState: authed() },
+  );
 }
 
 const queuedUpload: Upload = {
@@ -284,6 +287,47 @@ describe("UploadDropzone", () => {
     fireEvent.drop(screen.getByTestId("dropzone"), { dataTransfer: { files: [] } });
     expect(posts).toHaveLength(0);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("reports each upload's start and its settlement when the post fails", async () => {
+    const started: string[] = [];
+    const settled: string[] = [];
+    server.use(
+      http.post("*/projects/p-1/uploads", () =>
+        HttpResponse.json({ detail: "backend down" }, { status: 503 }),
+      ),
+    );
+    renderWithProviders(
+      <UploadDropzone
+        projectId="p-1"
+        onUploadStart={(file) => started.push(file.name)}
+        onUploadSettled={(file) => settled.push(file.name)}
+      />,
+      { preloadedState: authed() },
+    );
+    await userEvent.setup().upload(screen.getByLabelText("Upload"), pdfFile("doomed.pdf"));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(started).toEqual(["doomed.pdf"]);
+    expect(settled).toEqual(["doomed.pdf"]);
+  });
+
+  it("reports each upload's start and its settlement when the post succeeds", async () => {
+    const started: string[] = [];
+    const settled: string[] = [];
+    recordUploadPosts();
+    renderWithProviders(
+      <UploadDropzone
+        projectId="p-1"
+        onUploadStart={(file) => started.push(file.name)}
+        onUploadSettled={(file) => settled.push(file.name)}
+      />,
+      { preloadedState: authed() },
+    );
+    await userEvent.setup().upload(screen.getByLabelText("Upload"), pdfFile("fine.pdf"));
+    await vi.waitFor(() => {
+      expect(settled).toEqual(["fine.pdf"]);
+    });
+    expect(started).toEqual(["fine.pdf"]);
   });
 
   it("ignores a second gesture while a batch is in flight", async () => {

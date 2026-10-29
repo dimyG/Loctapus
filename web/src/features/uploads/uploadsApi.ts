@@ -9,8 +9,13 @@ import { api } from "../../app/api";
  */
 export const UPLOAD_TIMEOUT_MS = 360_000;
 
-/** The statuses an upload's latest pipeline run can report. */
-export type UploadStatus = "queued" | "fetching" | "processing" | "indexing" | "ready" | "failed";
+/**
+ * The statuses an upload's latest pipeline run can report, plus "uploading":
+ * the client-side state of a file whose bytes are still being posted, which
+ * the server never returns because it only learns of the upload at the end.
+ */
+export type UploadStatus =
+  "uploading" | "queued" | "fetching" | "processing" | "indexing" | "ready" | "failed";
 
 /** One uploaded file as the uploads endpoints return it. */
 export type Upload = {
@@ -42,6 +47,24 @@ export const uploadsApi = api.injectEndpoints({
     }),
     uploadFile: build.mutation<Upload, { projectId: string; file: File }>({
       query: uploadFileArgs,
+      // Insert the created row the moment the server answers, so the table
+      // swaps the client's "uploading" stand-in for the real row without
+      // waiting for the invalidation refetch - and survives that refetch
+      // failing. The refetch still follows as the authoritative backstop.
+      onQueryStarted: async ({ projectId }, { dispatch, queryFulfilled }) => {
+        try {
+          const { data: upload } = await queryFulfilled;
+          dispatch(
+            uploadsApi.util.updateQueryData("getUploads", projectId, (draft) => {
+              if (!draft.some((row) => row.id === upload.id)) {
+                draft.unshift(upload);
+              }
+            }),
+          );
+        } catch {
+          // A failed upload has no row to insert; the caller surfaces the error.
+        }
+      },
       invalidatesTags: (_upload, _error, { projectId }) => [{ type: "Upload", id: projectId }],
     }),
     deleteUpload: build.mutation<void, { projectId: string; uploadId: string }>({

@@ -7,12 +7,20 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { useState } from "react";
 import { Link as RouterLink, useParams } from "react-router";
 import { sectionPath } from "../../app/sectionPaths";
 import { useProjectGuard } from "../projects/useProjectGuard";
 import { useProjectUploads } from "../uploads/useProjectUploads";
+import type { Upload } from "../uploads/uploadsApi";
 import SourceItemsTable from "./SourceItemsTable";
 import UploadDropzone from "./UploadDropzone";
+
+/** One file whose POST is still in flight, shown as an optimistic table row. */
+type PendingUpload = {
+  filename: string;
+  createdAt: string;
+};
 
 /** Shared breadcrumb back to the projects list. */
 function BackLink() {
@@ -37,6 +45,11 @@ export default function FileUploadPage() {
     error: uploadsError,
     refetch: refetchUploads,
   } = useProjectUploads(projectId, { skip: projectMissing });
+  // Files whose POST is still streaming; they render as "uploading" rows so
+  // the seconds between the upload gesture and the queued row are visible.
+  // The dropzone settles each one: on success the mutation has already put
+  // the real row in the cache, on failure the dropzone's alert says why.
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
 
   if (projectMissing) {
     return (
@@ -60,6 +73,20 @@ export default function FileUploadPage() {
     );
   }
 
+  // Pending rows lead the list, deduped by filename so a pending row never
+  // doubles the real row that replaced it.
+  const serverFilenames = new Set((uploads ?? []).map((upload) => upload.filename));
+  const pendingRows: Upload[] = pendingUploads
+    .filter((pending) => !serverFilenames.has(pending.filename))
+    .map((pending) => ({
+      id: `pending-${pending.filename}`,
+      project_id: projectId ?? "",
+      filename: pending.filename,
+      status: "uploading",
+      created_at: pending.createdAt,
+    }));
+  const items = [...pendingRows, ...(uploads ?? [])];
+
   return (
     <>
       <Stack spacing={0.5} sx={{ pt: 3, alignItems: "flex-start" }}>
@@ -72,7 +99,22 @@ export default function FileUploadPage() {
           File upload
         </Typography>
       </Stack>
-      {projectId !== undefined && <UploadDropzone projectId={projectId} />}
+      {projectId !== undefined && (
+        <UploadDropzone
+          projectId={projectId}
+          onUploadStart={(file) =>
+            setPendingUploads((current) => [
+              ...current,
+              { filename: file.name, createdAt: new Date().toISOString() },
+            ])
+          }
+          onUploadSettled={(file) =>
+            setPendingUploads((current) =>
+              current.filter((pending) => pending.filename !== file.name),
+            )
+          }
+        />
+      )}
       {uploadsLoading ? (
         <Table sx={{ mt: 3 }}>
           <TableBody>
@@ -97,7 +139,7 @@ export default function FileUploadPage() {
           </Button>
         </Stack>
       ) : (
-        <SourceItemsTable items={uploads ?? []} />
+        <SourceItemsTable items={items} />
       )}
     </>
   );
