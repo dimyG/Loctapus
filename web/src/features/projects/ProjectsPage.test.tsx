@@ -84,6 +84,8 @@ describe("ProjectsPage", () => {
       }),
     );
     renderProjects();
+    // The vi.waitFor chain retries until five skeleton rows render; the
+    // then/catch pair turns a timeout into an explicit "never rendered" failure.
     await vi
       .waitFor(() => {
         expect(screen.getAllByTestId("skeleton-row")).toHaveLength(5);

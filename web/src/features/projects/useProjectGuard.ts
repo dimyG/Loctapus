@@ -19,6 +19,8 @@ function errorStatus(error: FetchBaseQueryError | SerializedError | undefined): 
  * drives the "Project not found." state and `projectUncacheableError` the
  * retryable "Could not load project." state (an error with nothing cached;
  * stale cached data renders normally instead).
+ *
+ * @param {string | undefined} projectId - Project id to load, or undefined to skip the query.
  */
 export function useProjectGuard(projectId: string | undefined): {
   project: Project | undefined;

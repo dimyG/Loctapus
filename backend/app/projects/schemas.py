@@ -24,6 +24,8 @@ class ProjectUpdate(BaseModel):
     def _reject_explicit_nulls(self) -> Self:
         """Fail when a field is explicitly set to null instead of omitted."""
 
+        # An omitted PATCH field means "leave unchanged"; an explicit null is a
+        # caller mistake, not a request to clear the field.
         for field in self.model_fields_set:
             if getattr(self, field) is None:
                 raise ValueError(f"{field} must not be null; omit the field to leave it unchanged")

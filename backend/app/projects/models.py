@@ -27,11 +27,14 @@ class Project(Base):
     """A unit of work created by a team inside a workspace, with per-team visibility."""
 
     __tablename__ = "projects"
+    # Postgres does not index foreign key columns on its own; workspace listings
+    # and ownership joins filter on this one.
     __table_args__ = (Index("ix_projects_workspace_id", "workspace_id"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id"))
     name: Mapped[str] = mapped_column(String)
+    # Public projects are readable by any authenticated user, not only role holders.
     is_public: Mapped[bool] = mapped_column(default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

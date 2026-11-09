@@ -7,21 +7,32 @@ from sqlalchemy.orm import Session
 
 
 def _auth(*, client: TestClient, email: str) -> dict[str, str]:
-    """Register an account and return its bearer headers."""
+    """Register an account and return its bearer headers.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param email: Address to register.
+    """
 
     r = client.post("/api/auth/register", json={"email": email, "password": "password123"})
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
 def _default_team_id(*, client: TestClient, headers: dict[str, str]) -> str:
-    """Return the account's default team id through the API."""
+    """Return the account's default team id through the API.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param headers: Bearer headers of the account whose team is looked up.
+    """
 
     ws = client.get("/api/workspaces", headers=headers).json()[0]
     return str(client.get(f"/api/workspaces/{ws['id']}/teams", headers=headers).json()[0]["id"])
 
 
 def test_create_and_list_projects(*, client: TestClient) -> None:
-    """Check project creation and the per-user listing."""
+    """Check that a created project is listed beside the account's default project.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers = _auth(client=client, email="crl@example.com")
     team_id = _default_team_id(client=client, headers=headers)
@@ -35,7 +46,10 @@ def test_create_and_list_projects(*, client: TestClient) -> None:
 
 
 def test_get_project_not_shared_with_user_is_404(*, client: TestClient) -> None:
-    """Check that a stranger cannot fetch a private project."""
+    """Check that a stranger cannot fetch a private project.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     alice = _auth(client=client, email="a2@example.com")
     bob = _auth(client=client, email="b2@example.com")
@@ -48,14 +62,20 @@ def test_get_project_not_shared_with_user_is_404(*, client: TestClient) -> None:
 
 
 def test_projects_require_auth(*, client: TestClient) -> None:
-    """Check that the project endpoints reject unauthenticated requests."""
+    """Check that the project endpoints reject unauthenticated requests.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     assert client.get("/api/projects").status_code == 401
     assert client.post("/api/projects", json={"name": "x"}).status_code == 401
 
 
 def test_create_project_validates_name(*, client: TestClient) -> None:
-    """Check that an empty name fails validation."""
+    """Check that an empty name fails validation.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers = _auth(client=client, email="val@example.com")
     team_id = _default_team_id(client=client, headers=headers)
@@ -64,7 +84,10 @@ def test_create_project_validates_name(*, client: TestClient) -> None:
 
 
 def test_create_project_requires_team_membership(*, client: TestClient) -> None:
-    """Check that creating on a stranger's team answers 404."""
+    """Check that creating on a stranger's team answers 404.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     alice = _auth(client=client, email="fa@example.com")
     bob = _auth(client=client, email="fb@example.com")
@@ -74,7 +97,10 @@ def test_create_project_requires_team_membership(*, client: TestClient) -> None:
 
 
 def test_delete_project_flow_and_cross_user_404(*, client: TestClient) -> None:
-    """Check deletion permissions and the idempotent 404 afterwards."""
+    """Check that only the owning admin can delete, and that a deleted project stays 404.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     alice = _auth(client=client, email="del-a@example.com")
     bob = _auth(client=client, email="del-b@example.com")
@@ -87,7 +113,10 @@ def test_delete_project_flow_and_cross_user_404(*, client: TestClient) -> None:
 
 
 def test_public_project_visible_to_non_member(*, client: TestClient) -> None:
-    """Check that a public project is readable and listed for strangers."""
+    """Check that a public project is readable and listed for strangers.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     alice = _auth(client=client, email="pa@example.com")
     bob = _auth(client=client, email="pb@example.com")
@@ -104,7 +133,10 @@ def test_public_project_visible_to_non_member(*, client: TestClient) -> None:
 
 
 def test_public_project_not_editable_by_non_member(*, client: TestClient) -> None:
-    """Check that a stranger with view access cannot modify or delete."""
+    """Check that a stranger with view access cannot modify or delete.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     alice = _auth(client=client, email="qa@example.com")
     bob = _auth(client=client, email="qb@example.com")
@@ -115,17 +147,19 @@ def test_public_project_not_editable_by_non_member(*, client: TestClient) -> Non
     ).json()["id"]
     made_public = client.patch(f"/api/projects/{pid}", json={"is_public": True}, headers=alice)
     assert made_public.status_code == 200 and made_public.json()["is_public"] is True
-    # Bob can view the public project.
+    # Public visibility grants read access only; writes still require an admin role.
     assert client.get(f"/api/projects/{pid}", headers=bob).status_code == 200
-    # But he cannot edit or delete it.
     assert client.patch(f"/api/projects/{pid}", json={"name": "hax"}, headers=bob).status_code == 404
     assert client.delete(f"/api/projects/{pid}", headers=bob).status_code == 404
-    # And his edit attempt changed nothing.
+    # The failed patch left the stored name unchanged.
     assert client.get(f"/api/projects/{pid}", headers=bob).json()["name"] == "pub2"
 
 
 def test_patch_updates_name_and_visibility(*, client: TestClient) -> None:
-    """Check that patch updates name and visibility."""
+    """Check that a patch updates name and visibility together.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     h = _auth(client=client, email="pu@example.com")
     pid = client.post(
@@ -138,7 +172,10 @@ def test_patch_updates_name_and_visibility(*, client: TestClient) -> None:
 
 
 def test_patch_rejects_explicit_nulls(*, client: TestClient) -> None:
-    """Check that an explicit null in a patch body is rejected instead of ignored."""
+    """Check that an explicit null in a patch body is rejected instead of ignored.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     h = _auth(client=client, email="null@example.com")
     pid = client.post(
@@ -152,7 +189,11 @@ def test_patch_rejects_explicit_nulls(*, client: TestClient) -> None:
 
 
 def test_patch_rejects_non_admin_team_member(*, client: TestClient, db_session: Session) -> None:
-    """Check that a viewer-role team member cannot patch."""
+    """Check that a viewer-role team member cannot patch.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Session used to insert the viewer role directly.
+    """
 
     from app.projects.models import ProjectTeamRole
 
@@ -163,7 +204,7 @@ def test_patch_rejects_non_admin_team_member(*, client: TestClient, db_session: 
         json={"name": "roled", "team_id": _default_team_id(client=client, headers=alice)},
         headers=alice,
     ).json()["id"]
-    # Give the viewer's own team a viewer (non-admin) role on the project.
+    # The viewer's own team holds only a viewer (non-admin) role on the project.
     viewer_team_id = _default_team_id(client=client, headers=viewer_headers)
     db_session.add(
         ProjectTeamRole(project_id=uuid.UUID(pid), team_id=uuid.UUID(viewer_team_id), role="viewer")

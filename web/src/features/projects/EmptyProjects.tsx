@@ -3,7 +3,11 @@ import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
-/** Friendly empty state; the create CTA opens the same dialog as the header. */
+/**
+ * Friendly empty state; the create CTA opens the same dialog as the header.
+ *
+ * @param {() => void} onCreate - Opens the create-project dialog.
+ */
 export default function EmptyProjects({ onCreate }: { onCreate: () => void }) {
   return (
     <Card variant="outlined" sx={{ mt: 4, py: 6, px: 4 }}>

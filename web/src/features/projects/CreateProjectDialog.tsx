@@ -15,7 +15,12 @@ import { useGetWorkspaceTeamsQuery } from "../workspaces/teamsApi";
 import { useGetWorkspacesQuery } from "../workspaces/workspacesApi";
 import { useCreateProjectMutation } from "./projectsApi";
 
-/** The create-project form inside a dialog, with the workspace->team picker. */
+/**
+ * The create-project form inside a dialog, with the workspace->team picker.
+ *
+ * @param {boolean} open - Whether the dialog is currently shown.
+ * @param {() => void} onClose - Closes the dialog after a successful create or cancel.
+ */
 export default function CreateProjectDialog({
   open,
   onClose,

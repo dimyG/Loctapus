@@ -1,5 +1,6 @@
 import { api } from "../../app/api";
 
+/** One project as the API returns it. */
 export type Project = {
   id: string;
   name: string;
@@ -25,4 +26,9 @@ export const projectsApi = api.injectEndpoints({
   }),
 });
 
+/**
+ * Generated hooks for the project endpoints: list all projects, fetch one by
+ * id, and create a project on a team. Creating invalidates the Project tag,
+ * so the list and detail queries refetch.
+ */
 export const { useCreateProjectMutation, useGetProjectsQuery, useGetProjectQuery } = projectsApi;
