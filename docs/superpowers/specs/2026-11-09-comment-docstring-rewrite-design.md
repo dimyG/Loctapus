@@ -15,9 +15,9 @@ Success criteria:
 - The diff touches only comments and docstrings - zero behavior changes.
 - After every backend slice: `ruff check .`, `ruff format --check .`, `mypy app tests`, `pytest` (run in `backend/`). After every frontend slice: `npm run lint`, `npm run test`, `npx tsc -b` (run in `web/`). All must pass.
 
-## Model constraint (explicit user instruction)
+## Model constraint (explicit user instruction, amended mid-execution)
 
-**All work on this task - implementation slices, subagents, and the final fresh-context review - uses only the model `opencode/mimo-v2.6-flash-free` (MiMo V2.6 Flash Free).** No other model is permitted for any part of this task, including the end-of-task review. This overrides the model-selection list in `AGENTS.md` for this task only.
+**All work on this task uses only the model `z-ai/glm-5.3` (GLM 5.3)** for implementation slices, subagents, and the final fresh-context review. (Original instruction: `opencode/mimo-v2.6-flash-free`; amended 2026-11-09 after the free model's usage limit was reached - GLM 5.3 only, per the user.) This overrides the model-selection list in `AGENTS.md` for this task only.
 
 ## Scope
 

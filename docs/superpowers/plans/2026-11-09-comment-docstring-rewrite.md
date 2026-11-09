@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Model: **only `opencode/mimo-v2.6-flash-free`** for all execution, subagents, and reviews (spec's model constraint; overrides AGENTS.md model list for this task).
+- **Implementation and review model: `z-ai/glm-5.3` only** (amended from `opencode/mimo-v2.6-flash-free` when the free tier ran out, mid-execution; every dispatch - implementer, reviewer, re-reviewer, final review - specifies it explicitly).
 - Diff touches **only comments and docstrings**; executable lines never change. Where a comment disagrees with the code, rewrite the comment to match the code.
 - No em dashes anywhere; comments capitalized and ending with a period; line length 110 (Python); blank line after every docstring (enforced by `tests/test_style.py`).
 - Python: every function/method with parameters gets one `:param name:` line per parameter, no `:type:` lines. Frontend: every export gets preceding JSDoc with `@param {type} name - ...` lines where it takes parameters.
