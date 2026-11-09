@@ -43,7 +43,7 @@ export default function CreateProjectDialog({
   const [dialogError, setDialogError] = useState<string | null>(null);
 
   // Query errors outrank submit errors: without workspaces or teams there is
-  // nothing the user can fix by resubmitting (spec 4.5 failure mode 5).
+  // nothing the user can fix by resubmitting.
   const queryError = workspacesError ?? teamsError;
 
   function handleWorkspaceChange(id: string) {
