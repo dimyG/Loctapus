@@ -31,7 +31,11 @@ export type Upload = {
 /** One row of the sources table: a server upload, or an optimistic stand-in. */
 export type SourceRow = Omit<Upload, "status"> & { status: RowStatus };
 
-/** Builds the fetch args for one file upload, capping the request at the stall timeout. */
+/**
+ * Builds the fetch args for one file upload, capping the request at the stall timeout.
+ *
+ * @param {{ projectId: string; file: File }} args - Project id and the file to post.
+ */
 export function uploadFileArgs({ projectId, file }: { projectId: string; file: File }): FetchArgs {
   const formData = new FormData();
   formData.append("file", file);
@@ -107,6 +111,12 @@ export const uploadsApi = api.injectEndpoints({
   }),
 });
 
+/**
+ * Generated hooks for the uploads endpoints: list a project's uploads, upload a
+ * file, delete an upload, and fetch an upload's raw bytes. Creating and deleting
+ * upsert or drop the cached row immediately, then invalidate the project's
+ * Upload tag so the list refetch stays the authoritative backstop.
+ */
 export const {
   useGetUploadsQuery,
   useUploadFileMutation,

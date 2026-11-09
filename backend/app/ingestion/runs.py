@@ -43,6 +43,12 @@ def _transition(
 
     Zero matched rows means a duplicate or stale delivery, which callers turn into a
     no-op; the pair check runs before any SQL so an illegal call touches nothing.
+
+    :param db: Session the guarded UPDATE runs on; the caller commits.
+    :param run_id: Id of the run to transition.
+    :param from_status: Status the run must currently hold.
+    :param to_status: Status the run moves to.
+    :param values: Extra column values written with the status change.
     """
 
     if (from_status, to_status) not in _ALLOWED_TRANSITIONS:
@@ -59,7 +65,13 @@ def _transition(
 
 
 def request_ingestion(*, db: Session, source_item_id: UUID, raw_object_key: str, content_hash: str) -> UUID:
-    """Add one queued run pinned to its file version, with its event, in the caller's transaction."""
+    """Add one queued run pinned to its file version, with its event, in the caller's transaction.
+
+    :param db: Session the run and its outbox event are added to; the caller commits.
+    :param source_item_id: Item the run belongs to.
+    :param raw_object_key: Storage key of the file version this run processes.
+    :param content_hash: Sha256 of that version's bytes, verified before parsing.
+    """
 
     run_id = uuid4()
     db.add(
@@ -80,7 +92,11 @@ def request_ingestion(*, db: Session, source_item_id: UUID, raw_object_key: str,
 
 
 def claim_run(*, db: Session, run_id: UUID) -> bool:
-    """Move a queued run to fetching and stamp its started_at."""
+    """Move a queued run to fetching and stamp its started_at.
+
+    :param db: Session the guarded UPDATE runs on; the caller commits.
+    :param run_id: Id of the queued run.
+    """
 
     return _transition(
         db=db,
@@ -92,7 +108,11 @@ def claim_run(*, db: Session, run_id: UUID) -> bool:
 
 
 def start_processing(*, db: Session, run_id: UUID) -> bool:
-    """Move a fetching run to processing."""
+    """Move a fetching run to processing.
+
+    :param db: Session the guarded UPDATE runs on; the caller commits.
+    :param run_id: Id of the fetching run.
+    """
 
     return _transition(
         db=db,
@@ -104,7 +124,12 @@ def start_processing(*, db: Session, run_id: UUID) -> bool:
 
 
 def mark_indexing(*, db: Session, run_id: UUID, document_id: UUID) -> bool:
-    """Move a processing run to indexing with its document id."""
+    """Move a processing run to indexing with its document id.
+
+    :param db: Session the guarded UPDATE runs on; the caller commits.
+    :param run_id: Id of the processing run.
+    :param document_id: Document the run created and is indexing.
+    """
 
     return _transition(
         db=db,
@@ -116,7 +141,13 @@ def mark_indexing(*, db: Session, run_id: UUID, document_id: UUID) -> bool:
 
 
 def mark_ready(*, db: Session, run_id: UUID, expected: RunStatus, document_id: UUID | None = None) -> bool:
-    """Move a processing or indexing run to ready, stamping finished_at."""
+    """Move a processing or indexing run to ready, stamping finished_at.
+
+    :param db: Session the guarded UPDATE runs on; the caller commits.
+    :param run_id: Id of the run ending ready.
+    :param expected: Status the run must currently hold.
+    :param document_id: Document to stamp when the caller has it.
+    """
 
     values: dict[str, object] = {"finished_at": func.now()}
     if document_id is not None:
@@ -131,7 +162,13 @@ def mark_ready(*, db: Session, run_id: UUID, expected: RunStatus, document_id: U
 
 
 def mark_failed(*, db: Session, run_id: UUID, expected: RunStatus, error: str) -> bool:
-    """Move a fetching, processing, or indexing run to failed with the error and finished_at."""
+    """Move a fetching, processing, or indexing run to failed with the error and finished_at.
+
+    :param db: Session the guarded UPDATE runs on; the caller commits.
+    :param run_id: Id of the run ending failed.
+    :param expected: Status the run must currently hold.
+    :param error: User-safe error message stored on the run.
+    """
 
     return _transition(
         db=db,
@@ -143,7 +180,10 @@ def mark_failed(*, db: Session, run_id: UUID, expected: RunStatus, error: str) -
 
 
 def latest_run_status(*, source_item_id: SQLColumnExpression[UUID]) -> ScalarSelect[str]:
-    """Return the correlated latest-run status lookup for one source item."""
+    """Return the correlated latest-run status lookup for one source item.
+
+    :param source_item_id: Correlated column expression of the item whose latest run is read.
+    """
 
     return (
         select(IngestionRun.status)

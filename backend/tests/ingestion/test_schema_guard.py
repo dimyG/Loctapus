@@ -14,7 +14,10 @@ from tests.fakes import MismatchedEmbeddingProvider
 
 
 def test_dimension_guard(*, db_session: Session) -> None:
-    """Check the catalog dimension query and the comparison against the provider."""
+    """Check the catalog dimension query and the comparison against the provider.
+
+    :param db_session: Transaction-managed session the catalog query runs on.
+    """
 
     assert query_embedding_dimension(db=db_session) == 384
     verify_embedding_dimension(expected_dimension=384, actual_dimension=384)
@@ -26,7 +29,11 @@ def test_dimension_guard(*, db_session: Session) -> None:
 
 
 def test_run_startup_checks(*, db_session: Session, settings: Settings) -> None:
-    """Check that startup checks pass for a matching provider and fail for a mismatch."""
+    """Check that startup checks pass for a matching provider and fail for a mismatch.
+
+    :param db_session: Transaction-managed session the catalog query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     run_startup_checks(db=db_session, embedding_provider=get_embedding_provider(settings=settings))
     mismatched = MismatchedEmbeddingProvider(dimension=512)

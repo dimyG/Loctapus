@@ -3,11 +3,14 @@ export const MAX_UPLOAD_MB = 25;
 
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
+/** The only file extensions the client sends, matching the server's allowlist. */
 export const ALLOWED_EXTENSIONS = [".pdf", ".docx"] as const;
 
 /**
  * Mirrors the server's upload checks so invalid files never leave the browser.
  * The copy matches the server's 422 messages exactly.
+ *
+ * @param {File} file - File chosen or dropped by the user.
  */
 export function uploadRejection(file: File): string | null {
   const name = file.name.toLowerCase();

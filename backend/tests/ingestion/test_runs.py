@@ -31,7 +31,10 @@ TIE_BREAK_TIME = datetime(2026, 10, 14, 12, 0, 0, tzinfo=UTC)
 
 
 def test_status_enum_matches_the_migrated_check(*, engine: Engine) -> None:
-    """Check that the migrated status check constraint names exactly the RunStatus values."""
+    """Check that the migrated status check constraint names exactly the RunStatus values.
+
+    :param engine: Session-scoped engine on the migration-built test database.
+    """
 
     with engine.connect() as conn:
         definitions = (
@@ -52,7 +55,10 @@ def test_status_enum_matches_the_migrated_check(*, engine: Engine) -> None:
 
 
 def test_disallowed_transition_raises_without_touching_the_row(*, db_session: Session) -> None:
-    """Check that an illegal transition raises ValueError and leaves the run untouched."""
+    """Check that an illegal transition raises ValueError and leaves the run untouched.
+
+    :param db_session: Transaction-managed session the illegal transition is attempted on.
+    """
 
     project_id = seed_project(db=db_session, email="runs-disallowed@example.com")
     seeded = seed_upload(db=db_session, project_id=project_id)
@@ -67,7 +73,10 @@ def test_disallowed_transition_raises_without_touching_the_row(*, db_session: Se
 
 
 def test_transitions_follow_the_pipeline(*, db_session: Session) -> None:
-    """Check the guarded pipeline transitions and that a claimed run cannot be re-claimed."""
+    """Check the guarded pipeline transitions and that a claimed run cannot be re-claimed.
+
+    :param db_session: Transaction-managed session the transitions run on.
+    """
 
     project_id = seed_project(db=db_session, email="runs-pipeline@example.com")
     seeded = seed_upload(db=db_session, project_id=project_id)
@@ -97,7 +106,10 @@ def test_transitions_follow_the_pipeline(*, db_session: Session) -> None:
 
 
 def test_finished_at_must_match_a_terminal_status(*, db_session: Session) -> None:
-    """Check that a terminal status without finished_at is rejected on flush."""
+    """Check that a terminal status without finished_at is rejected on flush.
+
+    :param db_session: Transaction-managed session the illegal run state is flushed on.
+    """
 
     project_id = seed_project(db=db_session, email="runs-finished-at@example.com")
     seeded = seed_upload(db=db_session, project_id=project_id)
@@ -110,7 +122,10 @@ def test_finished_at_must_match_a_terminal_status(*, db_session: Session) -> Non
 
 
 def test_latest_run_status_prefers_the_newest_run(*, db_session: Session) -> None:
-    """Check that the latest-run lookup orders by created_at and not by happenstance."""
+    """Check that the latest-run lookup orders by created_at and not by happenstance.
+
+    :param db_session: Transaction-managed session the two runs are written through.
+    """
 
     project_id = seed_project(db=db_session, email="runs-newest@example.com")
     seeded = seed_upload(db=db_session, project_id=project_id)
@@ -139,7 +154,10 @@ def test_latest_run_status_prefers_the_newest_run(*, db_session: Session) -> Non
 
 
 def test_latest_run_status_breaks_ties_by_id(*, db_session: Session) -> None:
-    """Check that tied created_at resolves by id and the sources list stays one row."""
+    """Check that tied created_at resolves by id and the sources list stays one row.
+
+    :param db_session: Transaction-managed session the tied runs are written through.
+    """
 
     project_id = seed_project(db=db_session, email="runs-tie@example.com")
     seeded = seed_upload(db=db_session, project_id=project_id)
@@ -179,7 +197,10 @@ def test_latest_run_status_breaks_ties_by_id(*, db_session: Session) -> None:
 
 
 def test_request_ingestion_adds_a_queued_run_and_its_event(*, db_session: Session) -> None:
-    """Check that request_ingestion appends one queued run and its outbox event."""
+    """Check that request_ingestion appends one queued run and its outbox event.
+
+    :param db_session: Transaction-managed session the run and event are written through.
+    """
 
     project_id = seed_project(db=db_session, email="runs-request@example.com")
     seeded = seed_upload(db=db_session, project_id=project_id)

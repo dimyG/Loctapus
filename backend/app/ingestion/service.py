@@ -48,6 +48,8 @@ def _run_error_message(*, exc: BaseException) -> str:
 
     ``ParseError`` messages are already user-facing; the storage and fingerprint
     cases map to their fixed copy; anything else is unexpected by definition.
+
+    :param exc: Exception the user-safe message is chosen for.
     """
 
     if isinstance(exc, ParseError):
@@ -64,7 +66,13 @@ def _run_error_message(*, exc: BaseException) -> str:
 
 
 def _fail_run(*, db: Session, run_id: UUID, expected: RunStatus, error: str) -> None:
-    """Log the current failure in full, then record its safe message on the run and commit."""
+    """Log the current failure in full, then record its safe message on the run and commit.
+
+    :param db: Session the failed transition and commit run on.
+    :param run_id: Id of the run being failed.
+    :param expected: Status the run must currently hold.
+    :param error: User-safe error message stored on the run.
+    """
 
     _logger.exception("ingestion run %s failed", run_id)
     mark_failed(db=db, run_id=run_id, expected=expected, error=error)
@@ -89,7 +97,11 @@ class _ItemContext:
 
 
 def _claim_run(*, db: Session, ingestion_run_id: UUID) -> bool:
-    """Claim the queued run, returning False for a duplicate or stale delivery."""
+    """Claim the queued run, returning False for a duplicate or stale delivery.
+
+    :param db: Session the claim and its commit run on.
+    :param ingestion_run_id: Id of the run being claimed.
+    """
 
     claimed = claim_run(db=db, run_id=ingestion_run_id)
     db.commit()
@@ -97,7 +109,10 @@ def _claim_run(*, db: Session, ingestion_run_id: UUID) -> bool:
 
 
 def _normalized_payload(*, document: NormalizedDocument) -> dict[str, object]:
-    """Return the title-elements-metadata mapping that both the hash and the row store."""
+    """Return the title-elements-metadata mapping that both the hash and the row store.
+
+    :param document: Normalized document to project into the stored payload.
+    """
 
     return {
         "title": document.title,
@@ -114,19 +129,28 @@ def canonical_document_json(*, document: NormalizedDocument) -> str:
 
     Only title, elements, and metadata enter the hash: ids and timestamps would make
     every hash unique and leave the unique(source_item_id, content_hash) guard dead.
+
+    :param document: Normalized document to fingerprint.
     """
 
     return json.dumps(_normalized_payload(document=document), sort_keys=True, separators=(",", ":"))
 
 
 def _content_hash(*, text: str) -> str:
-    """Return the sha256 hex digest of one UTF-8 string."""
+    """Return the sha256 hex digest of one UTF-8 string.
+
+    :param text: Text to hash.
+    """
 
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _load_item_context(*, db: Session, ingestion_run_id: UUID) -> _ItemContext | None:
-    """Return the run-pinned pipeline inputs, read from the run row and its item."""
+    """Return the run-pinned pipeline inputs, read from the run row and its item.
+
+    :param db: Session the run and item lookups run on.
+    :param ingestion_run_id: Id of the run whose pinned inputs are loaded.
+    """
 
     run = db.get(IngestionRun, ingestion_run_id)
     if run is None:
@@ -154,6 +178,11 @@ def _fetch_raw_bytes(
 
     Every storage failure - the object missing or the backend being unavailable -
     ends the run; which of the two it was only shapes the recorded error.
+
+    :param db: Session the failure is recorded through.
+    :param run_id: Id of the fetching run.
+    :param storage: Garage client the bytes are fetched from.
+    :param raw_object_key: Run-pinned key the bytes are fetched by.
     """
 
     try:
@@ -164,14 +193,22 @@ def _fetch_raw_bytes(
 
 
 def _verify_run_fingerprint(*, content_hash: str, raw_bytes: bytes) -> None:
-    """Raise when the fetched bytes are not the version the run was created for."""
+    """Raise when the fetched bytes are not the version the run was created for.
+
+    :param content_hash: Sha256 the run pins as its file version.
+    :param raw_bytes: Bytes fetched from storage under the run's key.
+    """
 
     if hashlib.sha256(raw_bytes).hexdigest() != content_hash:
         raise _FingerprintMismatchError("fingerprint mismatch") from None
 
 
 def _begin_processing(*, db: Session, run_id: UUID) -> bool:
-    """Move the claimed run to processing, committed so the parse spans no transaction."""
+    """Move the claimed run to processing, committed so the parse spans no transaction.
+
+    :param db: Session the transition and its commit run on.
+    :param run_id: Id of the claimed run.
+    """
 
     transitioned = start_processing(db=db, run_id=run_id)
     db.commit()
@@ -179,7 +216,10 @@ def _begin_processing(*, db: Session, run_id: UUID) -> bool:
 
 
 def _no_text_content_error(*, filename: str) -> str:
-    """Return the failure message for a document with nothing to chunk or index."""
+    """Return the failure message for a document with nothing to chunk or index.
+
+    :param filename: Filename the empty parse came from.
+    """
 
     return f"no text content to index in {filename!r}"
 
@@ -190,7 +230,12 @@ def _build_chunk_rows(
     document_id: UUID,
     chunks: list[ChunkText],
 ) -> list[Chunk]:
-    """Build the chunk rows for one document, positions from enumeration."""
+    """Build the chunk rows for one document, positions from enumeration.
+
+    :param context: Run-pinned inputs supplying the project and filename metadata.
+    :param document_id: Document the chunks belong to.
+    :param chunks: Chunker output to turn into rows.
+    """
 
     return [
         Chunk(
@@ -225,6 +270,12 @@ def _mark_run_ready_against_existing(
     Only a conflict on the documents content-hash constraint counts as the identical
     version; any other integrity error that reached this reconciliation is a genuine
     failure, so the backstop stays reserved for its own constraint.
+
+    :param db: Session the existing-document lookup and the ready transition run on.
+    :param run_id: Id of the run being reconciled.
+    :param source_item_id: Item the conflicting document belongs to.
+    :param content_hash: Hash that collided with the already-stored document.
+    :param exc: IntegrityError whose diagnostic constraint name is inspected.
     """
 
     constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
@@ -263,6 +314,13 @@ def _commit_document_set(
 
     Transient database errors propagate to the task (so that they can be retried).
     Every other failure ends on the run row.
+
+    :param db: Session the document set is written through.
+    :param run_id: Id of the processing run.
+    :param context: Run-pinned inputs the document and chunks are built from.
+    :param parsed: Normalized document to store.
+    :param document_hash: Canonical-JSON sha256 fingerprint of ``parsed``.
+    :param chunks: Chunker output to store beside the document.
     """
 
     document = Document(
@@ -288,7 +346,6 @@ def _commit_document_set(
         )
         return
     except _TRANSIENT_DATABASE_ERRORS:
-        # Connection-level failures must reach the task so its autoretry can re-drive it.
         db.rollback()
         raise
     try:
@@ -303,7 +360,6 @@ def _commit_document_set(
             return
         db.commit()
     except _TRANSIENT_DATABASE_ERRORS:
-        # Connection-level failures must reach the task so its autoretry can re-drive it.
         db.rollback()
         raise
     except Exception as exc:
@@ -321,7 +377,15 @@ def _parse_and_index(
     parser: Parser,
     settings: Settings,
 ) -> None:
-    """Parse the raw bytes, chunk them, and commit the document set in one transaction."""
+    """Parse the raw bytes, chunk them, and commit the document set in one transaction.
+
+    :param db: Session the parse outcome is written through.
+    :param run_id: Id of the processing run.
+    :param context: Run-pinned inputs the parse and rows are built from.
+    :param raw_bytes: Verified file bytes handed to the parser.
+    :param parser: Parser selected for this file's content type.
+    :param settings: Settings supplying the chunking budgets.
+    """
 
     try:
         parsed = parser.parse(filename=context.filename, content=raw_bytes)
@@ -349,7 +413,6 @@ def _parse_and_index(
             chunks=chunks,
         )
     except _TRANSIENT_DATABASE_ERRORS:
-        # Connection-level failures must reach the task so its autoretry can re-drive it.
         db.rollback()
         raise
     except Exception as exc:
@@ -373,6 +436,12 @@ def ingest_source_item(
     version never redirects a queued run. The claim guard makes duplicate and stale
     deliveries no-ops; after a successful claim, transient database errors propagate
     to the task (which retries them) and every other failure ends on the run row.
+
+    :param db: Session the claim, lookups, and transitions run on.
+    :param ingestion_run_id: Id of the queued run to ingest.
+    :param storage: Garage client the pinned bytes are fetched from.
+    :param parser: Parser selected for the item's content type.
+    :param settings: Settings supplying the chunking budgets.
     """
 
     if not _claim_run(db=db, ingestion_run_id=ingestion_run_id):
@@ -424,7 +493,14 @@ def _embed_batches(
     embedding_provider: EmbeddingProvider,
     batch_size: int,
 ) -> None:
-    """Embed and update every chunk in batch-size groups, committing once per batch."""
+    """Embed and update every chunk in batch-size groups, committing once per batch.
+
+    :param db: Session the vector updates and per-batch commits run on.
+    :param chunk_ids: Ids of the chunks to update, in embedding order.
+    :param chunk_texts: Texts aligned with ``chunk_ids``.
+    :param embedding_provider: Provider the batch texts are embedded with.
+    :param batch_size: Number of chunks embedded and updated per group.
+    """
 
     for start in range(0, len(chunk_ids), batch_size):
         ids = chunk_ids[start : start + batch_size]
@@ -439,7 +515,11 @@ def _embed_batches(
 
 
 def _mark_run_ready(*, db: Session, run_id: UUID) -> None:
-    """Move the run from indexing to ready with finished_at, then commit."""
+    """Move the run from indexing to ready with finished_at, then commit.
+
+    :param db: Session the ready transition and commit run on.
+    :param run_id: Id of the indexing run.
+    """
 
     mark_ready(db=db, run_id=run_id, expected=RunStatus.INDEXING)
     db.commit()
@@ -459,6 +539,12 @@ def embed_document(
     deterministic stub provider make re-delivery naturally idempotent; provider
     failures end on the run row with a user-safe error, and transient database
     errors propagate to the task, which retries them.
+
+    :param db: Session the chunk reads, vector updates, and run transition run on.
+    :param document_id: Document whose chunks are embedded.
+    :param ingestion_run_id: Run moved to ready once the embed lands.
+    :param embedding_provider: Provider the chunk texts are embedded with.
+    :param settings: Settings supplying the embedding batch size.
     """
 
     document_exists = db.scalar(select(Document.id).where(Document.id == document_id))
@@ -467,7 +553,7 @@ def embed_document(
     rows = db.execute(
         select(Chunk.id, Chunk.text).where(Chunk.document_id == document_id).order_by(Chunk.position)
     ).all()
-    # Close the read transaction: the provider call runs outside any transaction.
+    # Same read-transaction rule as the fetch: the provider call spans no transaction.
     db.commit()
     try:
         _embed_batches(
@@ -478,7 +564,6 @@ def embed_document(
             batch_size=settings.embedding_batch_size,
         )
     except _TRANSIENT_DATABASE_ERRORS:
-        # Connection-level failures must reach the task so its autoretry can re-drive it.
         db.rollback()
         raise
     except Exception as exc:

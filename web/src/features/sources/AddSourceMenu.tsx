@@ -32,7 +32,11 @@ const SOURCE_TYPES: SourceType[] = [
   { key: "gdrive", label: "Google Drive", icon: AddToDriveRoundedIcon, comingSoon: true },
 ];
 
-/** The sources toolbar's primary action: pick a source type to add. */
+/**
+ * The sources toolbar's primary action: pick a source type to add.
+ *
+ * @param {{ projectId: string }} props - Project the chosen source type is added to.
+ */
 export default function AddSourceMenu({ projectId }: { projectId: string }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const navigate = useNavigate();

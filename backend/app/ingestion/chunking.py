@@ -19,6 +19,8 @@ def _estimate_tokens(*, words: int) -> int:
 
     The 4/3 ratio is a documented English-prose average; the estimate avoids a
     tokenizer dependency so chunk budgets stay stable across deployments.
+
+    :param words: Word count to estimate tokens for.
     """
 
     return ceil(words * 4 / 3)
@@ -30,6 +32,10 @@ def _hard_split(*, text: str, max_tokens: int, overlap_tokens: int) -> list[str]
     Windows hold ``floor(max_tokens * 3 / 4)`` words, the largest word count
     whose estimate cannot exceed ``max_tokens``, and step back by
     ``overlap_tokens`` words so consecutive windows share that many-word prefix.
+
+    :param text: Over-max text to split into word windows.
+    :param max_tokens: Inclusive upper bound on each window's token estimate.
+    :param overlap_tokens: Words shared by consecutive windows.
     """
 
     words = text.split()
@@ -56,18 +62,29 @@ class _PendingPack:
     words: int = 0
 
     def would_exceed_target(self, *, words: int, target_tokens: int) -> bool:
-        """Report whether adding ``words`` more words would push the pack over target."""
+        """Report whether adding ``words`` more words would push the pack over target.
+
+        :param words: Word count of the candidate next paragraph.
+        :param target_tokens: Packing target the pack must not cross.
+        """
 
         return _estimate_tokens(words=self.words + words) > target_tokens
 
     def add(self, *, text: str) -> None:
-        """Append one paragraph text and its word count to the pack."""
+        """Append one paragraph text and its word count to the pack.
+
+        :param text: Paragraph text to accumulate.
+        """
 
         self.texts.append(text)
         self.words += len(text.split())
 
     def flush(self, *, chunks: list[ChunkText], stack: list[str]) -> None:
-        """Emit the accumulated paragraphs as one chunk under ``stack``, then reset."""
+        """Emit the accumulated paragraphs as one chunk under ``stack``, then reset.
+
+        :param chunks: List the emitted chunk is appended to.
+        :param stack: Heading path the pack was built under.
+        """
 
         if self.texts:
             chunks.append(ChunkText(text="\n\n".join(self.texts), heading_path=list(stack)))
@@ -76,7 +93,11 @@ class _PendingPack:
 
 
 def _advance_stack(*, stack: list[str], element: NormalizedElement) -> list[str]:
-    """Return the heading stack after ``element``, with a missing level treated as 1."""
+    """Return the heading stack after ``element``, with a missing level treated as 1.
+
+    :param stack: Heading stack before the heading element.
+    :param element: Heading element whose level trims and extends the stack.
+    """
 
     level = element.level if element.level is not None else 1
     return stack[: level - 1] + [element.text]
@@ -92,7 +113,16 @@ def _absorb_paragraph(
     max_tokens: int,
     overlap_tokens: int,
 ) -> None:
-    """Fold one paragraph element into the pack, hard-splitting it when it is oversized."""
+    """Fold one paragraph element into the pack, hard-splitting it when it is oversized.
+
+    :param element: Paragraph element to absorb.
+    :param pack: Accumulator the paragraph is added to when it fits.
+    :param chunks: List any hard-split windows or flushed packs are appended to.
+    :param stack: Heading path the paragraph sits under.
+    :param target_tokens: Packing target; the overflowing element starts the next chunk.
+    :param max_tokens: Inclusive upper bound on any emitted chunk's token estimate.
+    :param overlap_tokens: Words shared by consecutive hard-split windows.
+    """
 
     words = len(element.text.split())
     if _estimate_tokens(words=words) > max_tokens:
@@ -124,6 +154,11 @@ def chunk_elements(
     or when ``overlap_tokens`` leaves no new word for a hard-split window, and
     returns ``[]`` for a headings-only document. The max-token invariant
     presumes ``target_tokens <= max_tokens``.
+
+    :param elements: Normalized elements in document order.
+    :param target_tokens: Packing target; a pack flushes before crossing it.
+    :param max_tokens: Inclusive upper bound on any emitted chunk's token estimate.
+    :param overlap_tokens: Words shared by consecutive hard-split windows.
     """
 
     if not elements:

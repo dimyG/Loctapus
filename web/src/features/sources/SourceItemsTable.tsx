@@ -26,6 +26,8 @@ import { useDeleteUploadMutation, useLazyGetUploadRawQuery } from "../uploads/up
  * a filename opens the file itself in a new tab; both grow per type once a
  * second source type exists. Rows delete through a confirm dialog; a failed
  * delete surfaces in a snackbar whose action retries it.
+ *
+ * @param {{ items: SourceRow[] }} props - Rows to render, including optimistic stand-ins.
  */
 export default function SourceItemsTable({ items }: { items: SourceRow[] }) {
   const [getRaw] = useLazyGetUploadRawQuery();

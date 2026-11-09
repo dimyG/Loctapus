@@ -32,6 +32,10 @@ const visuallyHiddenInputSx = {
  * file is reported to the page when its POST starts (for the "uploading"
  * row) and when its mutation settles either way: on success the real row is
  * already cached by the mutation, on failure the alert carries the error.
+ *
+ * @param {string} projectId - Project the dropped files are uploaded to.
+ * @param {(file: File) => void} onUploadStart - Fires when one accepted file's POST begins.
+ * @param {(file: File) => void} onUploadSettled - Fires after one file's POST succeeds or fails.
  */
 export default function UploadDropzone({
   projectId,

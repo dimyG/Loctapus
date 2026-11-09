@@ -26,6 +26,10 @@ function selectUploads(projectId: string) {
  * row the mutation inserts on completion. The cached reads happen through
  * store selectors memoized per projectId, so they are created once per
  * project and never on every store update.
+ *
+ * @param {string | undefined} projectId - Project whose uploads are listed, or undefined to skip.
+ * @param {{ skip: boolean; pausePolling?: boolean }} options - `skip` disables the query;
+ *   `pausePolling` suspends the poll while an upload POST is in flight.
  */
 export function useProjectUploads(
   projectId: string | undefined,

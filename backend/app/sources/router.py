@@ -33,7 +33,10 @@ router = APIRouter()
 
 
 def _validated_filename(*, file: UploadFile) -> str:
-    """Return the sanitized filename, raising 422 for an unusable name or extension."""
+    """Return the sanitized filename, raising 422 for an unusable name or extension.
+
+    :param file: Multipart part carrying the client's filename.
+    """
 
     try:
         filename = sanitize_filename(filename=file.filename or "")
@@ -45,7 +48,11 @@ def _validated_filename(*, file: UploadFile) -> str:
 
 
 def _validated_size(*, file: UploadFile, settings: Settings) -> None:
-    """Reject empty and oversized uploads via ``UploadFile.size`` before the bytes are read."""
+    """Reject empty and oversized uploads via ``UploadFile.size`` before the bytes are read.
+
+    :param file: Multipart part whose declared size is gated.
+    :param settings: Settings supplying the maximum upload size in megabytes.
+    """
 
     max_bytes = settings.max_upload_mb * 1024 * 1024
     if file.size is None:
@@ -59,7 +66,10 @@ def _validated_size(*, file: UploadFile, settings: Settings) -> None:
 
 
 def _to_out(*, listing: UploadListing) -> UploadOut:
-    """Map one upload listing into its response body."""
+    """Map one upload listing into its response body.
+
+    :param listing: Service-level listing row for one upload.
+    """
 
     return UploadOut(
         id=listing.id,
@@ -80,7 +90,18 @@ def upload(
     settings: Settings = Depends(get_settings),
     storage: StorageService = Depends(get_storage),
 ) -> UploadOut:
-    """Store one uploaded file as the project's upload item, raising 404, 409, 422, or 503."""
+    """Store one uploaded file as the project's upload item, raising 404, 409, 422, or 503.
+
+    Editors and admins may upload; a viewer or stranger is a 404, not a 403, so the
+    project's existence is not confirmed to someone who cannot act on it.
+
+    :param project_id: Project the file is uploaded to.
+    :param file: Multipart file part.
+    :param user: Authenticated user.
+    :param db: Session the project check and the upload write run on.
+    :param settings: Settings supplying the maximum upload size.
+    :param storage: Garage client the bytes are stored through.
+    """
 
     project = get_project_for_user_with_role(db=db, user=user, project_id=project_id, minimum_role="editor")
     if project is None:
@@ -110,7 +131,14 @@ def list_all(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[UploadOut]:
-    """List a project's uploads newest first, raising 404 when the project is not visible."""
+    """List a project's uploads newest first, raising 404 when the project is not visible.
+
+    Any visible member, including a viewer or a stranger on a public project, may list.
+
+    :param project_id: Project whose uploads are listed.
+    :param user: Authenticated user.
+    :param db: Session the visibility check and the listing run on.
+    """
 
     project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
     if project is None:
@@ -127,7 +155,16 @@ def delete(
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
 ) -> None:
-    """Delete one upload item with its pipeline rows and stored bytes, raising 404 or 503."""
+    """Delete one upload item with its pipeline rows and stored bytes, raising 404 or 503.
+
+    Same editor gate as the upload: a viewer or stranger is a 404.
+
+    :param project_id: Project the upload belongs to.
+    :param upload_id: Id of the upload item.
+    :param user: Authenticated user.
+    :param db: Session the project check and the delete run on.
+    :param storage: Garage client the object versions are deleted through.
+    """
 
     project = get_project_for_user_with_role(db=db, user=user, project_id=project_id, minimum_role="editor")
     if project is None:
@@ -149,7 +186,16 @@ def download_raw(
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage),
 ) -> Response:
-    """Return the upload's stored bytes, raising 404 or 503."""
+    """Return the upload's stored bytes, raising 404 or 503.
+
+    Visible-project access only: listing and downloading share the viewer gate.
+
+    :param project_id: Project the upload belongs to.
+    :param upload_id: Id of the upload item.
+    :param user: Authenticated user.
+    :param db: Session the project and item lookups run on.
+    :param storage: Garage client the bytes are fetched from.
+    """
 
     project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
     if project is None:

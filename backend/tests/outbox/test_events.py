@@ -21,7 +21,10 @@ from tests.factories import seed_project, seed_upload
 
 
 def test_ingestion_requested_event_row(*, db_session: Session) -> None:
-    """Check that the ingestion-requested helper stores the exact payload and starts unpublished."""
+    """Check that the ingestion-requested helper stores the exact payload and starts unpublished.
+
+    :param db_session: Transaction-managed session the event is written through.
+    """
 
     source_item_id = uuid4()
     ingestion_run_id = uuid4()
@@ -42,7 +45,10 @@ def test_ingestion_requested_event_row(*, db_session: Session) -> None:
 
 
 def test_document_ready_event_row(*, db_session: Session) -> None:
-    """Check that the document-ready helper stores the exact payload and starts unpublished."""
+    """Check that the document-ready helper stores the exact payload and starts unpublished.
+
+    :param db_session: Transaction-managed session the event is written through.
+    """
 
     document_id = uuid4()
     ingestion_run_id = uuid4()
@@ -87,7 +93,10 @@ def test_routes_cover_both_events() -> None:
 
 
 def test_ingestion_requested_payload_carries_only_the_run_id(*, db_session: Session) -> None:
-    """Check that the payload is only the run id and the run row pins the key and hash."""
+    """Check that the payload is only the run id and the run row pins the key and hash.
+
+    :param db_session: Transaction-managed session the seed and lookup run on.
+    """
 
     project_id = seed_project(db=db_session, email="payload-only@example.com")
     seeded = seed_upload(db=db_session, project_id=project_id)

@@ -13,31 +13,49 @@ OVERLAP_TOKENS = 8
 
 
 def _paragraph(*, word_count: int, tag: str) -> str:
-    """Build a text with exactly ``word_count`` unique, countable words."""
+    """Build a text with exactly ``word_count`` unique, countable words.
+
+    :param word_count: Number of unique words the text carries.
+    :param tag: Prefix distinguishing this text's words from others.
+    """
 
     return " ".join(f"{tag}-{index}" for index in range(word_count))
 
 
 def _paragraph_element(*, word_count: int, tag: str) -> NormalizedElement:
-    """Build a paragraph element carrying exactly ``word_count`` words."""
+    """Build a paragraph element carrying exactly ``word_count`` words.
+
+    :param word_count: Number of words the element's text carries.
+    :param tag: Prefix distinguishing this element's words from others.
+    """
 
     return NormalizedElement(type="paragraph", text=_paragraph(word_count=word_count, tag=tag))
 
 
 def _heading(*, text: str, level: int | None) -> NormalizedElement:
-    """Build a heading element with an optional level."""
+    """Build a heading element with an optional level.
+
+    :param text: Heading text.
+    :param level: Heading level, or None for a missing level.
+    """
 
     return NormalizedElement(type="heading", text=text, level=level)
 
 
 def _estimate_tokens(*, text: str) -> int:
-    """Re-derive the documented estimate, ceil(words * 4 / 3), independently."""
+    """Re-derive the documented estimate, ceil(words * 4 / 3), independently.
+
+    :param text: Chunk text whose word count is estimated.
+    """
 
     return math.ceil(len(text.split()) * 4 / 3)
 
 
 def _chunk(*, elements: list[NormalizedElement]) -> list[ChunkText]:
-    """Chunk ``elements`` with the standard golden-test budgets."""
+    """Chunk ``elements`` with the standard golden-test budgets.
+
+    :param elements: Normalized elements to chunk.
+    """
 
     return chunk_elements(
         elements=elements,

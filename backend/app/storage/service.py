@@ -23,7 +23,13 @@ class StorageUnavailableError(StorageError):
 
 
 def build_raw_object_key(*, project_id: UUID, source_item_id: UUID, content_hash: str, filename: str) -> str:
-    """Return the storage key under which a source item's raw bytes live."""
+    """Return the storage key under which a source item's raw bytes live.
+
+    :param project_id: Project the item belongs to.
+    :param source_item_id: Item the version belongs to.
+    :param content_hash: Sha256 of the version's bytes, so a retry lands under a new key.
+    :param filename: Sanitized basename kept as the key's last segment.
+    """
 
     return f"raw/{project_id}/{source_item_id}/{content_hash}/{filename}"
 
@@ -32,7 +38,10 @@ class StorageService:
     """S3 client bound to the configured Garage bucket."""
 
     def __init__(self, *, settings: Settings) -> None:
-        """Create the boto3 client from the settings' S3 block, with path-style addressing."""
+        """Create the boto3 client from the settings' S3 block, with path-style addressing.
+
+        :param settings: Settings supplying the endpoint, credentials, region, and bucket.
+        """
 
         self._bucket = settings.s3_bucket
         # A dedicated session keeps this client independent of boto3's shared default
@@ -55,7 +64,12 @@ class StorageService:
         )
 
     def put_object(self, *, key: str, content: bytes, content_type: str | None = None) -> None:
-        """Store ``content`` under ``key``, optionally labelling it with a content type."""
+        """Store ``content`` under ``key``, optionally labelling it with a content type.
+
+        :param key: Storage key to write.
+        :param content: Raw bytes to store.
+        :param content_type: Optional MIME type stored with the object.
+        """
 
         try:
             if content_type is None:
@@ -66,7 +80,10 @@ class StorageService:
             raise StorageUnavailableError(f"put failed for key {key!r}: {exc}") from exc
 
     def get_object(self, *, key: str) -> bytes:
-        """Return the bytes stored under ``key``, raising ObjectNotFoundError when absent."""
+        """Return the bytes stored under ``key``, raising ObjectNotFoundError when absent.
+
+        :param key: Storage key to read.
+        """
 
         try:
             response = self._client.get_object(Bucket=self._bucket, Key=key)
@@ -82,7 +99,10 @@ class StorageService:
             raise StorageUnavailableError(f"get failed for key {key!r}: {exc}") from exc
 
     def delete_object(self, *, key: str) -> None:
-        """Delete the object under ``key``; S3 deletes are idempotent, so a missing key is a no-op."""
+        """Delete the object under ``key``; S3 deletes are idempotent, so a missing key is a no-op.
+
+        :param key: Storage key to delete.
+        """
 
         try:
             self._client.delete_object(Bucket=self._bucket, Key=key)

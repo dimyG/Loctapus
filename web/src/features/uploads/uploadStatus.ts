@@ -1,11 +1,19 @@
 import type { RowStatus } from "./uploadsApi";
 
-/** The status is terminal once the pipeline decided an outcome for it. */
+/**
+ * The status is terminal once the pipeline decided an outcome for it.
+ *
+ * @param {RowStatus} status - Status a sources-table row currently shows.
+ */
 export function isTerminal(status: RowStatus): boolean {
   return status === "ready" || status === "failed";
 }
 
-/** Maps a status to its chip: primary while in flight, colored once decided. */
+/**
+ * Maps a status to its chip: primary while in flight, colored once decided.
+ *
+ * @param {RowStatus} status - Status a sources-table row currently shows.
+ */
 export function statusChip(status: RowStatus): {
   label: string;
   color: "primary" | "success" | "error";

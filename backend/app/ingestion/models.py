@@ -76,10 +76,7 @@ class Chunk(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
         Index("ix_chunks_search_vector", "search_vector", postgresql_using="gin"),
-        # project_id is repeated down sources -> source_items -> documents -> chunks so
-        # retrieval filters chunks by project without joins; the composite FK makes the
-        # database reject any row whose project differs from its document's, so the
-        # tenant boundary is enforced by Postgres rather than remembered by writers.
+        # Same composite-FK tenant rule as Document: the child's project must match.
         ForeignKeyConstraint(
             ["document_id", "project_id"],
             ["documents.id", "documents.project_id"],

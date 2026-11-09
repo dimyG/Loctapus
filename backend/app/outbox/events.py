@@ -68,7 +68,12 @@ def enqueue_source_item_ingestion_requested(
     source_item_id: UUID,
     ingestion_run_id: UUID,
 ) -> OutboxEvent:
-    """Append a source-item ingestion-requested event inside the caller's transaction."""
+    """Append a source-item ingestion-requested event inside the caller's transaction.
+
+    :param db: Session the event row is added to; the caller commits.
+    :param source_item_id: Item the event is about.
+    :param ingestion_run_id: Run that pins the file version the worker will process.
+    """
 
     event = OutboxEvent(
         event_type=SOURCE_ITEM_INGESTION_REQUESTED,
@@ -85,7 +90,12 @@ def enqueue_source_item_ingestion_requested(
 def enqueue_document_ready_for_embedding(
     *, db: Session, document_id: UUID, ingestion_run_id: UUID
 ) -> OutboxEvent:
-    """Append a document-ready-for-embedding event inside the caller's transaction."""
+    """Append a document-ready-for-embedding event inside the caller's transaction.
+
+    :param db: Session the event row is added to; the caller commits.
+    :param document_id: Document whose chunks should be embedded.
+    :param ingestion_run_id: Run that transitions to ready once the embed lands.
+    """
 
     event = OutboxEvent(
         event_type=DOCUMENT_READY_FOR_EMBEDDING,

@@ -10,7 +10,10 @@ from tests.factories import seed_project, seed_upload
 
 
 def test_item_project_must_match_its_source(*, db_session: Session) -> None:
-    """Check that a source item claimed by another project is rejected on flush."""
+    """Check that a source item claimed by another project is rejected on flush.
+
+    :param db_session: Transaction-managed session the impostor item is written through.
+    """
 
     project_a = seed_project(db=db_session, email="scope-item-a@example.com")
     project_b = seed_project(db=db_session, email="scope-item-b@example.com")
@@ -33,7 +36,10 @@ def test_item_project_must_match_its_source(*, db_session: Session) -> None:
 
 
 def test_document_project_must_match_its_item(*, db_session: Session) -> None:
-    """Check that a document claimed by another project is rejected on flush."""
+    """Check that a document claimed by another project is rejected on flush.
+
+    :param db_session: Transaction-managed session the impostor document is written through.
+    """
 
     project_a = seed_project(db=db_session, email="scope-document-a@example.com")
     project_b = seed_project(db=db_session, email="scope-document-b@example.com")
@@ -53,7 +59,10 @@ def test_document_project_must_match_its_item(*, db_session: Session) -> None:
 
 
 def test_chunk_project_must_match_its_document(*, db_session: Session) -> None:
-    """Check that a chunk claimed by another project is rejected on flush."""
+    """Check that a chunk claimed by another project is rejected on flush.
+
+    :param db_session: Transaction-managed session the impostor chunk is written through.
+    """
 
     project_a = seed_project(db=db_session, email="scope-chunk-a@example.com")
     project_b = seed_project(db=db_session, email="scope-chunk-b@example.com")

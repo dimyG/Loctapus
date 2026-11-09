@@ -22,6 +22,8 @@ def query_embedding_dimension(*, db: Session) -> int | None:
     None also covers a column that is not a fixed-dimension vector. ``to_regclass``
     resolves the table through the search path, so a same-named table in another
     schema cannot satisfy the lookup.
+
+    :param db: Session the catalog query runs on.
     """
 
     data_type = db.scalar(
@@ -42,6 +44,9 @@ def verify_embedding_dimension(*, expected_dimension: int, actual_dimension: int
 
     Failing fast here replaces a cryptic psycopg insert failure deep in the embed path
     after chunks are already committed.
+
+    :param expected_dimension: Dimension the selected embedding provider emits.
+    :param actual_dimension: Dimension of the migrated ``chunks.embedding`` column, or None.
     """
 
     if actual_dimension != expected_dimension:
@@ -52,7 +57,11 @@ def verify_embedding_dimension(*, expected_dimension: int, actual_dimension: int
 
 
 def run_startup_checks(*, db: Session, embedding_provider: EmbeddingProvider) -> None:
-    """Run the worker's startup checks: query the catalog and verify the dimension."""
+    """Run the worker's startup checks: query the catalog and verify the dimension.
+
+    :param db: Session the catalog query runs on.
+    :param embedding_provider: Provider whose dimension must match the stored column.
+    """
 
     verify_embedding_dimension(
         expected_dimension=embedding_provider.dimension,

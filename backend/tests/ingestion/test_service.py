@@ -36,26 +36,39 @@ class _CountingEmbeddingProvider:
     dimension: int
 
     def __init__(self, *, inner: EmbeddingProvider) -> None:
-        """Wrap ``inner`` and start with an empty call-size record."""
+        """Wrap ``inner`` and start with an empty call-size record.
+
+        :param inner: Provider the wrapper delegates embeddings to.
+        """
 
         self._inner = inner
         self.dimension = inner.dimension
         self.call_sizes: list[int] = []
 
     def embed_documents(self, *, texts: list[str]) -> list[list[float]]:
-        """Delegate to the wrapped provider and record this call's batch size."""
+        """Delegate to the wrapped provider and record this call's batch size.
+
+        :param texts: Batch of chunk texts to embed.
+        """
 
         self.call_sizes.append(len(texts))
         return self._inner.embed_documents(texts=texts)
 
     def embed_query(self, *, text: str) -> list[float]:
-        """Delegate a single-text embedding to the wrapped provider."""
+        """Delegate a single-text embedding to the wrapped provider.
+
+        :param text: Query text to embed.
+        """
 
         return self._inner.embed_query(text=text)
 
 
 def _make_docx(*, heading: str | None, paragraphs: list[str]) -> bytes:
-    """Build an in-memory DOCX carrying one optional heading and the given paragraphs."""
+    """Build an in-memory DOCX carrying one optional heading and the given paragraphs.
+
+    :param heading: Optional level-1 heading text.
+    :param paragraphs: Paragraph texts added after the heading.
+    """
 
     buffer = io.BytesIO()
     document = DocxDocument()
@@ -74,7 +87,13 @@ def _seed(
     filename: str,
     content: bytes,
 ) -> tuple[UUID, SeededUpload]:
-    """Seed one upload with its bytes in Garage: a project, its rows, and the stored object."""
+    """Seed one upload with its bytes in Garage: a project, its rows, and the stored object.
+
+    :param db: Transaction-managed session the seed rows are written through.
+    :param storage: StorageService the raw bytes are put through.
+    :param filename: Filename of the seeded upload.
+    :param content: Raw bytes stored in Garage.
+    """
 
     project_id = seed_project(db=db, email=f"{uuid4().hex}@example.com")
     seeded = seed_upload(db=db, project_id=project_id, filename=filename, content=content)
@@ -90,7 +109,13 @@ def _ingest(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Run the ingestion task for one run, the way the worker will."""
+    """Run the ingestion task for one run, the way the worker will.
+
+    :param db: Transaction-managed session the task runs on.
+    :param seeded: Seeded upload whose run is ingested.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService the pinned bytes are fetched from.
+    """
 
     ingest_source_item(
         db=db,
@@ -102,7 +127,11 @@ def _ingest(
 
 
 def _read_vectors(*, db: Session, document_id: UUID) -> list[list[float] | None]:
-    """Return one document's stored chunk vectors, ordered by chunk position."""
+    """Return one document's stored chunk vectors, ordered by chunk position.
+
+    :param db: Transaction-managed session the chunks are read through.
+    :param document_id: Document whose chunk vectors are read.
+    """
 
     chunks = db.query(Chunk).filter(Chunk.document_id == document_id).order_by(Chunk.position).all()
     return [chunk.embedding for chunk in chunks]
@@ -114,7 +143,12 @@ def test_ingest_end_to_end(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check the full happy path into the single indexing transaction."""
+    """Check the full happy path into the single indexing transaction.
+
+    :param db_session: Transaction-managed session the pipeline rows are read through.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     paragraphs = [
         "The first paragraph carries plain prose for the packer.",
@@ -204,7 +238,12 @@ def test_duplicate_delivery_no_ops(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that a re-delivered run cannot be re-claimed and writes nothing new."""
+    """Check that a re-delivered run cannot be re-claimed and writes nothing new.
+
+    :param db_session: Transaction-managed session the redelivery runs on.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     content = _make_docx(heading="Introduction", paragraphs=["One paragraph of prose."])
     _project_id, seeded = _seed(
@@ -239,7 +278,12 @@ def test_missing_run_no_ops(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that a delivery naming unknown ids is acked without writing any rows."""
+    """Check that a delivery naming unknown ids is acked without writing any rows.
+
+    :param db_session: Transaction-managed session the absence of rows is checked on.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     ingest_source_item(
         db=db_session,
@@ -259,7 +303,12 @@ def test_fingerprint_mismatch_fails_the_run(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that bytes whose hash disagrees with the run's pinned version fail the run."""
+    """Check that bytes whose hash disagrees with the run's pinned version fail the run.
+
+    :param db_session: Transaction-managed session the failed run is read through.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService the mismatched bytes are put through.
+    """
 
     content = _make_docx(heading="Fingerprint", paragraphs=["Fingerprinted prose."])
     _project_id, seeded = _seed(
@@ -287,7 +336,12 @@ def test_missing_object_fails_the_run(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that a run whose object was never stored fails with the object-missing copy."""
+    """Check that a run whose object was never stored fails with the object-missing copy.
+
+    :param db_session: Transaction-managed session the factory rows are written through.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     project_id = seed_project(db=db_session, email="missing-object@example.com")
     # The rows exist but no bytes ever landed in Garage.
@@ -310,13 +364,23 @@ def test_unexpected_parser_error_is_logged_not_shown(
     storage: StorageService,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Check that an unexpected parser crash is logged in full and shown safely."""
+    """Check that an unexpected parser crash is logged in full and shown safely.
+
+    :param db_session: Transaction-managed session the failed run is read through.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    :param caplog: Captures the worker's error log for the assertion.
+    """
 
     class _ExplodingParser:
         """Parser stand-in whose exception leaks what looks like sensitive SQL."""
 
         def parse(self, *, filename: str, content: bytes) -> NormalizedDocument:
-            """Raise an unexpected error carrying potentially sensitive text."""
+            """Raise an unexpected error carrying potentially sensitive text.
+
+            :param filename: Filename the parser would have parsed.
+            :param content: Bytes the parser would have parsed.
+            """
 
             raise RuntimeError("SELECT secret FROM x")
 
@@ -355,7 +419,12 @@ def test_older_run_uses_its_own_version(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that a queued run processes its own file version, never the item's newer one."""
+    """Check that a queued run processes its own file version, never the item's newer one.
+
+    :param db_session: Transaction-managed session the newer item version is written through.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     content_v1 = _make_docx(heading="Version One", paragraphs=["Version one prose."])
     _project_id, seeded = _seed(
@@ -390,7 +459,12 @@ def test_garbage_pdf_fails_the_run(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that unparseable bytes fail the run with no document and the error recorded."""
+    """Check that unparseable bytes fail the run with no document and the error recorded.
+
+    :param db_session: Transaction-managed session the failed run is read through.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     content = b"these bytes are definitely not a pdf document"
     _project_id, seeded = _seed(
@@ -415,7 +489,12 @@ def test_zero_chunk_document_fails_the_run(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that a headings-only document fails the run instead of storing zero chunks."""
+    """Check that a headings-only document fails the run instead of storing zero chunks.
+
+    :param db_session: Transaction-managed session the failed run is read through.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     content = _make_docx(heading="Only A Heading", paragraphs=[])
     _project_id, seeded = _seed(
@@ -440,7 +519,12 @@ def test_identical_version_conflict_is_idempotent_noop(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check the unique backstop: a second identical run ends ready on the stored document."""
+    """Check the unique backstop: a second identical run ends ready on the stored document.
+
+    :param db_session: Transaction-managed session both runs are driven on.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     content = _make_docx(heading="Introduction", paragraphs=["Shared prose for both runs."])
     _project_id, seeded = _seed(
@@ -486,7 +570,12 @@ def test_embed_updates_vectors_and_marks_ready(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that embedding fills every chunk vector and moves the run to ready."""
+    """Check that embedding fills every chunk vector and moves the run to ready.
+
+    :param db_session: Transaction-managed session the vectors and run are read through.
+    :param settings: Test settings selecting the stub embeddings.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     paragraphs = ["Alpha prose for the embedding pass.", "Beta prose for the embedding pass."]
     content = _make_docx(heading="Vectors", paragraphs=paragraphs)
@@ -532,7 +621,12 @@ def test_embed_is_idempotent_on_redelivery(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that re-delivering the embed task keeps the run ready with identical vectors."""
+    """Check that re-delivering the embed task keeps the run ready with identical vectors.
+
+    :param db_session: Transaction-managed session the redelivery runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     content = _make_docx(heading="Stable", paragraphs=["Stable prose embeds identically."])
     _project_id, seeded = _seed(
@@ -571,7 +665,11 @@ def test_embed_is_idempotent_on_redelivery(
 
 
 def test_embed_batches_chunks(*, db_session: Session, storage: StorageService) -> None:
-    """Check that embedding splits five chunks into provider calls of the batch size."""
+    """Check that embedding splits five chunks into provider calls of the batch size.
+
+    :param db_session: Transaction-managed session the chunks and run are read through.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     settings = SettingsForTests(
         chunk_target_tokens=4,
@@ -618,7 +716,12 @@ def test_embed_provider_failure_fails_the_run(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check that a provider failure during embed fails the run with every vector empty."""
+    """Check that a provider failure during embed fails the run with every vector empty.
+
+    :param db_session: Transaction-managed session the failed run is read through.
+    :param settings: Test settings selecting the stub parser.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     class _ExplodingEmbeddingProvider:
         """Embedding provider whose batch calls always raise."""
@@ -626,12 +729,18 @@ def test_embed_provider_failure_fails_the_run(
         dimension = STUB_EMBEDDING_DIM
 
         def embed_documents(self, *, texts: list[str]) -> list[list[float]]:
-            """Refuse every batch."""
+            """Refuse every batch.
+
+            :param texts: Batch of chunk texts that would have been embedded.
+            """
 
             raise RuntimeError("provider exploded")
 
         def embed_query(self, *, text: str) -> list[float]:
-            """Refuse every query."""
+            """Refuse every query.
+
+            :param text: Query text that would have been embedded.
+            """
 
             raise RuntimeError("provider exploded")
 
@@ -670,7 +779,11 @@ def test_embed_provider_failure_fails_the_run(
 
 
 def test_embed_missing_document_no_ops(*, db_session: Session, settings: Settings) -> None:
-    """Check that an embed delivery naming an unknown document is acked without rows."""
+    """Check that an embed delivery naming an unknown document is acked without rows.
+
+    :param db_session: Transaction-managed session the absence of rows is checked on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     embed_document(
         db=db_session,

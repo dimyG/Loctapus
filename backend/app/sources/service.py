@@ -40,6 +40,8 @@ def sanitize_filename(*, filename: str) -> str:
     Only the last ``/`` or ``\\`` segment is kept, control characters are dropped, and
     dot-only names are rejected; an empty result or a name longer than 255 characters
     is rejected because the stored name is both display data and part of the storage key.
+
+    :param filename: Client-supplied filename, possibly a full path.
     """
 
     basename = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
@@ -50,7 +52,10 @@ def sanitize_filename(*, filename: str) -> str:
 
 
 def upload_content_type(*, filename: str) -> str | None:
-    """Return the content type this slice stores for ``filename``, by its suffix, or None."""
+    """Return the content type this slice stores for ``filename``, by its suffix, or None.
+
+    :param filename: Sanitized filename whose lower-cased suffix is looked up.
+    """
 
     dot = filename.rfind(".")
     if dot < 0:
@@ -74,7 +79,12 @@ class UploadListing:
 
 
 def _upload_item(*, db: Session, project_id: UUID, filename: str) -> SourceItem | None:
-    """Return the project's upload item with this exact filename, if any."""
+    """Return the project's upload item with this exact filename, if any.
+
+    :param db: Session the lookup runs on.
+    :param project_id: Project whose upload source is searched.
+    :param filename: Exact ``external_id`` of the item.
+    """
 
     return db.execute(
         select(SourceItem)
@@ -84,7 +94,12 @@ def _upload_item(*, db: Session, project_id: UUID, filename: str) -> SourceItem 
 
 
 def get_upload_item(*, db: Session, project_id: UUID, upload_id: UUID) -> SourceItem | None:
-    """Return the project's upload item with this id, if any."""
+    """Return the project's upload item with this id, if any.
+
+    :param db: Session the lookup runs on.
+    :param project_id: Project the item must belong to.
+    :param upload_id: Id of the item.
+    """
 
     return db.execute(
         select(SourceItem)
@@ -94,7 +109,11 @@ def get_upload_item(*, db: Session, project_id: UUID, upload_id: UUID) -> Source
 
 
 def _is_retryable(*, db: Session, item: SourceItem) -> bool:
-    """Return whether the item's latest run failed with no document ever indexed."""
+    """Return whether the item's latest run failed with no document ever indexed.
+
+    :param db: Session the latest-status and document-existence lookups run on.
+    :param item: Item whose retry eligibility is checked.
+    """
 
     status = db.scalar(
         select(latest_run_status(source_item_id=SourceItem.id)).where(SourceItem.id == item.id)
@@ -104,7 +123,11 @@ def _is_retryable(*, db: Session, item: SourceItem) -> bool:
 
 
 def _upload_source_id(*, db: Session, project_id: UUID) -> UUID:
-    """Return the project's one upload source id, creating the row when missing (R5)."""
+    """Return the project's one upload source id, creating the row when missing (R5).
+
+    :param db: Session the conflict-safe insert and select run on.
+    :param project_id: Project the upload source belongs to.
+    """
 
     db.execute(
         insert(Source)
@@ -134,6 +157,12 @@ def upload_file(
     same-name item is retried only when its latest run failed with no document indexed
     (R2); otherwise the upload is a duplicate and replacement stays S7's
     replace-only-after-success path.
+
+    :param db: Session the item, run, and event are written through.
+    :param project_id: Project the upload belongs to.
+    :param filename: Sanitized basename used as the item's identity.
+    :param content: Raw file bytes to store.
+    :param storage: Garage client the bytes are put through.
     """
 
     content_type = upload_content_type(filename=filename)
@@ -205,6 +234,11 @@ def delete_upload(*, db: Session, project_id: UUID, upload_id: UUID, storage: St
     no-op: the worker's guarded transitions treat the vanished run row as a stale
     delivery. The row delete is a plain statement so a concurrent delete loses
     cleanly instead of failing the request.
+
+    :param db: Session the item lookup and row delete run on.
+    :param project_id: Project the upload belongs to.
+    :param upload_id: Id of the item to delete.
+    :param storage: Garage client the object versions are deleted through.
     """
 
     item = get_upload_item(db=db, project_id=project_id, upload_id=upload_id)
@@ -215,7 +249,6 @@ def delete_upload(*, db: Session, project_id: UUID, upload_id: UUID, storage: St
         db.scalars(select(IngestionRun.raw_object_key).where(IngestionRun.source_item_id == item.id)).all()
     )
     superseded_keys.discard(current_key)
-    # End the read transaction: no transaction may span the storage DELETEs.
     db.commit()
     # The current version's key goes last: a mid-loop storage failure then
     # leaves the live row pointing at its actual bytes, and the 503's retry
@@ -229,7 +262,11 @@ def delete_upload(*, db: Session, project_id: UUID, upload_id: UUID, storage: St
 
 
 def list_uploads(*, db: Session, project_id: UUID) -> list[UploadListing]:
-    """List a project's uploads newest first by item creation, deriving the latest status."""
+    """List a project's uploads newest first by item creation, deriving the latest status.
+
+    :param db: Session the listing query runs on.
+    :param project_id: Project whose upload items are listed.
+    """
 
     rows = db.execute(
         select(

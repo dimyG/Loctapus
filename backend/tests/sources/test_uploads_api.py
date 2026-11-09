@@ -37,7 +37,12 @@ DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessin
 
 
 def _create_project(*, client: TestClient, headers: dict[str, str], name: str) -> str:
-    """Create a project through the API and return its id."""
+    """Create a project through the API and return its id.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param headers: Bearer headers of the account creating the project.
+    :param name: Display name of the new project.
+    """
 
     team_id = _default_team_id(client=client, headers=headers)
     created = client.post("/api/projects", json={"name": name, "team_id": team_id}, headers=headers)
@@ -53,7 +58,15 @@ def _upload(
     content: bytes,
     content_type: str = PDF_CONTENT_TYPE,
 ) -> Response:
-    """POST one multipart upload to the uploads endpoint and return the response."""
+    """POST one multipart upload to the uploads endpoint and return the response.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param headers: Bearer headers of the account uploading the file.
+    :param project_id: Project the file is uploaded to.
+    :param filename: Client-side filename sent in the multipart part.
+    :param content: Raw bytes sent as the file part.
+    :param content_type: MIME type declared on the multipart part.
+    """
 
     response: Response = client.post(
         f"/api/projects/{project_id}/uploads",
@@ -66,7 +79,12 @@ def _upload(
 def test_upload_creates_item_run_and_event(
     *, client: TestClient, db_session: Session, storage: StorageService
 ) -> None:
-    """Check the upload happy path: 201 UploadOut shape plus the rows and the raw object."""
+    """Check the upload happy path: 201 UploadOut shape plus the rows and the raw object.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seeded rows are read through.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="upload@example.com")
     project_id = _create_project(client=client, headers=headers, name="uploads")
@@ -114,7 +132,11 @@ def test_upload_creates_item_run_and_event(
 
 
 def test_uploads_share_the_project_upload_source(*, client: TestClient, db_session: Session) -> None:
-    """Check that two differently named uploads land in one shared upload source."""
+    """Check that two differently named uploads land in one shared upload source.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the source counts are read through.
+    """
 
     headers = _auth(client=client, email="shared@example.com")
     project_id = _create_project(client=client, headers=headers, name="shared")
@@ -134,7 +156,11 @@ def test_uploads_share_the_project_upload_source(*, client: TestClient, db_sessi
 
 
 def test_duplicate_filename_in_flight_is_rejected(*, client: TestClient, db_session: Session) -> None:
-    """Check that a same-name upload while the first is still processing is a 409."""
+    """Check that a same-name upload while the first is still processing is a 409.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the row counts are read through.
+    """
 
     headers = _auth(client=client, email="dupes@example.com")
     project_id = _create_project(client=client, headers=headers, name="dupes")
@@ -155,7 +181,11 @@ def test_duplicate_filename_in_flight_is_rejected(*, client: TestClient, db_sess
 
 
 def test_failed_file_can_be_uploaded_again(*, client: TestClient, db_session: Session) -> None:
-    """Check that a failed run with no document lets the same name upload again."""
+    """Check that a failed run with no document lets the same name upload again.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the failed run is written through.
+    """
 
     headers = _auth(client=client, email="retry@example.com")
     project_id = _create_project(client=client, headers=headers, name="retry")
@@ -195,7 +225,13 @@ def test_failed_file_can_be_uploaded_again(*, client: TestClient, db_session: Se
 def test_indexed_file_cannot_be_replaced_yet(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check that a failed latest run over an indexed document is a 409, not a retry."""
+    """Check that a failed latest run over an indexed document is a 409, not a retry.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the run is failed through.
+    :param settings: Test settings for the app under test.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="indexed@example.com")
     project_id = _create_project(client=client, headers=headers, name="indexed")
@@ -241,7 +277,13 @@ def test_indexed_file_cannot_be_replaced_yet(
 def test_content_type_comes_from_the_extension(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check that the stored and Garage content types come from the extension, not the client."""
+    """Check that the stored and Garage content types come from the extension, not the client.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the stored item is read through.
+    :param settings: Test settings for the app under test.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="content-type@example.com")
     project_id = _create_project(client=client, headers=headers, name="content-type")
@@ -264,7 +306,11 @@ def test_content_type_comes_from_the_extension(
 
 
 def test_extension_check_is_case_insensitive(*, client: TestClient, db_session: Session) -> None:
-    """Check that the extension gate accepts upper-case suffixes."""
+    """Check that the extension gate accepts upper-case suffixes.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the upload is written through.
+    """
 
     headers = _auth(client=client, email="upper@example.com")
     project_id = _create_project(client=client, headers=headers, name="upper")
@@ -277,7 +323,11 @@ def test_extension_check_is_case_insensitive(*, client: TestClient, db_session: 
 
 
 def test_uploads_list_derives_the_latest_status(*, client: TestClient, db_session: Session) -> None:
-    """Check the list derives each item's status from its latest run, newest first, one row each."""
+    """Check the list derives each item's status from its latest run, newest first, one row each.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the tied runs are written through.
+    """
 
     headers = _auth(client=client, email="list@example.com")
     project_id = _create_project(client=client, headers=headers, name="listing")
@@ -335,7 +385,12 @@ def test_uploads_list_derives_the_latest_status(*, client: TestClient, db_sessio
 def test_storage_put_runs_with_no_open_transaction(
     *, client: TestClient, db_session: Session, settings: Settings
 ) -> None:
-    """Check that no DB transaction is open on the request session across the storage PUT."""
+    """Check that no DB transaction is open on the request session across the storage PUT.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session whose state the recorder observes.
+    :param settings: Test settings for the app under test.
+    """
 
     headers = _auth(client=client, email="put-txn@example.com")
     project_id = _create_project(client=client, headers=headers, name="put-txn")
@@ -346,7 +401,12 @@ def test_storage_put_runs_with_no_open_transaction(
         """Storage service that records the request session's transaction state during puts."""
 
         def put_object(self, *, key: str, content: bytes, content_type: str | None = None) -> None:
-            """Record the transaction state, then store the bytes through the real client."""
+            """Record the transaction state, then store the bytes through the real client.
+
+            :param key: Storage key the upload is written to.
+            :param content: Raw bytes being stored.
+            :param content_type: Optional MIME type stored with the object.
+            """
 
             recorded.append(db_session.in_transaction())
             super().put_object(key=key, content=content, content_type=content_type)
@@ -363,7 +423,12 @@ def test_storage_put_runs_with_no_open_transaction(
 def test_upload_storage_failure_returns_503(
     *, client: TestClient, db_session: Session, settings: Settings
 ) -> None:
-    """Check that a storage failure during upload yields a 503 and leaves no rows."""
+    """Check that a storage failure during upload yields a 503 and leaves no rows.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the absence of rows is checked on.
+    :param settings: Test settings for the app under test.
+    """
 
     headers = _auth(client=client, email="storage-failure@example.com")
     project_id = _create_project(client=client, headers=headers, name="storage-failure")
@@ -372,7 +437,12 @@ def test_upload_storage_failure_returns_503(
         """Storage service whose puts fail as if the backend were down."""
 
         def put_object(self, *, key: str, content: bytes, content_type: str | None = None) -> None:
-            """Refuse the put with the unavailable error."""
+            """Refuse the put with the unavailable error.
+
+            :param key: Storage key the upload would have been written to.
+            :param content: Raw bytes that would have been stored.
+            :param content_type: Optional MIME type that would have been stored.
+            """
 
             raise StorageUnavailableError("backend down")
 
@@ -387,7 +457,10 @@ def test_upload_storage_failure_returns_503(
 
 
 def test_upload_validates_extension_empty_and_size(*, client: TestClient) -> None:
-    """Check the friendly 422s for a wrong extension, an empty file, and an oversized body."""
+    """Check the friendly 422s for a wrong extension, an empty file, and an oversized body.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers = _auth(client=client, email="validate@example.com")
     project_id = _create_project(client=client, headers=headers, name="validation")
@@ -420,7 +493,11 @@ def test_upload_validates_extension_empty_and_size(*, client: TestClient) -> Non
 
 
 def test_upload_filename_sanitized(*, client: TestClient, db_session: Session) -> None:
-    """Check that the stored filename and the storage key use the sanitized basename."""
+    """Check that the stored filename and the storage key use the sanitized basename.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the stored item is read through.
+    """
 
     headers = _auth(client=client, email="sanitize@example.com")
     project_id = _create_project(client=client, headers=headers, name="sanitize")
@@ -454,7 +531,11 @@ def test_upload_filename_sanitized(*, client: TestClient, db_session: Session) -
 
 
 def test_upload_requires_editor_role(*, client: TestClient, db_session: Session) -> None:
-    """Check that a viewer-role member can list but not upload, and a stranger sees 404."""
+    """Check that a viewer-role member can list but not upload, and a stranger sees 404.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the viewer role is written through.
+    """
 
     owner = _auth(client=client, email="owner@example.com")
     viewer = _auth(client=client, email="viewer@example.com")
@@ -482,7 +563,10 @@ def test_upload_requires_editor_role(*, client: TestClient, db_session: Session)
 
 
 def test_public_project_viewer_can_list_but_not_upload(*, client: TestClient) -> None:
-    """Check that a stranger can list a public project's uploads but cannot upload."""
+    """Check that a stranger can list a public project's uploads but cannot upload.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     owner = _auth(client=client, email="public-owner@example.com")
     stranger = _auth(client=client, email="public-stranger@example.com")
@@ -503,7 +587,13 @@ def test_public_project_viewer_can_list_but_not_upload(*, client: TestClient) ->
 def test_project_delete_cascades_fully_ingested_source(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check that deleting a project with a fully ingested upload removes every pipeline row."""
+    """Check that deleting a project with a fully ingested upload removes every pipeline row.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the pipeline rows are counted on.
+    :param settings: Test settings for the app under test.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="cascade@example.com")
     project_id = _create_project(client=client, headers=headers, name="cascade")
@@ -542,12 +632,14 @@ def test_project_delete_cascades_fully_ingested_source(
     assert db_session.query(Document).count() == 0
     assert db_session.query(Chunk).count() == 0
     assert db_session.query(IngestionRun).count() == 0
-    # Outbox rows for deleted aggregates linger by design (no FK); later tasks no-op on them.
     assert db_session.query(OutboxEvent).count() == 2
 
 
 def test_upload_raw_returns_the_stored_bytes(*, client: TestClient) -> None:
-    """Check the raw happy path: 200 with the stored bytes, PDF type, and inline disposition."""
+    """Check the raw happy path: 200 with the stored bytes, PDF type, and inline disposition.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers = _auth(client=client, email="raw@example.com")
     project_id = _create_project(client=client, headers=headers, name="raw")
@@ -566,7 +658,10 @@ def test_upload_raw_returns_the_stored_bytes(*, client: TestClient) -> None:
 
 
 def test_upload_raw_requires_auth(*, client: TestClient) -> None:
-    """Check that the raw endpoint rejects an anonymous request with 401."""
+    """Check that the raw endpoint rejects an anonymous request with 401.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers = _auth(client=client, email="raw-auth@example.com")
     project_id = _create_project(client=client, headers=headers, name="raw-auth")
@@ -580,7 +675,10 @@ def test_upload_raw_requires_auth(*, client: TestClient) -> None:
 
 
 def test_upload_raw_invisible_project_returns_404(*, client: TestClient) -> None:
-    """Check that another user's raw URL is a 404, as if the project did not exist."""
+    """Check that another user's raw URL is a 404, as if the project did not exist.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     owner = _auth(client=client, email="raw-owner@example.com")
     stranger = _auth(client=client, email="raw-stranger@example.com")
@@ -596,7 +694,10 @@ def test_upload_raw_invisible_project_returns_404(*, client: TestClient) -> None
 
 
 def test_upload_raw_unknown_or_other_project_item_returns_404(*, client: TestClient) -> None:
-    """Check that a random item id and another project's item id are both a 404."""
+    """Check that a random item id and another project's item id are both a 404.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers = _auth(client=client, email="raw-missing@example.com")
     project_id = _create_project(client=client, headers=headers, name="raw-one")
@@ -625,7 +726,11 @@ def test_upload_raw_unknown_or_other_project_item_returns_404(*, client: TestCli
 
 
 def test_upload_raw_missing_object_returns_404(*, client: TestClient, db_session: Session) -> None:
-    """Check that an upload row whose bytes were never stored is a 404, not a crash."""
+    """Check that an upload row whose bytes were never stored is a 404, not a crash.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the factory rows are written through.
+    """
 
     headers = _auth(client=client, email="raw-ghost@example.com")
     project_id = _create_project(client=client, headers=headers, name="raw-ghost")
@@ -640,7 +745,12 @@ def test_upload_raw_missing_object_returns_404(*, client: TestClient, db_session
 def test_upload_raw_storage_failure_returns_503(
     *, client: TestClient, db_session: Session, settings: Settings
 ) -> None:
-    """Check that a storage failure while serving raw bytes yields a 503."""
+    """Check that a storage failure while serving raw bytes yields a 503.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the factory rows are written through.
+    :param settings: Test settings for the app under test.
+    """
 
     headers = _auth(client=client, email="raw-storage@example.com")
     project_id = _create_project(client=client, headers=headers, name="raw-storage")
@@ -650,7 +760,10 @@ def test_upload_raw_storage_failure_returns_503(
         """Storage service whose gets fail as if the backend were down."""
 
         def get_object(self, *, key: str) -> bytes:
-            """Refuse the get with the unavailable error."""
+            """Refuse the get with the unavailable error.
+
+            :param key: Storage key that would have been read.
+            """
 
             raise StorageUnavailableError("backend down")
 
@@ -664,7 +777,13 @@ def test_upload_raw_storage_failure_returns_503(
 def test_delete_upload_removes_rows_and_the_stored_object(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check the delete happy path: 204, every pipeline row gone, and the object gone."""
+    """Check the delete happy path: 204, every pipeline row gone, and the object gone.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the pipeline rows are counted on.
+    :param settings: Test settings for the app under test.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="delete@example.com")
     project_id = _create_project(client=client, headers=headers, name="delete")
@@ -712,7 +831,11 @@ def test_delete_upload_removes_rows_and_the_stored_object(
 
 
 def test_delete_upload_frees_the_filename_for_reupload(*, client: TestClient, db_session: Session) -> None:
-    """Check that a deleted upload's filename can be uploaded again immediately."""
+    """Check that a deleted upload's filename can be uploaded again immediately.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the item count is read through.
+    """
 
     headers = _auth(client=client, email="delete-reupload@example.com")
     project_id = _create_project(client=client, headers=headers, name="delete-reupload")
@@ -733,7 +856,11 @@ def test_delete_upload_frees_the_filename_for_reupload(*, client: TestClient, db
 
 
 def test_delete_upload_requires_editor_role(*, client: TestClient, db_session: Session) -> None:
-    """Check that a viewer-role member cannot delete, and a stranger sees 404."""
+    """Check that a viewer-role member cannot delete, and a stranger sees 404.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the viewer role is written through.
+    """
 
     owner = _auth(client=client, email="delete-owner@example.com")
     viewer = _auth(client=client, email="delete-viewer@example.com")
@@ -759,7 +886,10 @@ def test_delete_upload_requires_editor_role(*, client: TestClient, db_session: S
 
 
 def test_delete_upload_unknown_or_other_project_item_returns_404(*, client: TestClient) -> None:
-    """Check that a random item id and another project's item id are both a 404."""
+    """Check that a random item id and another project's item id are both a 404.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers = _auth(client=client, email="delete-missing@example.com")
     project_id = _create_project(client=client, headers=headers, name="delete-one")
@@ -784,11 +914,14 @@ def test_delete_upload_unknown_or_other_project_item_returns_404(*, client: Test
 
 
 def test_delete_upload_without_stored_object_succeeds(*, client: TestClient, db_session: Session) -> None:
-    """Check that an item whose bytes never reached Garage still deletes: the row is the truth."""
+    """Check that an item whose bytes never reached Garage still deletes: the row is the truth.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the factory rows are written through.
+    """
 
     headers = _auth(client=client, email="delete-ghost@example.com")
     project_id = _create_project(client=client, headers=headers, name="delete-ghost")
-    # The factory writes only the rows, so the raw object is absent from Garage.
     seeded = seed_upload(db=db_session, project_id=UUID(project_id), filename="ghost.pdf")
 
     r = client.delete(f"/api/projects/{project_id}/uploads/{seeded.source_item_id}", headers=headers)
@@ -800,7 +933,13 @@ def test_delete_upload_without_stored_object_succeeds(*, client: TestClient, db_
 def test_delete_upload_storage_failure_returns_503(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check that a storage failure during delete yields a 503 and leaves every row."""
+    """Check that a storage failure during delete yields a 503 and leaves every row.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the surviving rows are read through.
+    :param settings: Test settings for the app under test.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="delete-storage@example.com")
     project_id = _create_project(client=client, headers=headers, name="delete-storage")
@@ -813,7 +952,10 @@ def test_delete_upload_storage_failure_returns_503(
         """Storage service whose deletes fail as if the backend were down."""
 
         def delete_object(self, *, key: str) -> None:
-            """Refuse the delete with the unavailable error."""
+            """Refuse the delete with the unavailable error.
+
+            :param key: Storage key that would have been deleted.
+            """
 
             raise StorageUnavailableError("backend down")
 
@@ -831,7 +973,13 @@ def test_delete_upload_storage_failure_returns_503(
 def test_delete_upload_partial_storage_failure_keeps_the_current_object(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check that a failed superseded-key delete leaves the row's current bytes in place."""
+    """Check that a failed superseded-key delete leaves the row's current bytes in place.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the two versions are written through.
+    :param settings: Test settings for the app under test.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="delete-partial@example.com")
     project_id = _create_project(client=client, headers=headers, name="delete-partial")
@@ -855,7 +1003,10 @@ def test_delete_upload_partial_storage_failure_keeps_the_current_object(
         """Storage service failing only the superseded key's delete."""
 
         def delete_object(self, *, key: str) -> None:
-            """Fail the superseded key; delete everything else for real."""
+            """Fail the superseded key; delete everything else for real.
+
+            :param key: Storage key whose delete is attempted.
+            """
 
             if key == superseded_key:
                 raise StorageUnavailableError("backend down")
@@ -873,7 +1024,12 @@ def test_delete_upload_partial_storage_failure_keeps_the_current_object(
 def test_delete_upload_removes_every_version_of_the_object(
     *, client: TestClient, db_session: Session, storage: StorageService
 ) -> None:
-    """Check that deleting a retried upload removes both the current and the superseded bytes."""
+    """Check that deleting a retried upload removes both the current and the superseded bytes.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the two versions are written through.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="delete-versions@example.com")
     project_id = _create_project(client=client, headers=headers, name="delete-versions")
@@ -907,7 +1063,13 @@ def test_delete_upload_removes_every_version_of_the_object(
 def test_delete_queued_upload_leaves_the_ingest_task_a_clean_noop(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check that ingesting a deleted item's run returns cleanly instead of crashing."""
+    """Check that ingesting a deleted item's run returns cleanly instead of crashing.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the remaining rows are counted on.
+    :param settings: Test settings for the app under test.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="delete-queued@example.com")
     project_id = _create_project(client=client, headers=headers, name="delete-queued")
@@ -937,7 +1099,13 @@ def test_delete_queued_upload_leaves_the_ingest_task_a_clean_noop(
 def test_delete_after_ingest_leaves_the_embed_task_a_clean_noop(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check that embedding a deleted item's document returns cleanly instead of crashing."""
+    """Check that embedding a deleted item's document returns cleanly instead of crashing.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the remaining rows are counted on.
+    :param settings: Test settings for the app under test.
+    :param storage: StorageService pointed at the test Garage.
+    """
 
     headers = _auth(client=client, email="delete-embed@example.com")
     project_id = _create_project(client=client, headers=headers, name="delete-embed")
