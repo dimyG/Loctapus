@@ -1,4 +1,9 @@
-"""Provider interfaces shared by the parse and embed pipelines."""
+"""Provider interfaces every parser, embedding, and LLM implementation shares.
+
+These are ``Protocol`` classes: implementations satisfy them structurally and
+do not inherit from them. Ingestion uses ``Parser`` and ``EmbeddingProvider``,
+retrieval uses ``EmbeddingProvider``, and answers uses ``LLMProvider``.
+"""
 
 from dataclasses import dataclass
 from typing import Literal, Protocol
@@ -14,6 +19,7 @@ class NormalizedElement:
 
     type: str
     text: str
+    # Only headings carry a level; chunking reads it to build the heading path.
     level: int | None = None
 
 
@@ -30,7 +36,14 @@ class Parser(Protocol):
     """Interface every parser provider implements."""
 
     def parse(self, *, filename: str, content: bytes) -> NormalizedDocument:
-        """Parse raw document bytes into a normalized document."""
+        """Parse raw document bytes into a normalized document.
+
+        The filename suffix, not the bytes, selects the format. Raises
+        ``ParseError`` with user-safe copy when nothing usable comes out.
+
+        :param filename: Upload name whose suffix selects the format.
+        :param content: Raw file bytes to extract text from.
+        """
 
         ...
 
@@ -38,15 +51,25 @@ class Parser(Protocol):
 class EmbeddingProvider(Protocol):
     """Interface every embedding provider implements."""
 
+    # The worker's startup guard compares this to the chunks.embedding column
+    # type and refuses to boot on a mismatch.
     dimension: int
 
+    # Queries and passages stay separate methods so a real provider can treat
+    # them differently without changing callers; the stub shares one body.
     def embed_documents(self, *, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of texts into fixed-dimension vectors."""
+        """Embed a batch of texts into fixed-dimension vectors.
+
+        :param texts: Texts to embed, in the order the vectors come back.
+        """
 
         ...
 
     def embed_query(self, *, text: str) -> list[float]:
-        """Embed a single query text into a fixed-dimension vector."""
+        """Embed a single query text into a fixed-dimension vector.
+
+        :param text: Query text to embed.
+        """
 
         ...
 
@@ -59,6 +82,7 @@ class LLMError(Exception):
 class ChatMessage:
     """One chat turn sent to an LLM provider, in send order."""
 
+    # The system prompt is a generate/route parameter, never a message role.
     role: Literal["user", "assistant"]
     content: str
 
@@ -68,6 +92,8 @@ class RouteDecision:
     """The router's choice of which evidence path one answer turn takes."""
 
     route: Literal["direct", "reuse", "retrieve"]
+    # On retrieve this is the standalone search question; None searches the
+    # raw question. On direct and reuse the field is not applicable.
     rewritten_query: str | None
 
 
@@ -75,11 +101,24 @@ class LLMProvider(Protocol):
     """Interface every LLM provider implements."""
 
     def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
-        """Generate one completion from a system prompt and the chat turns."""
+        """Generate one completion from a system prompt and the chat turns.
+
+        Raises ``LLMError`` with user-safe copy on any upstream failure.
+
+        :param system: System prompt steering the completion.
+        :param messages: Prior turns in send order, oldest first.
+        """
 
         ...
 
     def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
-        """Choose the answer path for one turn from the router prompt and the turns."""
+        """Choose the answer path for one turn from the router prompt and the turns.
+
+        Raises ``LLMError`` with user-safe copy when the reply breaks the
+        router contract; the answer service then falls back to a retrieve turn.
+
+        :param system: Router prompt naming the three paths.
+        :param messages: Prior turns in send order, oldest first.
+        """
 
         ...

@@ -1,4 +1,8 @@
-"""Tests for the Groq LLM provider, run hermetically through MockTransport."""
+"""Tests for the Groq LLM provider, run hermetically through MockTransport.
+
+httpx calls each MockTransport handler with one positional request, so the
+handlers cannot be keyword-only; every one carries ``# noqa: PLR0917``.
+"""
 
 import json
 from collections.abc import Callable
@@ -17,7 +21,13 @@ def _provider(
     route_max_tokens: int = 128,
     route_timeout_seconds: float = 10.0,
 ) -> GroqLLMProvider:
-    """Build a Groq provider around a hermetic MockTransport handler."""
+    """Build a Groq provider around a hermetic MockTransport handler.
+
+    :param handler: Transport handler answering every request.
+    :param base_url: Base URL the provider posts to.
+    :param route_max_tokens: Router completion budget.
+    :param route_timeout_seconds: Router call timeout.
+    """
 
     return GroqLLMProvider(
         api_key="gsk-test",
@@ -32,12 +42,16 @@ def _provider(
 
 
 def _router_reply(*, content: str) -> Callable[[httpx.Request], httpx.Response]:
-    """Build one hermetic handler serving a canned router reply."""
+    """Build one hermetic handler serving a canned router reply.
 
-    # httpx calls a MockTransport handler with one positional request, so the
-    # closure cannot be keyword-only; it carries the same silencer as the rest.
+    :param content: Message content the fake completion returns.
+    """
+
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Serve the canned router reply."""
+        """Serve the canned router reply.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
@@ -45,12 +59,13 @@ def _router_reply(*, content: str) -> Callable[[httpx.Request], httpx.Response]:
 
 
 def test_generate_returns_message_content() -> None:
-    """A 200 completion returns its message content verbatim."""
+    """Check that a 200 completion returns its message content verbatim."""
 
-    # httpx calls a MockTransport handler with one positional request, so the
-    # handlers in this module cannot be keyword-only; each carries the silencer.
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Serve one canned completion."""
+        """Serve one canned completion.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         return httpx.Response(200, json={"choices": [{"message": {"content": "Rotate the key. [1]"}}]})
 
@@ -62,12 +77,15 @@ def test_generate_returns_message_content() -> None:
 
 
 def test_generate_sends_model_key_and_messages() -> None:
-    """One POST carries the endpoint path, the bearer key, and the ordered messages."""
+    """Check that one POST carries the endpoint path, the bearer key, and the ordered messages."""
 
     captured: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Capture the outgoing request and serve one canned completion."""
+        """Capture the outgoing request and serve one canned completion.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         captured.append(request)
         return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
@@ -89,10 +107,16 @@ def test_generate_sends_model_key_and_messages() -> None:
 
 @pytest.mark.parametrize("status_code", [429, 500])
 def test_non_2xx_raises_user_safe_llm_error(*, status_code: int) -> None:
-    """A non-2xx response surfaces as the one fixed user-safe copy, never a raw HTTP error."""
+    """Check that a non-2xx response surfaces as the one fixed user-safe copy.
+
+    :param status_code: Upstream HTTP status the fake transport answers with.
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Serve one upstream failure."""
+        """Serve one upstream failure.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         return httpx.Response(status_code, json={"error": {"message": "boom"}})
 
@@ -103,10 +127,13 @@ def test_non_2xx_raises_user_safe_llm_error(*, status_code: int) -> None:
 
 
 def test_timeout_raises_llm_error() -> None:
-    """A connect timeout surfaces as the one fixed user-safe copy."""
+    """Check that a connect timeout surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Simulate the upstream never answering."""
+        """Simulate the upstream never answering.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         raise httpx.ConnectTimeout("connect timed out")
 
@@ -117,10 +144,13 @@ def test_timeout_raises_llm_error() -> None:
 
 
 def test_malformed_body_raises_llm_error() -> None:
-    """A 200 with a non-JSON body surfaces as the one fixed user-safe copy."""
+    """Check that a 200 with a non-JSON body surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Serve one non-JSON body."""
+        """Serve one non-JSON body.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         return httpx.Response(200, text="not json")
 
@@ -131,10 +161,13 @@ def test_malformed_body_raises_llm_error() -> None:
 
 
 def test_missing_choices_raises_llm_error() -> None:
-    """A 200 body without choices surfaces as the one fixed user-safe copy."""
+    """Check that a 200 body without choices surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Serve one choices-free body."""
+        """Serve one choices-free body.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         return httpx.Response(200, json={})
 
@@ -145,10 +178,13 @@ def test_missing_choices_raises_llm_error() -> None:
 
 
 def test_empty_choices_raises_llm_error() -> None:
-    """A 200 body with an empty choices list surfaces as the one fixed user-safe copy."""
+    """Check that a 200 body with an empty choices list surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Serve one empty-choices body."""
+        """Serve one empty-choices body.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         return httpx.Response(200, json={"choices": []})
 
@@ -160,10 +196,16 @@ def test_empty_choices_raises_llm_error() -> None:
 
 @pytest.mark.parametrize("content", ["", "   "])
 def test_empty_content_raises_llm_error(*, content: str) -> None:
-    """A 200 whose message content is blank surfaces as the one fixed user-safe copy."""
+    """Check that a 200 whose message content is blank surfaces as the one fixed user-safe copy.
+
+    :param content: Blank or whitespace message content the fake completion returns.
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Serve one blank completion."""
+        """Serve one blank completion.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
@@ -174,7 +216,7 @@ def test_empty_content_raises_llm_error(*, content: str) -> None:
 
 
 def test_route_parses_valid_decision() -> None:
-    """A strict-JSON router reply parses into one RouteDecision."""
+    """Check that a strict-JSON router reply parses into one RouteDecision."""
 
     content = '{"route": "retrieve", "rewritten_query": "standalone q"}'
     provider = _provider(handler=_router_reply(content=content))
@@ -183,7 +225,7 @@ def test_route_parses_valid_decision() -> None:
 
 
 def test_route_rejects_garbage_json() -> None:
-    """A router reply that is not JSON surfaces as the user-safe LLMError."""
+    """Check that a router reply that is not JSON surfaces as the user-safe LLMError."""
 
     provider = _provider(handler=_router_reply(content="route: retrieve"))
     with pytest.raises(LLMError) as excinfo:
@@ -192,7 +234,7 @@ def test_route_rejects_garbage_json() -> None:
 
 
 def test_route_rejects_unknown_route_literal() -> None:
-    """A router reply naming an unknown route surfaces as the user-safe LLMError."""
+    """Check that a router reply naming an unknown route surfaces as the user-safe LLMError."""
 
     provider = _provider(handler=_router_reply(content='{"route": "teleport"}'))
     with pytest.raises(LLMError) as excinfo:
@@ -201,7 +243,7 @@ def test_route_rejects_unknown_route_literal() -> None:
 
 
 def test_route_rejects_blank_rewritten_query() -> None:
-    """A retrieval turn with a blank rewrite surfaces as the user-safe LLMError."""
+    """Check that a retrieval turn with a blank rewrite surfaces as the user-safe LLMError."""
 
     provider = _provider(handler=_router_reply(content='{"route": "retrieve", "rewritten_query": "  "}'))
     with pytest.raises(LLMError) as excinfo:
@@ -210,7 +252,7 @@ def test_route_rejects_blank_rewritten_query() -> None:
 
 
 def test_route_accepts_missing_rewritten_query_on_reuse() -> None:
-    """A reuse turn may omit the rewrite; the field is only required on retrieve."""
+    """Check that a reuse turn may omit the rewrite; the field is only required on retrieve."""
 
     provider = _provider(handler=_router_reply(content='{"route": "reuse"}'))
     decision = provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
@@ -218,12 +260,15 @@ def test_route_accepts_missing_rewritten_query_on_reuse() -> None:
 
 
 def test_route_payload_carries_route_max_tokens_and_timeout() -> None:
-    """The router POST carries its own max_tokens and per-call timeout."""
+    """Check that the router POST carries its own max_tokens and per-call timeout."""
 
     captured: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Capture the router POST and serve one valid decision."""
+        """Capture the router POST and serve one valid decision.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         captured.append(request)
         return httpx.Response(200, json={"choices": [{"message": {"content": '{"route": "direct"}'}}]})
@@ -237,10 +282,13 @@ def test_route_payload_carries_route_max_tokens_and_timeout() -> None:
 
 
 def test_route_maps_http_errors_to_llm_error() -> None:
-    """A non-2xx router reply surfaces as the one fixed user-safe copy."""
+    """Check that a non-2xx router reply surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
-        """Serve one upstream failure."""
+        """Serve one upstream failure.
+
+        :param request: Outgoing request httpx is sending.
+        """
 
         return httpx.Response(429, json={"error": {"message": "rate limited"}})
 

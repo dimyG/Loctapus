@@ -42,12 +42,13 @@ __all__ = [
 ]
 
 
+# Every factory below dispatches on a ``Literal`` settings field, so each match
+# is exhaustive: an unresolvable provider is a settings-construction error
+# (fail fast at boot), never a runtime branch here.
 def get_parser(*, settings: Settings) -> Parser:
     """Return the parser provider selected by ``settings.parser_provider``.
 
-    The setting is a ``Literal`` and this match is exhaustive, so an unresolvable
-    provider is a settings-construction error (fail fast at boot), never a runtime
-    branch here.
+    :param settings: Settings whose ``parser_provider`` literal selects the implementation.
     """
 
     match settings.parser_provider:
@@ -60,9 +61,7 @@ def get_parser(*, settings: Settings) -> Parser:
 def get_embedding_provider(*, settings: Settings) -> EmbeddingProvider:
     """Return the embedding provider selected by ``settings.embedding_provider``.
 
-    The setting is a ``Literal`` and this match is exhaustive, so an unresolvable
-    provider is a settings-construction error (fail fast at boot), never a runtime
-    branch here.
+    :param settings: Settings whose ``embedding_provider`` literal selects the implementation.
     """
 
     match settings.embedding_provider:
@@ -75,9 +74,7 @@ def get_embedding_provider(*, settings: Settings) -> EmbeddingProvider:
 def get_llm_provider(*, settings: Settings) -> LLMProvider:
     """Return the LLM provider selected by ``settings.llm_provider``.
 
-    The setting is a ``Literal`` and this match is exhaustive, so an unresolvable
-    provider is a settings-construction error (fail fast at boot), never a runtime
-    branch here.
+    :param settings: Settings selecting the implementation and supplying any Groq endpoint knobs.
     """
 
     match settings.llm_provider:

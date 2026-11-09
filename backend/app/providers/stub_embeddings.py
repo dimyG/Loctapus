@@ -10,7 +10,15 @@ STUB_EMBEDDING_DIM = 384
 
 
 def _hash_bag(*, text: str) -> list[float]:
-    """Return the L2-normalized hash-bag vector for ``text``, zeros when empty."""
+    """Return the L2-normalized hash-bag vector for ``text``, zeros when empty.
+
+    Each whitespace-separated token hashes to one signed bucket, giving a
+    vocabulary-free signature that is stable across processes. The L2 norm
+    puts every non-empty vector on the unit sphere, so lengths cannot skew
+    similarity.
+
+    :param text: Text whose tokens are hashed into the vector.
+    """
 
     vector = [0.0] * STUB_EMBEDDING_DIM
     for token in text.lower().split():
@@ -30,11 +38,17 @@ class StubEmbeddingProvider:
     dimension: int = STUB_EMBEDDING_DIM
 
     def embed_documents(self, *, texts: list[str]) -> list[list[float]]:
-        """Embed every text into a fixed-dimension vector."""
+        """Embed every text into a fixed-dimension vector.
+
+        :param texts: Texts to embed, in the order the vectors come back.
+        """
 
         return [_hash_bag(text=text) for text in texts]
 
     def embed_query(self, *, text: str) -> list[float]:
-        """Embed a single query text into a fixed-dimension vector."""
+        """Embed a single query text into a fixed-dimension vector.
+
+        :param text: Query text to embed.
+        """
 
         return _hash_bag(text=text)

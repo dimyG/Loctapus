@@ -75,7 +75,7 @@ def test_parser_copy_is_user_safe() -> None:
 
 
 def test_unknown_parser_provider_setting_is_rejected() -> None:
-    """An unknown provider string is rejected at settings construction, before any boot.
+    """Check that an unknown provider string is rejected at settings construction, before any boot.
 
     The invalid value goes through ``model_validate`` because the typed constructor
     signature itself refuses it: rejection at construction is the feature.

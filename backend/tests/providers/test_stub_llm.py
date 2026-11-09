@@ -32,7 +32,7 @@ def test_stub_llm_ignores_prompt_content() -> None:
 
 
 def test_stub_route_always_retrieves_with_raw_query() -> None:
-    """The stub router keeps the offline path on today's retrieval behavior."""
+    """Check that the stub router always retrieves and keeps the raw question."""
 
     decision = StubLLMProvider().route(system="s", messages=[ChatMessage(role="user", content="q")])
     assert decision == RouteDecision(route="retrieve", rewritten_query=None)

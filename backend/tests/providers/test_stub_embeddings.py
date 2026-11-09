@@ -51,7 +51,7 @@ def test_empty_text_yields_zero_vector() -> None:
 
 
 def test_unknown_embedding_provider_setting_is_rejected() -> None:
-    """An unknown embedding provider string is rejected at settings construction.
+    """Check that an unknown embedding provider string is rejected at settings construction.
 
     The invalid value goes through ``model_validate`` because the typed constructor
     signature itself refuses it: rejection at construction is the feature.
