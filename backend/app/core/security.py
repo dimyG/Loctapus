@@ -74,6 +74,6 @@ def decode_access_token(*, token: str, settings: Settings) -> TokenClaims:
             exp=datetime.fromtimestamp(claims["exp"], tz=UTC),
         )
     except (KeyError, ValueError) as exc:
-        # Any malformed claim shape becomes InvalidTokenError, so callers only ever
-        # handle the one failure type the API documents.
+        # Missing or unparseable claims become InvalidTokenError, so callers only
+        # ever handle the one failure type the API documents.
         raise jwt.InvalidTokenError("malformed token claims") from exc

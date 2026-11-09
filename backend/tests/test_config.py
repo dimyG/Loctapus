@@ -10,7 +10,7 @@ from tests.helpers import SettingsForTests
 
 
 def test_settings_defaults() -> None:
-    """Check fallback values when no environment variables are set."""
+    """Check that the settings keep their defaults when no environment variables are set."""
 
     s = SettingsForTests()
     assert s.database_url == "postgresql+psycopg://rag:rag@localhost:5432/rag"

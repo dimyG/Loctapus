@@ -1,7 +1,7 @@
 /** The URL sections the signed-in shell distinguishes. */
 export type Section = "projects" | "sources" | "chat";
 
-// Matches /projects plus an id segment: /projects/p-1, /projects/p-1/sources, ...
+// Matches /projects plus an id segment: /projects/p-1, /projects/p-1/sources, and anything deeper.
 const projectIdPattern = /^\/projects\/([^/]+)/;
 
 // A section segment under a project, at the end of the path or with more path below it.

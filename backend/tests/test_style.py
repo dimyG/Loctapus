@@ -37,7 +37,7 @@ def _docstring_statement(*, node: _DocstringOwner) -> ast.Expr | None:
 
 
 def test_docstrings_are_followed_by_a_blank_line() -> None:
-    """Fail when a docstring is not separated from the following statement by a blank line."""
+    """Check that a docstring is separated from the following statement by a blank line."""
 
     offenders: list[str] = []
     for path in _python_files(*STYLE_DIRS):
@@ -61,7 +61,7 @@ def test_docstrings_are_followed_by_a_blank_line() -> None:
 
 
 def test_private_functions_and_methods_have_docstrings() -> None:
-    """Fail when a private function or method opens without a docstring."""
+    """Check that every private function or method opens with a docstring."""
 
     offenders: list[str] = []
     for path in _python_files(*STYLE_DIRS):
