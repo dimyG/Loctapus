@@ -25,6 +25,17 @@ Use Kimi K3.1 Pro for fresh context reviews. Use Kimi K3 as an alternative to GL
 - When a specification has been implemented it should freeze. The source of truth is the roadmap specification
 - After a task is completed, update the docs/system-overview.md file to reflect the new state  
 
+## Asynchronous Background tasks
+
+For every asynchronous background task, answer two questions:
+1. What happens if the same task runs again after partial progress or success?
+2. What happens if two workers run it at the same time?
+
+Ensure retries preserve completed work and concurrent runs leave the system
+in a consistent state. If a worker claims a task, explain how another worker
+can recover it after a crash. Mark the task complete only after its results
+are durable. Document any external calls that may repeat.
+
 ## Comments
 
 - Comments start with a capital letter and end with a dot
