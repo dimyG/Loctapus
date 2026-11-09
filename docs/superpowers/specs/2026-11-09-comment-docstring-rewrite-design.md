@@ -17,7 +17,7 @@ Success criteria:
 
 ## Model constraint (explicit user instruction, amended mid-execution)
 
-**All work on this task uses only the model `z-ai/glm-5.3` (GLM 5.3)** for implementation slices, subagents, and the final fresh-context review. (Original instruction: `opencode/mimo-v2.6-flash-free`; amended 2026-11-09 after the free model's usage limit was reached - GLM 5.3 only, per the user.) This overrides the model-selection list in `AGENTS.md` for this task only.
+**All work on this task uses only GLM 5.3 flash (`opencode/glm-5.3-flash-free`)** for implementation slices, subagents, and the final fresh-context review. (History: originally `opencode/mimo-v2.6-flash-free`; switched to `z-ai/glm-5.3` after the MiMo free limit was reached; switched to GLM 5.3 flash by explicit user instruction during Task 5.) This overrides the model-selection list in `AGENTS.md` for this task only.
 
 ## Scope
 
