@@ -18,7 +18,7 @@
 - Python: every function/method with parameters gets one `:param name:` line per parameter, no `:type:` lines. Frontend: every export gets preceding JSDoc with `@param {type} name - ...` lines where it takes parameters.
 - Test docstrings: imperative "Check that..." voice, one line.
 - One concern per commit, `docs(<scope>): ...` message, no co-author trailer. Untracked files get their own dedicated commit.
-- Verification per slice: backend `ruff check .`, `ruff format --check .`, `mypy app tests`, `pytest` in `backend/`; frontend `npm run lint`, `npm run test`, `npx tsc -b`, `npm run format:check` in `web/`.
+- Verification per slice (amended by user ruling mid-execution): backend `ruff check .`, `ruff format --check .`, and `pytest tests/test_style.py` in `backend/`; frontend `npm run lint` and `npm run format:check` in `web/`. Format/style checks only - the full `pytest` and `npm run test` suites run once, at the end, in Task 11.
 
 ## Review Focus
 
