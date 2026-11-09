@@ -1,4 +1,4 @@
-"""review fixes: revoked_tokens, Project.is_public, drop is_personal
+"""Add revoked tokens and project visibility, and drop the personal flags.
 
 Revision ID: 0002
 Revises: 0001

@@ -23,7 +23,10 @@ DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
 
 
 def test_identity_tables_exist(*, engine: Engine) -> None:
-    """Check that migrations created every expected table."""
+    """Check that migrations created every expected table.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     with engine.connect() as conn:
         names = set(inspect(conn).get_table_names())
@@ -39,7 +42,10 @@ def test_identity_tables_exist(*, engine: Engine) -> None:
 
 
 def test_ingestion_tables_exist(*, engine: Engine) -> None:
-    """Check that migrations created the six S3 tables."""
+    """Check that migrations created the six S3 tables.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     with engine.connect() as conn:
         names = set(inspect(conn).get_table_names())
@@ -54,7 +60,10 @@ def test_ingestion_tables_exist(*, engine: Engine) -> None:
 
 
 def test_retrieve_logs_table_exists(*, engine: Engine) -> None:
-    """Check that migrations created the S4 query log table under its S6 name."""
+    """Check that migrations created the S4 query log table under its S6 name.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     with engine.connect() as conn:
         names = set(inspect(conn).get_table_names())
@@ -63,7 +72,10 @@ def test_retrieve_logs_table_exists(*, engine: Engine) -> None:
 
 
 def test_conversation_tables_exist(*, engine: Engine) -> None:
-    """Check that migrations created the three S6 conversation tables."""
+    """Check that migrations created the three S6 conversation tables.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     with engine.connect() as conn:
         names = set(inspect(conn).get_table_names())
@@ -75,7 +87,10 @@ def test_conversation_tables_exist(*, engine: Engine) -> None:
 
 
 def test_vector_and_fulltext_indexes(*, engine: Engine) -> None:
-    """Check that chunks carries the HNSW and GIN indexes and the outbox its partial index."""
+    """Check that chunks carries the HNSW and GIN indexes and the outbox its partial index.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     with engine.connect() as conn:
         chunk_defs = (
@@ -92,7 +107,11 @@ def test_vector_and_fulltext_indexes(*, engine: Engine) -> None:
 
 
 def test_citext_email_case_insensitive(*, engine: Engine, db_session: Session) -> None:
-    """Check that the migrated email column matches case-insensitively."""
+    """Check that the migrated email column matches case-insensitively.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    :param db_session: Transaction-managed session the test row is written through.
+    """
 
     from app.identity.models import User
 
@@ -103,7 +122,10 @@ def test_citext_email_case_insensitive(*, engine: Engine, db_session: Session) -
 
 
 def test_models_match_migrations(*, engine: Engine) -> None:
-    """Check that autogenerate sees no difference between the ORM models and the migrated schema."""
+    """Check that autogenerate sees no difference between the ORM models and the migrated schema.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     with engine.connect() as conn:
         diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
@@ -120,7 +142,11 @@ def test_single_head_revision() -> None:
 
 
 def test_upgrade_ignores_stray_database_url_env(*, engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that a stray RAG_DATABASE_URL cannot redirect a configured migration run."""
+    """Check that a stray RAG_DATABASE_URL cannot redirect a configured migration run.
+
+    :param engine: Session-scoped engine already migrated to head by the fixture.
+    :param monkeypatch: Fixture setting the stray ``RAG_DATABASE_URL`` for the test.
+    """
 
     monkeypatch.setenv("RAG_DATABASE_URL", "postgresql+psycopg://rag:rag@no-such-host:5432/rag_poison")
     url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
@@ -132,7 +158,10 @@ def test_upgrade_ignores_stray_database_url_env(*, engine: Engine, monkeypatch: 
 
 
 def test_foreign_key_columns_are_indexed(*, engine: Engine) -> None:
-    """Check that foreign key columns without a covering unique constraint are indexed."""
+    """Check that foreign key columns without a covering unique constraint are indexed.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     # Postgres does not index foreign keys automatically; the composite uniques cover
     # team_memberships.team_id and project_team_roles.project_id as leading columns only.
@@ -160,7 +189,10 @@ def test_foreign_key_columns_are_indexed(*, engine: Engine) -> None:
 
 
 def test_migration_chunk_fk_is_set_null(*, engine: Engine) -> None:
-    """Check that the snapshot chunk FK nulls out instead of blocking or cascading on deletion."""
+    """Check that the snapshot chunk FK nulls out instead of blocking or cascading on deletion.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     with engine.connect() as conn:
         fks = inspect(conn).get_foreign_keys("conversation_message_chunks")
@@ -169,7 +201,10 @@ def test_migration_chunk_fk_is_set_null(*, engine: Engine) -> None:
 
 
 def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
-    """Check that downgrading to base drops every table and the citext and vector extensions."""
+    """Check that downgrading to base drops every table and the citext and vector extensions.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
     admin_url = url.rsplit("/", 1)[0] + "/postgres"
@@ -203,7 +238,10 @@ def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
 
 
 def test_0002_downgrade_backfills_is_personal(*, engine: Engine) -> None:
-    """Check that the 0002 downgrade restores pre-0002 personal flags on existing rows."""
+    """Check that the 0002 downgrade restores pre-0002 personal flags on existing rows.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    """
 
     url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
     admin_url = url.rsplit("/", 1)[0] + "/postgres"
@@ -263,7 +301,11 @@ def test_0002_downgrade_backfills_is_personal(*, engine: Engine) -> None:
 
 
 def _terminate_and_drop(*, admin: Engine, db_name: str) -> None:
-    """Kill open connections to ``db_name`` and drop the database."""
+    """Kill open connections to ``db_name`` and drop the database.
+
+    :param admin: Autocommit engine connected to the postgres maintenance database.
+    :param db_name: Name of the database to drain and drop.
+    """
 
     with admin.connect() as conn:
         conn.execute(

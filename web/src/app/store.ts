@@ -20,6 +20,8 @@ export const initialRootState = (): RootState => ({
 /**
  * Builds a configured store. Tests seed auth or api state through
  * preloadedState; production uses the singleton {@link store} below.
+ *
+ * @param {RootState} [preloadedState] - State to seed the store with; production leaves it unset.
  */
 export const makeStore = (preloadedState?: RootState) =>
   configureStore({
@@ -30,7 +32,11 @@ export const makeStore = (preloadedState?: RootState) =>
     middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(api.middleware),
   });
 
+/** The singleton store production mounts; tests build their own through {@link makeStore}. */
 export const store = makeStore();
 
+/** The store type {@link makeStore} returns. */
 export type AppStore = ReturnType<typeof makeStore>;
+
+/** Dispatch type pre-bound to the store's action and state types. */
 export type AppDispatch = AppStore["dispatch"];

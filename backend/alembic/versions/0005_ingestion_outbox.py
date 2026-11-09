@@ -1,4 +1,4 @@
-"""ingestion and outbox schema
+"""Create the ingestion and outbox schema.
 
 Revision ID: 0005
 Revises: 0004

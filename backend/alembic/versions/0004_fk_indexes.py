@@ -1,4 +1,4 @@
-"""index foreign key columns
+"""Add indexes on foreign key columns.
 
 Revision ID: 0004
 Revises: 0003

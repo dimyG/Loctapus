@@ -22,6 +22,10 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
  */
 type WithAuthSlice = { auth: { token: string | null } };
 
+/**
+ * Raw RTK Query base query bound to {@link API_BASE_URL} that attaches the
+ * stored session token as a Bearer header when one exists.
+ */
 export const baseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
   prepareHeaders: (headers, { getState }) => {
@@ -44,6 +48,8 @@ type ErrorLike = { status?: number | string; data?: unknown };
  * `{detail}` bodies; validation failures carry an array; network failures
  * carry FETCH_ERROR and stalled requests carry TIMEOUT_ERROR, which both
  * mean retrying may help. Nothing raw from the payload is ever shown.
+ *
+ * @param {unknown} error - The failure returned by a query or thunk call.
  */
 export function getErrorMessage(error: unknown): string {
   if (typeof error !== "object" || error === null) {
@@ -99,6 +105,9 @@ export const api = createApi({
  * Builds the full BaseQueryApi shape RTK requires, for manual baseQuery
  * calls from createAsyncThunk payloads (which only have dispatch and
  * getState). Each call gets its own AbortController.
+ *
+ * @param {ThunkDispatch<unknown, unknown, UnknownAction>} dispatch - Thunk middleware dispatch.
+ * @param {() => unknown} getState - Returns the current store state.
  */
 export function thunkBaseQueryApi(
   dispatch: ThunkDispatch<unknown, unknown, UnknownAction>,

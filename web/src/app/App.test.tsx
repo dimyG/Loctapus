@@ -5,6 +5,7 @@ import { saveToken } from "../lib/tokenStorage";
 import { server } from "../test/server";
 import App from "./App";
 
+/** Render the app after pushing the given route into the browser history. */
 function renderApp(route: string) {
   window.history.pushState({}, "", route);
   render(<App />);

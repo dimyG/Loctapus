@@ -10,13 +10,19 @@ _DocstringOwner = ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctio
 
 
 def _python_files(*directories: str) -> list[Path]:
-    """Return every Python file under ``directories``, sorted for stable output."""
+    """Return every Python file under ``directories``, sorted for stable output.
+
+    :param directories: Directory names relative to the backend root to scan recursively.
+    """
 
     return sorted(path for directory in directories for path in (BACKEND_DIR / directory).rglob("*.py"))
 
 
 def _docstring_statement(*, node: _DocstringOwner) -> ast.Expr | None:
-    """Return the docstring statement when ``node`` opens with a string literal."""
+    """Return the docstring statement when ``node`` opens with a string literal.
+
+    :param node: Module, class, or function node whose body may open with a docstring.
+    """
 
     if not node.body:
         return None

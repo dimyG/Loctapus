@@ -1,6 +1,8 @@
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch, RootState } from "./store";
 
-/** Pre-typed hooks so components never deal with the store's generic types. */
+/** Dispatch hook typed to the app's store, so thunks and action creators type-check. */
 export const useAppDispatch = useDispatch.withTypes<AppDispatch>();
+
+/** Selector hook typed to {@link RootState}, so selections need no manual typing. */
 export const useAppSelector = useSelector.withTypes<RootState>();

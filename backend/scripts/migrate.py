@@ -18,7 +18,10 @@ CONNECT_TIMEOUT_SECONDS = "5"
 
 
 def _bounded_url(*, database_url: str) -> str:
-    """Return ``database_url`` with a connect timeout so an unreachable host fails fast."""
+    """Return ``database_url`` with a connect timeout so an unreachable host fails fast.
+
+    :param database_url: SQLAlchemy URL whose query options may already set a timeout.
+    """
 
     # Without a timeout libpq can hang for minutes on an unreachable host, which
     # would stall compose instead of letting the one-off service fail.

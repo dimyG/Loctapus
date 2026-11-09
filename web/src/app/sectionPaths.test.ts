@@ -1,3 +1,7 @@
+/**
+ * Covers the pathname helpers the signed-in shell uses to detect the active
+ * section and to keep the open page across a project switch.
+ */
 import { describe, expect, it } from "vitest";
 import { activeSection, projectIdFromPath, sectionPath, switchProjectPath } from "./sectionPaths";
 

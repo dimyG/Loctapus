@@ -16,14 +16,22 @@ from urllib.parse import quote, urlsplit
 
 
 def _vhost_from_broker_url(*, broker_url: str) -> str:
-    """Return the vhost segment of ``broker_url``, defaulting to the root vhost."""
+    """Return the vhost segment of ``broker_url``, defaulting to the root vhost.
+
+    :param broker_url: AMQP URL whose path segment names the vhost.
+    """
 
     vhost = urlsplit(broker_url).path.lstrip("/")
     return vhost or "/"
 
 
 def _put_json(*, url: str, credentials: tuple[str, str], body: bytes) -> None:
-    """PUT ``body`` to ``url`` with basic auth; any HTTP error raises, any 2xx is success."""
+    """PUT ``body`` to ``url`` with basic auth; any HTTP error raises, any 2xx is success.
+
+    :param url: Management API endpoint that receives the request.
+    :param credentials: Username and password pair sent as basic auth.
+    :param body: JSON request payload, already encoded to bytes.
+    """
 
     username, password = credentials
     token = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
@@ -42,6 +50,9 @@ def ensure_broker_vhost(*, broker_url: str, management_url: str = "http://localh
     A newly created vhost grants no permissions by default, so the user that connects
     through ``broker_url`` needs the explicit configure/write/read rights before it
     can open a connection.
+
+    :param broker_url: AMQP URL naming the vhost and carrying the user's credentials.
+    :param management_url: Base URL of the broker's management HTTP API.
     """
 
     parsed = urlsplit(broker_url)

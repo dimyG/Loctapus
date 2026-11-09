@@ -1,4 +1,4 @@
-"""FastAPI application assembly."""
+"""FastAPI application assembly: startup checks, CORS policy, and every feature router."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -23,7 +23,10 @@ from app.sources.router import router as sources_router
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Run the startup checks once per process, before the app serves anything."""
+    """Run the startup checks once per process, before the app serves anything.
+
+    :param _: The FastAPI instance; unused because the checks need no app state.
+    """
 
     # The module-level SessionLocal indirection keeps the factory swappable for
     # tests; a direct import binding could not be redirected.

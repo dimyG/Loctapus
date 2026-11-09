@@ -36,7 +36,10 @@ def settings() -> Settings:
 
 @pytest.fixture
 def storage(*, settings: Settings) -> StorageService:
-    """Return the real storage service pointed at the compose Garage with the dev bucket."""
+    """Return the real storage service pointed at the compose Garage with the dev bucket.
+
+    :param settings: Settings carrying the Garage endpoint, credentials, and bucket.
+    """
 
     return StorageService(settings=settings)
 
@@ -91,7 +94,10 @@ def broker_url() -> str:
 
 @pytest.fixture
 def db_session(*, engine: Engine) -> Iterator[Session]:
-    """Return a session bound to a transaction that is rolled back after the test."""
+    """Return a session bound to a transaction that is rolled back after the test.
+
+    :param engine: Session-scoped engine on the migration-built test database.
+    """
 
     connection = engine.connect()
     transaction = connection.begin()
@@ -112,7 +118,12 @@ def db_session(*, engine: Engine) -> Iterator[Session]:
 
 @pytest.fixture
 def client(*, db_session: Session, engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    """Return a TestClient whose database dependency serves the rollback-managed session."""
+    """Return a TestClient whose database dependency serves the rollback-managed session.
+
+    :param db_session: Session the dependency override hands to every request.
+    :param engine: Engine the lifespan's startup checks are redirected to.
+    :param monkeypatch: Redirects ``app.main.SessionLocal`` for the test's duration.
+    """
 
     # The lifespan startup guard opens its own session through the app.main indirection;
     # point it at the migration-built test engine so no test ever touches the dev DB.

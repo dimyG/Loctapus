@@ -1,4 +1,4 @@
-"""conversations schema and the query->retrieve log rename
+"""Create the conversation schema and rename query logs to retrieve logs.
 
 Revision ID: 0007
 Revises: 0006

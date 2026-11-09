@@ -21,6 +21,8 @@ def make_engine(*, database_url: str) -> Engine:
     Every pooled connection is pinged before use (``pool_pre_ping``): a database
     restart under a long-lived worker invalidates pooled connections, and a ping turns
     that into a reconnect instead of a broken task.
+
+    :param database_url: SQLAlchemy URL of the database the engine should serve.
     """
 
     return create_engine(database_url, pool_pre_ping=True)

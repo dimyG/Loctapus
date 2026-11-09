@@ -1,19 +1,26 @@
 /** The URL sections the signed-in shell distinguishes. */
 export type Section = "projects" | "sources" | "chat";
 
-// /projects plus an id segment: /projects/p-1, /projects/p-1/sources, ...
+// Matches /projects plus an id segment: /projects/p-1, /projects/p-1/sources, ...
 const projectIdPattern = /^\/projects\/([^/]+)/;
 
 // A section segment under a project, at the end of the path or with more path below it.
 const sectionPattern = /^\/projects\/[^/]+\/(sources|chat)(?:\/|$)/;
 
-/** The project id a pathname sits under, or null when there is none. */
+/** The project id a pathname sits under, or null when there is none.
+ *
+ * @param {string} pathname - Browser location pathname to inspect.
+ */
 export function projectIdFromPath(pathname: string): string | null {
   const match = projectIdPattern.exec(pathname);
   return match === null ? null : match[1];
 }
 
-/** The path of one project section: sources or chat under the given project. */
+/** The path of one project section: sources or chat under the given project.
+ *
+ * @param {"sources" | "chat"} section - Section to build the path for.
+ * @param {string} projectId - Project the section belongs to.
+ */
 export function sectionPath(section: "sources" | "chat", projectId: string): string {
   return `/projects/${projectId}/${section}`;
 }
@@ -23,6 +30,9 @@ export function sectionPath(section: "sources" | "chat", projectId: string): str
  * after it, so a swap from deep inside a section stays just as deep - this is
  * what preserves the open page across a project switch. Paths without a
  * project segment pass through unchanged.
+ *
+ * @param {string} pathname - Browser location pathname to rewrite.
+ * @param {string} newProjectId - Project to switch the path to.
  */
 export function switchProjectPath(pathname: string, newProjectId: string): string {
   const projectId = projectIdFromPath(pathname);
@@ -37,6 +47,8 @@ export function switchProjectPath(pathname: string, newProjectId: string): strin
  * The one section a pathname belongs to: the projects list only on exactly
  * `/projects`, sources and chat under their segment and anything below it.
  * A bare project page belongs to no section.
+ *
+ * @param {string} pathname - Browser location pathname to classify.
  */
 export function activeSection(pathname: string): Section | null {
   if (pathname === "/projects") {

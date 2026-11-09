@@ -1,4 +1,4 @@
-"""query logs schema
+"""Create the query logs schema.
 
 Revision ID: 0006
 Revises: 0005

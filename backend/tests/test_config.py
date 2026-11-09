@@ -25,7 +25,10 @@ def test_settings_defaults() -> None:
 
 
 def test_settings_env_override(*, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check that RAG_-prefixed variables override the defaults."""
+    """Check that RAG_-prefixed variables override the defaults.
+
+    :param monkeypatch: Fixture supplying isolated environment variables for the test.
+    """
 
     monkeypatch.setenv("RAG_DATABASE_URL", "postgresql+psycopg://u:p@h:1/db")
     monkeypatch.setenv("RAG_JWT_SECRET", "abc")
@@ -104,6 +107,9 @@ def test_suite_pin_beats_env_file_provider(*, tmp_path: Path, monkeypatch: pytes
     RAG_LLM_PROVIDER as a real environment variable, which beats .env files in
     pydantic precedence. Construction mirrors the app's own: the .env file is
     resolved from the current directory.
+
+    :param tmp_path: Directory holding the throwaway ``.env`` file.
+    :param monkeypatch: Fixture isolating the change of the current directory.
     """
 
     env_file = tmp_path / ".env"
@@ -115,7 +121,11 @@ def test_suite_pin_beats_env_file_provider(*, tmp_path: Path, monkeypatch: pytes
 
 @pytest.mark.parametrize(("field", "value"), [("llm_timeout_seconds", 0), ("llm_max_tokens", 0)])
 def test_llm_settings_reject_nonpositive(*, field: str, value: int) -> None:
-    """Check that the LLM tuning knobs must stay positive."""
+    """Check that the LLM tuning knobs must stay positive.
+
+    :param field: Name of the tuning setting under test.
+    :param value: Non-positive value the setting must reject.
+    """
 
     with pytest.raises(ValidationError):
         SettingsForTests.model_validate({field: value})
@@ -145,20 +155,23 @@ def test_production_rejects_default_s3_secret() -> None:
 
 
 def test_cors_origins_default() -> None:
-    """CORS defaults to the Vite dev origin."""
+    """Check that CORS defaults to the Vite dev origin."""
 
     assert SettingsForTests().cors_origins == ["http://localhost:5173"]
 
 
 def test_cors_origins_env_json(*, monkeypatch: pytest.MonkeyPatch) -> None:
-    """RAG_CORS_ORIGINS parses as a JSON list of origins."""
+    """Check that RAG_CORS_ORIGINS parses as a JSON list of origins.
+
+    :param monkeypatch: Fixture supplying the isolated CORS origin variable.
+    """
 
     monkeypatch.setenv("RAG_CORS_ORIGINS", '["https://app.example.com"]')
     assert SettingsForTests().cors_origins == ["https://app.example.com"]
 
 
 def test_ingestion_settings_defaults() -> None:
-    """The S3 pipeline settings default to the compose services and the stub providers."""
+    """Check that the ingestion settings default to the compose services and the stub providers."""
 
     s = SettingsForTests()
     assert s.broker_url == "amqp://guest:guest@localhost:5672//"
@@ -179,7 +192,7 @@ def test_ingestion_settings_defaults() -> None:
 
 
 def test_retrieval_settings_reject_nonpositive() -> None:
-    """The retrieval tuning knobs must stay positive and default to the spec values."""
+    """Check that the retrieval tuning knobs stay positive and default to the spec values."""
 
     with pytest.raises(ValidationError):
         SettingsForTests(retrieval_candidates_per_retriever=0)
@@ -191,7 +204,7 @@ def test_retrieval_settings_reject_nonpositive() -> None:
 
 
 def test_answer_settings_defaults_and_bounds() -> None:
-    """The answer tuning knobs default to the spec values and stay within bounds."""
+    """Check that the answer tuning knobs default to the spec values and stay within bounds."""
 
     with pytest.raises(ValidationError):
         SettingsForTests(answer_context_chunks=0)
@@ -205,7 +218,10 @@ def test_answer_settings_defaults_and_bounds() -> None:
 
 
 def test_broker_url_env_override(*, monkeypatch: pytest.MonkeyPatch) -> None:
-    """RAG_BROKER_URL selects the pytest vhost."""
+    """Check that RAG_BROKER_URL selects the pytest vhost.
+
+    :param monkeypatch: Fixture supplying the isolated broker URL variable.
+    """
 
     monkeypatch.setenv("RAG_BROKER_URL", "amqp://guest:guest@localhost:5672/rag_test")
     assert SettingsForTests().broker_url == "amqp://guest:guest@localhost:5672/rag_test"

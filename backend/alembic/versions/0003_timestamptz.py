@@ -1,4 +1,4 @@
-"""convert naive timestamps to timestamptz
+"""Convert naive timestamps to timezone-aware UTC.
 
 Revision ID: 0003
 Revises: 0002

@@ -1,4 +1,4 @@
-"""identity and projects
+"""Create the identity and projects schema.
 
 Revision ID: 0001
 Revises:

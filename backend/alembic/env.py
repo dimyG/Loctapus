@@ -1,7 +1,16 @@
+"""Alembic migration environment wired to the application's model registry.
+
+Offline mode renders the migration SQL from the configured URL without opening a
+connection; online mode runs the migrations through a live engine built from
+``alembic.ini``.
+"""
+
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
+# One import registers every model on Base.metadata, so migrations and autogenerate
+# see the whole schema instead of an empty registry.
 import app.models  # noqa: F401
 from alembic import context
 from app.core.models import Base
@@ -17,6 +26,8 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
+    """Render the migration SQL against the configured URL without opening a connection."""
+
     url = config.get_main_option("sqlalchemy.url")
     context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
     with context.begin_transaction():
@@ -24,6 +35,8 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    """Run the migrations through a live engine built from the alembic config section."""
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

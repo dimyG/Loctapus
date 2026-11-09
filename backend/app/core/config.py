@@ -1,4 +1,8 @@
-"""Application settings sourced from ``RAG_``-prefixed environment variables."""
+"""Application settings sourced from ``RAG_``-prefixed environment variables.
+
+Real environment variables outrank the ``.env`` file in pydantic's precedence,
+and ``get_settings`` caches one instance for the whole process lifetime.
+"""
 
 from functools import lru_cache
 from typing import Literal, Self
@@ -13,6 +17,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="RAG_", env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://rag:rag@localhost:5432/rag"
+    # Development fallback only; the production validator below refuses this literal.
     jwt_secret: str = "dev-secret-change-me"
     jwt_algorithm: str = "HS256"
     jwt_access_token_ttl_hours: int = 24
@@ -28,6 +33,7 @@ class Settings(BaseSettings):
     s3_bucket: str = "rag-dev"
     parser_provider: Literal["stub"] = "stub"
     embedding_provider: Literal["stub"] = "stub"
+    # Defaulting to the stub keeps local runs and the offline test suite off the network.
     llm_provider: Literal["stub", "groq"] = "stub"
     groq_api_key: str = ""
     groq_base_url: str = "https://api.groq.com/openai/v1"

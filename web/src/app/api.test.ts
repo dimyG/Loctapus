@@ -1,3 +1,7 @@
+/**
+ * Covers the shared API plumbing: getErrorMessage's copy mapping and the
+ * session-expiry behavior of the wrapped base query.
+ */
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import { projectsApi } from "../features/projects/projectsApi";
@@ -50,6 +54,8 @@ describe("session expiry", () => {
       auth: { token: "t-gone", user: { id: "u-1", email: "user@example.test" }, status: "idle" },
     });
     const action = testStore.dispatch(projectsApi.endpoints.getProjects.initiate());
+    // The 401 is the point of the test: swallow the expected rejection so the
+    // assertions stay focused on the resulting session state.
     await action.then(
       () => undefined,
       () => undefined,
