@@ -27,7 +27,12 @@ def start_conversation(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConversationCreatedOut:
-    """Create one empty conversation owned by the caller, raising 401 or 404."""
+    """Create one empty conversation owned by the caller, raising 401 or 404.
+
+    :param project_id: Project the conversation is created in.
+    :param user: User resolved from the bearer token.
+    :param db: Session the conversation commits through.
+    """
 
     project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
     if project is None:
@@ -43,7 +48,12 @@ def latest_conversation(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> LatestConversationOut:
-    """Return the caller's latest conversation with its full message history."""
+    """Return the caller's latest conversation with its full message history.
+
+    :param project_id: Project the conversation belongs to.
+    :param user: User resolved from the bearer token.
+    :param db: Session the response is materialized through.
+    """
 
     project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
     if project is None:

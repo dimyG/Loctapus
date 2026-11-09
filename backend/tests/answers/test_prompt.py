@@ -16,7 +16,12 @@ from app.retrieval.service import RetrievedChunk
 
 
 def _chunk(*, text: str, heading_path: list[str], filename: str = "handbook.pdf") -> RetrievedChunk:
-    """Build one chunk value with a fresh id; only the rendered fields matter."""
+    """Build one chunk value with a fresh id; only the rendered fields matter.
+
+    :param text: Chunk text the block renders.
+    :param heading_path: Headings the block header joins.
+    :param filename: Filename the block header shows.
+    """
 
     return RetrievedChunk(
         id=uuid4(),
@@ -33,7 +38,7 @@ def _chunk(*, text: str, heading_path: list[str], filename: str = "handbook.pdf"
 
 
 def test_blocks_numbered_in_rank_order() -> None:
-    """Check the prompt numbers blocks by rank and keeps both chunk texts."""
+    """Check that the prompt numbers blocks by rank and keeps both chunk texts."""
 
     chunks = [
         _chunk(text="first passage text", heading_path=[]),
@@ -46,7 +51,7 @@ def test_blocks_numbered_in_rank_order() -> None:
 
 
 def test_block_headers_render_filename_and_heading() -> None:
-    """Check a header renders the filename and the joined heading path."""
+    """Check that a header renders the filename and the joined heading path."""
 
     chunk = _chunk(text="rotate the key", heading_path=["Keys", "Rotation"])
     prompt = build_user_prompt(query="alpha", chunks=[chunk])
@@ -54,7 +59,7 @@ def test_block_headers_render_filename_and_heading() -> None:
 
 
 def test_empty_heading_path_renders_filename_only() -> None:
-    """Check an empty heading path renders the filename with no dash suffix."""
+    """Check that an empty heading path renders the filename with no dash suffix."""
 
     chunk = _chunk(text="rotate the key", heading_path=[])
     prompt = build_user_prompt(query="alpha", chunks=[chunk])
@@ -63,14 +68,14 @@ def test_empty_heading_path_renders_filename_only() -> None:
 
 
 def test_question_included() -> None:
-    """Check the prompt carries the question header line."""
+    """Check that the prompt carries the question header line."""
 
     prompt = build_user_prompt(query="how do I rotate the garage key", chunks=[])
     assert "Question: how do I rotate the garage key" in prompt
 
 
 def test_system_prompt_instructs_citations() -> None:
-    """Check the system prompt demands inline citations, scope, and brevity."""
+    """Check that the system prompt demands inline citations, scope, and brevity."""
 
     assert "[1]" in SYSTEM_PROMPT
     assert "only" in SYSTEM_PROMPT
@@ -78,13 +83,18 @@ def test_system_prompt_instructs_citations() -> None:
 
 
 def _block(*, text: str, heading_path: list[str] | None = None, filename: str = "doc.pdf") -> ContextBlock:
-    """Build one context block; only the rendered fields matter."""
+    """Build one context block; only the rendered fields matter.
+
+    :param text: Chunk text the block renders.
+    :param heading_path: Headings the block header joins, defaulting to none.
+    :param filename: Filename the block header shows.
+    """
 
     return ContextBlock(filename=filename, heading_path=heading_path or [], text=text)
 
 
 def test_router_system_prompt_states_contract() -> None:
-    """Check the router prompt names the routes, the JSON key, and strict JSON."""
+    """Check that the router prompt names the routes, the JSON key, and strict JSON."""
 
     for word in ("direct", "reuse", "retrieve", "rewritten_query"):
         assert word in ROUTER_SYSTEM_PROMPT
@@ -93,7 +103,7 @@ def test_router_system_prompt_states_contract() -> None:
 
 
 def test_direct_system_prompt_has_no_passages() -> None:
-    """Check the direct prompt answers from history without context passages."""
+    """Check that the direct prompt answers from history without context passages."""
 
     assert "history" in SYSTEM_PROMPT_DIRECT
     assert "passages" in SYSTEM_PROMPT_DIRECT
@@ -101,7 +111,7 @@ def test_direct_system_prompt_has_no_passages() -> None:
 
 
 def test_route_messages_contain_history_evidence_and_question() -> None:
-    """Check route messages order history, then the evidence summary, then the question."""
+    """Check that route messages order history, then the evidence summary, then the question."""
 
     history = [
         ChatMessage(role="user", content="what is alpha?"),
@@ -121,7 +131,7 @@ def test_route_messages_contain_history_evidence_and_question() -> None:
 
 
 def test_answer_messages_history_then_question_blocks() -> None:
-    """Check answer messages keep history ahead of the final grounded question."""
+    """Check that answer messages keep history ahead of the final grounded question."""
 
     history = [ChatMessage(role="user", content="what is alpha?")]
     blocks = [_block(text="first"), _block(text="second", heading_path=["H"])]
@@ -134,7 +144,7 @@ def test_answer_messages_history_then_question_blocks() -> None:
 
 
 def test_history_passes_through_verbatim() -> None:
-    """Check history arrives unmodified: load_history already stripped its markers."""
+    """Check that history arrives unmodified: load_history already stripped its markers."""
 
     history = [ChatMessage(role="assistant", content="clean answer")]
     messages = build_answer_messages(question="q", history=history, blocks=[])

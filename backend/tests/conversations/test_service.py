@@ -24,7 +24,10 @@ from tests.factories import seed_document_with_chunks, seed_project
 
 
 def _seed_user(*, db: Session) -> User:
-    """Seed one bare user row so the conversation's user foreign key resolves."""
+    """Seed one bare user row so the conversation's user foreign key resolves.
+
+    :param db: Transaction-managed session the user row is written through.
+    """
 
     user = User(email=f"{uuid4()}@example.com", password_hash="x")
     db.add(user)
@@ -33,7 +36,12 @@ def _seed_user(*, db: Session) -> User:
 
 
 def _snapshot(*, text: str, chunk_id: UUID | None = None, filename: str = "doc.pdf") -> SnapshotIn:
-    """Build one snapshot input; only the persisted fields matter."""
+    """Build one snapshot input; only the persisted fields matter.
+
+    :param text: Chunk text the snapshot persists.
+    :param chunk_id: Cited chunk row id, or null for a ghost snapshot.
+    :param filename: Filename the snapshot persists.
+    """
 
     return SnapshotIn(
         chunk_id=chunk_id,
@@ -45,7 +53,10 @@ def _snapshot(*, text: str, chunk_id: UUID | None = None, filename: str = "doc.p
 
 
 def test_create_and_get_latest_round_trip(*, db_session: Session) -> None:
-    """Check create then latest returns the same row with a non-null last_message_at."""
+    """Check that create then latest returns the same row with a non-null last_message_at.
+
+    :param db_session: Transaction-managed session the rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="conv@example.com")
     user = _seed_user(db=db_session)
@@ -58,7 +69,10 @@ def test_create_and_get_latest_round_trip(*, db_session: Session) -> None:
 
 
 def test_get_latest_none_when_user_has_no_conversation(*, db_session: Session) -> None:
-    """Check a user with no conversation gets None, never another user's row."""
+    """Check that a user with no conversation gets None, never another user's row.
+
+    :param db_session: Transaction-managed session the rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="conv-none@example.com")
     other = _seed_user(db=db_session)
@@ -68,7 +82,10 @@ def test_get_latest_none_when_user_has_no_conversation(*, db_session: Session) -
 
 
 def test_resolve_null_creates_pending_row_when_none_exists(*, db_session: Session) -> None:
-    """Check a null conversation_id with no prior row resolves to a matching new row."""
+    """Check that a null conversation_id with no prior row resolves to a matching new row.
+
+    :param db_session: Transaction-managed session the rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="conv-new@example.com")
     user = _seed_user(db=db_session)
@@ -83,7 +100,10 @@ def test_resolve_null_creates_pending_row_when_none_exists(*, db_session: Sessio
 
 
 def test_resolve_null_reuses_latest_conversation(*, db_session: Session) -> None:
-    """Check a null conversation_id racing hydration appends to the existing row (Focus 1)."""
+    """Check that a null conversation_id racing hydration appends to the existing row (Focus 1).
+
+    :param db_session: Transaction-managed session the rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="conv-race@example.com")
     user = _seed_user(db=db_session)
@@ -100,7 +120,10 @@ def test_resolve_null_reuses_latest_conversation(*, db_session: Session) -> None
 
 
 def test_resolve_explicit_rejects_foreign_conversation(*, db_session: Session) -> None:
-    """Check an explicit id resolves only for its owner inside its own project."""
+    """Check that an explicit id resolves only for its owner inside its own project.
+
+    :param db_session: Transaction-managed session the rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="conv-owner@example.com")
     other_project_id = seed_project(db=db_session, email="conv-other-project@example.com")
@@ -126,7 +149,10 @@ def test_resolve_explicit_rejects_foreign_conversation(*, db_session: Session) -
 
 
 def test_append_turn_writes_messages_snapshots_and_bumps(*, db_session: Session) -> None:
-    """Check one append writes both messages, their snapshots, and the recency bump."""
+    """Check that one append writes both messages, their snapshots, and the recency bump.
+
+    :param db_session: Transaction-managed session the rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="conv-append@example.com")
     user = _seed_user(db=db_session)
@@ -172,7 +198,10 @@ def test_append_turn_writes_messages_snapshots_and_bumps(*, db_session: Session)
 
 
 def test_append_turn_concurrent_sends_serialize(*, engine: Engine) -> None:
-    """Check two concurrent appends on one conversation land four distinct positions (Focus 2)."""
+    """Check that two concurrent appends on one conversation land four distinct positions (Focus 2).
+
+    :param engine: Engine opening private sessions outside the rollback fixture.
+    """
 
     factory = sessionmaker(bind=engine)
     setup = factory()
@@ -224,7 +253,10 @@ def test_append_turn_concurrent_sends_serialize(*, engine: Engine) -> None:
 
 
 def test_gather_snapshots_dedupes_and_caps(*, db_session: Session) -> None:
-    """Check gathering walks newest-first, dedupes, and caps at the request (Focus 4)."""
+    """Check that gathering walks newest-first, dedupes, and caps at the request (Focus 4).
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="conv-gather@example.com")
     user = _seed_user(db=db_session)
@@ -271,7 +303,10 @@ def test_gather_snapshots_dedupes_and_caps(*, db_session: Session) -> None:
 
 
 def test_snapshot_survives_chunk_replacement(*, db_session: Session) -> None:
-    """Check a deleted chunk nulls the snapshot instead of cascading it away (Focus 5)."""
+    """Check that a deleted chunk nulls the snapshot instead of cascading it away (Focus 5).
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="conv-stale@example.com")
     user = _seed_user(db=db_session)
@@ -297,7 +332,10 @@ def test_snapshot_survives_chunk_replacement(*, db_session: Session) -> None:
 
 
 def test_load_history_strips_citation_markers(*, db_session: Session) -> None:
-    """Check history returns the last messages oldest-first with markers stripped."""
+    """Check that history returns the last messages oldest-first with markers stripped.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="conv-history@example.com")
     user = _seed_user(db=db_session)

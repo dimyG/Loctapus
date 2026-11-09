@@ -44,7 +44,12 @@ class Answer:
 
 
 def _resolve_retrieve_in(*, query: str, params: AnswerIn, settings: Settings) -> RetrieveIn:
-    """Fill the request's omitted retrieval overrides from the answer settings."""
+    """Fill the request's omitted retrieval overrides from the answer settings.
+
+    :param query: Effective question the retrieval runs on.
+    :param params: Request whose overrides are null when omitted.
+    :param settings: Settings supplying the answer defaults.
+    """
 
     return RetrieveIn(
         query=query,
@@ -59,7 +64,11 @@ def _resolve_retrieve_in(*, query: str, params: AnswerIn, settings: Settings) ->
 
 
 def _effective_question(*, raw: str, decision: RouteDecision) -> str:
-    """Return the standalone search question: the rewrite, or the raw question."""
+    """Return the standalone search question: the rewrite, or the raw question.
+
+    :param raw: Question as the caller asked it.
+    :param decision: Router decision whose rewrite applies on the retrieve path.
+    """
 
     if decision.route == "retrieve" and decision.rewritten_query:
         return decision.rewritten_query
@@ -67,7 +76,10 @@ def _effective_question(*, raw: str, decision: RouteDecision) -> str:
 
 
 def _context_blocks(*, chunks: Sequence[RetrievedChunk | ConversationMessageChunk]) -> list[ContextBlock]:
-    """Render fresh or stored evidence rows as prompt context blocks."""
+    """Render fresh or stored evidence rows as prompt context blocks.
+
+    :param chunks: Evidence rows in citation order.
+    """
 
     return [
         ContextBlock(filename=chunk.filename, heading_path=chunk.heading_path, text=chunk.text)
@@ -76,7 +88,10 @@ def _context_blocks(*, chunks: Sequence[RetrievedChunk | ConversationMessageChun
 
 
 def _snapshot_from(*, chunk: RetrievedChunk | ConversationMessageChunk) -> SnapshotIn:
-    """Map one fresh or stored evidence row into its persisted snapshot shape."""
+    """Map one fresh or stored evidence row into its persisted snapshot shape.
+
+    :param chunk: Evidence row grounded into the answer.
+    """
 
     chunk_id = chunk.id if isinstance(chunk, RetrievedChunk) else chunk.chunk_id
     return SnapshotIn(
@@ -95,6 +110,12 @@ def generate_answer(
 
     Returns ``None`` only when an explicit ``conversation_id`` is not the
     caller's; the router maps that to a 404.
+
+    :param db: Session the history reads and the append transaction commit through.
+    :param project_id: Project whose chunks are searched.
+    :param user_id: User who asked, owning the conversation.
+    :param params: Request body with the query and any retrieval overrides.
+    :param settings: Settings supplying the answer and retrieval defaults.
     """
 
     conversation = resolve_conversation(
@@ -164,7 +185,8 @@ def generate_answer(
             },
         )
         if not fresh:
-            # An empty index answers from the can; the LLM never sees a context-less question.
+            # An empty index answers from the canned row; the LLM never sees a
+            # question with no context passages to ground it.
             append_turn(
                 db=db,
                 conversation=conversation,

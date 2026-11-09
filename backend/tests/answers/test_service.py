@@ -26,7 +26,10 @@ from tests.helpers import SettingsForTests
 
 
 def _seed_user(*, db: Session) -> User:
-    """Seed one bare user row so the query log's foreign key resolves."""
+    """Seed one bare user row so the query log's foreign key resolves.
+
+    :param db: Transaction-managed session the user row is written through.
+    """
 
     user = User(email=f"{uuid4()}@example.com", password_hash="x")
     db.add(user)
@@ -35,7 +38,14 @@ def _seed_user(*, db: Session) -> User:
 
 
 def _answer(*, db: Session, project_id: UUID, user_id: UUID, params: AnswerIn, settings: Settings) -> Answer:
-    """Call generate_answer and pin the returned answer; the None path has its own test."""
+    """Call generate_answer and pin the returned answer; the None path has its own test.
+
+    :param db: Transaction-managed session the answer round commits through.
+    :param project_id: Project the question is asked against.
+    :param user_id: User who asked the question.
+    :param params: Request body with the query and any retrieval overrides.
+    :param settings: Test settings selecting the stub LLM provider.
+    """
 
     result = generate_answer(db=db, project_id=project_id, user_id=user_id, params=params, settings=settings)
     assert result is not None
@@ -43,7 +53,11 @@ def _answer(*, db: Session, project_id: UUID, user_id: UUID, params: AnswerIn, s
 
 
 def test_answer_chunks_equal_retrieval_final_chunks(*, db_session: Session, settings: Settings) -> None:
-    """Check the answer grounds in exactly the chunks the answer-origin retrieve returns."""
+    """Check that the answer grounds in exactly the chunks the answer-origin retrieve returns.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    """
 
     project_id = seed_project(db=db_session, email="answer-chunks@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha alpha"])
@@ -70,7 +84,12 @@ def test_answer_chunks_equal_retrieval_final_chunks(*, db_session: Session, sett
 def test_empty_index_returns_canned_answer_without_llm_call(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check an empty index answers from the can and never calls the LLM."""
+    """Check that an empty index answers from the can and never calls the LLM.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that installs a recording provider.
+    """
 
     project_id = seed_project(db=db_session, email="answer-empty@example.com")
     user = _seed_user(db=db_session)
@@ -89,7 +108,11 @@ def test_empty_index_returns_canned_answer_without_llm_call(
 
 
 def test_answer_logs_origin_answer(*, db_session: Session, settings: Settings) -> None:
-    """Check the answer round labels its query log row with the answer origin."""
+    """Check that the answer round labels its query log row with the answer origin.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    """
 
     project_id = seed_project(db=db_session, email="answer-origin@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
@@ -106,7 +129,11 @@ def test_answer_logs_origin_answer(*, db_session: Session, settings: Settings) -
 
 
 def test_request_overrides_beat_settings(*, db_session: Session, settings: Settings) -> None:
-    """Check a request top_k override beats the settings default."""
+    """Check that a request top_k override beats the settings default.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    """
 
     project_id = seed_project(db=db_session, email="answer-override@example.com")
     seed_document_with_chunks(
@@ -125,7 +152,11 @@ def test_request_overrides_beat_settings(*, db_session: Session, settings: Setti
 
 
 def test_settings_defaults_apply_when_request_omits(*, db_session: Session, settings: Settings) -> None:
-    """Check omitted request overrides resolve against the answer settings defaults."""
+    """Check that omitted request overrides resolve against the answer settings defaults.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    """
 
     spread_project = seed_project(db=db_session, email="answer-defaults@example.com")
     for doc in range(4):
@@ -165,7 +196,10 @@ def test_settings_defaults_apply_when_request_omits(*, db_session: Session, sett
 
 
 def test_settings_answer_context_chunks_caps_when_request_omits(*, db_session: Session) -> None:
-    """Check a non-default answer_context_chunks setting caps an omitted request top_k."""
+    """Check that a non-default answer_context_chunks setting caps an omitted request top_k.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="answer-setting-source@example.com")
     for doc in range(4):
@@ -191,7 +225,12 @@ def test_settings_answer_context_chunks_caps_when_request_omits(*, db_session: S
 def test_retrieve_route_answers_from_fresh_chunks(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check a retrieve turn rewrites the query, answers grounded, and persists snapshots."""
+    """Check that a retrieve turn rewrites the query, answers grounded, and persists snapshots.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that installs a recording provider.
+    """
 
     project_id = seed_project(db=db_session, email="s6-retrieve@example.com")
     seeded = seed_document_with_chunks(
@@ -247,7 +286,12 @@ def test_retrieve_route_answers_from_fresh_chunks(
 def test_direct_route_skips_retrieval_and_logs(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check a direct turn answers from history alone with no retrieval and no log row."""
+    """Check that a direct turn answers from history alone with no retrieval and no log row.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that installs a recording provider.
+    """
 
     project_id = seed_project(db=db_session, email="s6-direct@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
@@ -280,7 +324,12 @@ def test_direct_route_skips_retrieval_and_logs(
 def test_reuse_route_gathers_conversation_snapshots(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check a reuse turn re-uses the conversation's earlier evidence without retrieval."""
+    """Check that a reuse turn re-uses the conversation's earlier evidence without retrieval.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that installs a recording provider.
+    """
 
     project_id = seed_project(db=db_session, email="s6-reuse@example.com")
     seeded = seed_document_with_chunks(
@@ -338,7 +387,12 @@ def test_reuse_route_gathers_conversation_snapshots(
 def test_reuse_with_zero_snapshots_falls_back_to_retrieve(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check a reuse turn with nothing gathered degrades to retrieval with the raw question."""
+    """Check that a reuse turn with nothing gathered degrades to retrieval with the raw question.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that installs a recording provider.
+    """
 
     project_id = seed_project(db=db_session, email="s6-reuse-empty@example.com")
     seed_document_with_chunks(
@@ -368,7 +422,12 @@ def test_reuse_with_zero_snapshots_falls_back_to_retrieve(
 def test_router_error_falls_back_to_retrieve_raw(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check a failed router call retrieves the raw question and logs the fallback (Focus 3)."""
+    """Check that a failed router call retrieves the raw question and logs the fallback (Focus 3).
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that installs a recording provider.
+    """
 
     project_id = seed_project(db=db_session, email="s6-fallback@example.com")
     seed_document_with_chunks(
@@ -396,7 +455,12 @@ def test_router_error_falls_back_to_retrieve_raw(
 def test_failed_answer_call_persists_nothing(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check a failed generate leaves no conversation, not even an empty one."""
+    """Check that a failed generate leaves no conversation, not even an empty one.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that installs a failing provider.
+    """
 
     project_id = seed_project(db=db_session, email="s6-nothing@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
@@ -415,7 +479,11 @@ def test_failed_answer_call_persists_nothing(
 
 
 def test_conversation_id_null_resolves_latest(*, db_session: Session, settings: Settings) -> None:
-    """Check a null conversation_id appends to the caller's latest conversation."""
+    """Check that a null conversation_id appends to the caller's latest conversation.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    """
 
     project_id = seed_project(db=db_session, email="s6-latest@example.com")
     user = _seed_user(db=db_session)
@@ -436,7 +504,11 @@ def test_conversation_id_null_resolves_latest(*, db_session: Session, settings: 
 
 
 def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: Settings) -> None:
-    """Check another user's conversation id resolves to None for the 404."""
+    """Check that another user's conversation id resolves to None for the 404.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    """
 
     project_id = seed_project(db=db_session, email="s6-foreign@example.com")
     owner = _seed_user(db=db_session)
@@ -455,11 +527,15 @@ def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: 
 def test_llm_calls_run_with_no_open_transaction(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check no DB transaction stays open on the session across the router and answer calls.
+    """Check that no DB transaction stays open on the session across the router and answer calls.
 
     The history and REUSE reads commit before the LLM calls on purpose (spec
     decision 14); an expired row attribute would quietly re-open a transaction
     on first read and pin a pooled connection across both remote calls.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that installs a transaction-recording provider.
     """
 
     project_id = seed_project(db=db_session, email="s6-txn@example.com")
@@ -515,7 +591,12 @@ def test_llm_calls_run_with_no_open_transaction(
 def test_reuse_answers_from_snapshots_after_chunk_replacement(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check REUSE answers from the inline snapshot once the cited chunk row is gone (Focus 5)."""
+    """Check that REUSE answers from the inline snapshot once the cited chunk row is gone (Focus 5).
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that installs a recording provider.
+    """
 
     project_id = seed_project(db=db_session, email="s6-reuse-stale@example.com")
     seeded = seed_document_with_chunks(

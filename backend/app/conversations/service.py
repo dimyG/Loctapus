@@ -30,7 +30,12 @@ class SnapshotIn:
 
 
 def create_conversation(*, db: Session, project_id: UUID, user_id: UUID) -> Conversation:
-    """Create and commit one empty conversation owned by the caller."""
+    """Create and commit one empty conversation owned by the caller.
+
+    :param db: Session the conversation commits through.
+    :param project_id: Project the conversation belongs to.
+    :param user_id: User who owns the conversation.
+    """
 
     conversation = Conversation(project_id=project_id, user_id=user_id)
     db.add(conversation)
@@ -39,7 +44,12 @@ def create_conversation(*, db: Session, project_id: UUID, user_id: UUID) -> Conv
 
 
 def get_latest_conversation(*, db: Session, project_id: UUID, user_id: UUID) -> Conversation | None:
-    """Return the owner's most recent conversation in one project, if any."""
+    """Return the owner's most recent conversation in one project, if any.
+
+    :param db: Session the read commits through.
+    :param project_id: Project the conversation belongs to.
+    :param user_id: User whose conversation is returned.
+    """
 
     latest = db.scalars(
         select(Conversation)
@@ -47,7 +57,8 @@ def get_latest_conversation(*, db: Session, project_id: UUID, user_id: UUID) -> 
         .order_by(Conversation.last_message_at.desc())
         .limit(1)
     ).first()
-    # Read-only close: no transaction stays open across the LLM calls that follow.
+    # Read-only close: every read-only service call commits before returning, so
+    # the answer path holds no transaction across the LLM calls that follow.
     db.commit()
     return latest
 
@@ -59,6 +70,11 @@ def resolve_conversation(
 
     On the null path with no prior row, the returned conversation is pending (no id):
     it joins the append transaction instead of persisting here.
+
+    :param db: Session the read runs on.
+    :param project_id: Project the conversation belongs to.
+    :param user_id: User who owns the conversation.
+    :param conversation_id: Explicit id the caller asked to thread into, or null.
     """
 
     # conversation_id arrives null only before hydration resolves: first entry into a
@@ -79,7 +95,12 @@ def resolve_conversation(
 
 
 def load_history(*, db: Session, conversation_id: UUID, limit: int) -> list[ChatMessage]:
-    """Return the conversation's last ``limit`` messages oldest-first, citations stripped."""
+    """Return the conversation's last ``limit`` messages oldest-first, citations stripped.
+
+    :param db: Session the read commits through.
+    :param conversation_id: Conversation whose messages are read.
+    :param limit: Maximum number of messages to return.
+    """
 
     rows = db.scalars(
         select(ConversationMessage)
@@ -94,7 +115,6 @@ def load_history(*, db: Session, conversation_id: UUID, limit: int) -> list[Chat
         )
         for row in reversed(rows)
     ]
-    # Read-only close: no transaction stays open across the LLM calls that follow.
     db.commit()
     return history
 
@@ -108,6 +128,10 @@ def gather_snapshots(
     a snapshot whose chunk row is gone (``chunk_id`` null) dedupes on its durable
     text and filename instead. The rows keep their stored ordinals: the caller
     cites them positionally.
+
+    :param db: Session the read commits through.
+    :param conversation_id: Conversation whose snapshots are gathered.
+    :param max_chunks: Maximum number of snapshots to return.
     """
 
     rows = db.scalars(
@@ -129,7 +153,6 @@ def gather_snapshots(
         gathered.append(row)
         if len(gathered) == max_chunks:
             break
-    # Read-only close: no transaction stays open across the LLM calls that follow.
     db.commit()
     return gathered
 
@@ -137,7 +160,11 @@ def gather_snapshots(
 def list_messages(
     *, db: Session, conversation_id: UUID
 ) -> list[tuple[ConversationMessage, list[ConversationMessageChunk]]]:
-    """Return the conversation's messages oldest-first with their snapshot chunks."""
+    """Return the conversation's messages oldest-first with their snapshot chunks.
+
+    :param db: Session the response is materialized through.
+    :param conversation_id: Conversation whose messages are read.
+    """
 
     messages = db.scalars(
         select(ConversationMessage)
@@ -177,6 +204,13 @@ def append_turn(
 
     The row lock on the conversation serializes concurrent turns so positions
     never collide.
+
+    :param db: Session the whole turn commits through.
+    :param conversation: Conversation to append to, possibly still pending.
+    :param question: The user's question, stored verbatim.
+    :param answer: The assistant's answer, stored verbatim.
+    :param route: Route the answer took, one of the literals the column accepts.
+    :param snapshots: Evidence snapshots persisted beside the answer.
     """
 
     # The conversation row joins this transaction on the null path: a failed answer call

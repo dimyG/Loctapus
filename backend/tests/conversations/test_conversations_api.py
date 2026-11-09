@@ -11,7 +11,11 @@ from tests.helpers import _auth, _default_team_id
 
 
 def _create_project(*, client: TestClient, email: str) -> tuple[dict[str, str], str]:
-    """Register one account and create one named project; return its auth headers and id."""
+    """Register one account and create one named project; return its auth headers and id.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param email: Address to register the project owner with.
+    """
 
     headers = _auth(client=client, email=email)
     team_id = _default_team_id(client=client, headers=headers)
@@ -22,7 +26,10 @@ def _create_project(*, client: TestClient, email: str) -> tuple[dict[str, str], 
 
 
 def _snapshot(*, text: str) -> SnapshotIn:
-    """Build one snapshot input for seeding a hydrated thread."""
+    """Build one snapshot input for seeding a hydrated thread.
+
+    :param text: Chunk text the snapshot persists.
+    """
 
     return SnapshotIn(
         chunk_id=None,
@@ -34,7 +41,10 @@ def _snapshot(*, text: str) -> SnapshotIn:
 
 
 def test_post_conversations_creates_owned_empty_conversation(*, client: TestClient) -> None:
-    """Check POST creates the caller's empty conversation and a stranger sees none."""
+    """Check that POST creates the caller's empty conversation and a stranger sees none.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers, project_id = _create_project(client=client, email="alice-create@example.com")
     response = client.post(f"/api/projects/{project_id}/conversations", headers=headers)
@@ -54,7 +64,11 @@ def test_post_conversations_creates_owned_empty_conversation(*, client: TestClie
 
 
 def test_get_latest_returns_messages_in_order_with_chunks(*, client: TestClient, db_session: Session) -> None:
-    """Check the hydrated thread carries ordered messages with their snapshots."""
+    """Check that the hydrated thread carries ordered messages with their snapshots.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="alice-thread@example.com")
     created = client.post(f"/api/projects/{project_id}/conversations", headers=headers)
@@ -100,7 +114,10 @@ def test_get_latest_returns_messages_in_order_with_chunks(*, client: TestClient,
 
 
 def test_get_latest_404_when_none(*, client: TestClient) -> None:
-    """Check latest answers 404 with a friendly detail before any conversation exists."""
+    """Check that latest answers 404 with a friendly detail before any conversation exists.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers, project_id = _create_project(client=client, email="alice-empty@example.com")
     response = client.get(f"/api/projects/{project_id}/conversations/latest", headers=headers)
@@ -109,7 +126,10 @@ def test_get_latest_404_when_none(*, client: TestClient) -> None:
 
 
 def test_post_and_get_latest_404_on_invisible_project(*, client: TestClient) -> None:
-    """Check both endpoints answer 404 for a project the caller cannot see."""
+    """Check that both endpoints answer 404 for a project the caller cannot see.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     _headers, project_id = _create_project(client=client, email="alice-hidden@example.com")
     stranger_headers = _auth(client=client, email="bob-hidden@example.com")
@@ -122,7 +142,10 @@ def test_post_and_get_latest_404_on_invisible_project(*, client: TestClient) -> 
 
 
 def test_routes_require_auth(*, client: TestClient) -> None:
-    """Check both endpoints answer 401 without a bearer token."""
+    """Check that both endpoints answer 401 without a bearer token.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     project_id = uuid4()
     post = client.post(f"/api/projects/{project_id}/conversations")

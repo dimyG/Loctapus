@@ -49,7 +49,11 @@ class ContextBlock:
 
 
 def _render_block(*, number: int, block: ContextBlock) -> str:
-    """Render one numbered context block: its header line, then its text."""
+    """Render one numbered context block: its header line, then its text.
+
+    :param number: 1-based citation number the block renders as.
+    :param block: Context passage with its header fields.
+    """
 
     header = f"[{number}] {block.filename}"
     if block.heading_path:
@@ -58,7 +62,10 @@ def _render_block(*, number: int, block: ContextBlock) -> str:
 
 
 def _render_evidence(*, blocks: Sequence[ContextBlock]) -> str:
-    """Render the evidence summary message for the router prompt."""
+    """Render the evidence summary message for the router prompt.
+
+    :param blocks: Gathered evidence in citation order.
+    """
 
     rows = [
         _render_block(number=number, block=_previewed(block=block))
@@ -68,7 +75,10 @@ def _render_evidence(*, blocks: Sequence[ContextBlock]) -> str:
 
 
 def _previewed(*, block: ContextBlock) -> ContextBlock:
-    """Return one block with its text cut to the preview length."""
+    """Return one block with its text cut to the preview length.
+
+    :param block: Full context block to trim.
+    """
 
     return ContextBlock(
         filename=block.filename,
@@ -78,7 +88,11 @@ def _previewed(*, block: ContextBlock) -> ContextBlock:
 
 
 def build_user_prompt(*, query: str, chunks: list[RetrievedChunk]) -> str:
-    """Render the question and the numbered context blocks in rank order."""
+    """Render the question and the numbered context blocks in rank order.
+
+    :param query: Question the user asked.
+    :param chunks: Retrieved chunks in rank order.
+    """
 
     blocks = [
         ContextBlock(filename=chunk.filename, heading_path=chunk.heading_path, text=chunk.text)
@@ -95,6 +109,10 @@ def build_route_messages(
 
     The evidence set is the same gathered set a REUSE answer reuses, so the
     router's judgment is honest.
+
+    :param question: Follow-up question as the caller asked it.
+    :param history: Earlier turns, citations already stripped.
+    :param evidence: Gathered evidence in citation order.
     """
 
     messages = list(history)
@@ -107,7 +125,12 @@ def build_route_messages(
 def build_answer_messages(
     *, question: str, history: list[ChatMessage], blocks: Sequence[ContextBlock]
 ) -> list[ChatMessage]:
-    """Render the answer messages: history, then the final grounded question."""
+    """Render the answer messages: history, then the final grounded question.
+
+    :param question: Question the user asked.
+    :param history: Earlier turns, citations already stripped.
+    :param blocks: Context passages in citation order.
+    """
 
     messages = list(history)
     rendered = [_render_block(number=number, block=block) for number, block in enumerate(blocks, start=1)]

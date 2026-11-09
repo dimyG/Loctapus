@@ -62,6 +62,11 @@ export const answersApi = api.injectEndpoints({
   }),
 });
 
+/**
+ * Generated hooks for the answers endpoints: ask one grounded question, fetch the
+ * caller's latest conversation, and create a fresh one. Asking and creating invalidate
+ * the Conversation tag so the hydration query refetches.
+ */
 export const {
   useAskQuestionMutation,
   useCreateConversationMutation,

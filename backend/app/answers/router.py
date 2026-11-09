@@ -25,7 +25,10 @@ router = APIRouter()
 
 
 def _to_out(*, chunk: RetrievedChunk | ConversationMessageChunk) -> SnapshotChunkOut:
-    """Map one fresh or stored evidence row into its response body."""
+    """Map one fresh or stored evidence row into its response body.
+
+    :param chunk: Evidence row backing one of the answer's citations.
+    """
 
     chunk_id = chunk.id if isinstance(chunk, RetrievedChunk) else chunk.chunk_id
     return SnapshotChunkOut(
@@ -46,7 +49,14 @@ def answer_question(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AnswerOut:
-    """Generate one grounded answer for one query, raising 401, 404, 422, or 502."""
+    """Generate one grounded answer for one query, raising 401, 404, 422, or 502.
+
+    :param project_id: Project the question is asked against.
+    :param body: Request body with the query and any retrieval overrides.
+    :param user: User resolved from the bearer token.
+    :param db: Session the answer round commits through.
+    :param settings: Settings supplying the answer and retrieval defaults.
+    """
 
     project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
     if project is None:
@@ -56,6 +66,8 @@ def answer_question(
             db=db, project_id=project.id, user_id=user.id, params=body, settings=settings
         )
     except LLMError as error:
+        # The failure is the upstream's, not the caller's: 502 separates a dead
+        # provider from a client mistake, and the message stays user-friendly.
         _logger.warning("Answer generation failed", exc_info=error)
         raise HTTPException(502, str(error)) from error
     if answer is None:

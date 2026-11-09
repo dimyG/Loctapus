@@ -17,7 +17,11 @@ from tests.helpers import _auth, _default_team_id
 
 
 def _create_project(*, client: TestClient, email: str) -> tuple[dict[str, str], str]:
-    """Register one account and create one named project; return its auth headers and id."""
+    """Register one account and create one named project; return its auth headers and id.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param email: Address to register the project owner with.
+    """
 
     headers = _auth(client=client, email=email)
     team_id = _default_team_id(client=client, headers=headers)
@@ -28,14 +32,20 @@ def _create_project(*, client: TestClient, email: str) -> tuple[dict[str, str], 
 
 
 def test_answer_requires_auth(*, client: TestClient) -> None:
-    """Check the endpoint answers 401 without a bearer token."""
+    """Check that the endpoint answers 401 without a bearer token.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     response = client.post(f"/api/projects/{uuid4()}/answer", json={"query": "alpha"})
     assert response.status_code == 401
 
 
 def test_answer_404_for_invisible_project(*, client: TestClient) -> None:
-    """Check a non-member gets 404 for another user's private project."""
+    """Check that a non-member gets 404 for another user's private project.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     _headers, project_id = _create_project(client=client, email="alice-404@example.com")
     bob_headers = _auth(client=client, email="bob-404@example.com")
@@ -45,7 +55,11 @@ def test_answer_404_for_invisible_project(*, client: TestClient) -> None:
 
 
 def test_answer_works_for_public_project_non_member(*, client: TestClient, db_session: Session) -> None:
-    """Check a non-member can ask about a project the owner made public."""
+    """Check that a non-member can ask about a project the owner made public.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     alice_headers, project_id = _create_project(client=client, email="alice-pub@example.com")
     seed_document_with_chunks(
@@ -74,7 +88,11 @@ def test_answer_works_for_public_project_non_member(*, client: TestClient, db_se
     ],
 )
 def test_answer_validation_errors(*, client: TestClient, body: dict[str, object]) -> None:
-    """Check malformed bodies answer 422."""
+    """Check that malformed bodies answer 422.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param body: One malformed request body from the parametrize list.
+    """
 
     headers, project_id = _create_project(client=client, email=f"val-{uuid4()}@example.com")
     response = client.post(f"/api/projects/{project_id}/answer", json=body, headers=headers)
@@ -82,7 +100,11 @@ def test_answer_validation_errors(*, client: TestClient, body: dict[str, object]
 
 
 def test_answer_strips_and_matches(*, client: TestClient, db_session: Session) -> None:
-    """Check a padded query strips and still matches its chunk."""
+    """Check that a padded query strips and still matches its chunk.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="strip@example.com")
     seed_document_with_chunks(db=db_session, project_id=UUID(project_id), chunk_texts=["alpha alpha"])
@@ -94,7 +116,11 @@ def test_answer_strips_and_matches(*, client: TestClient, db_session: Session) -
 
 
 def test_rerank_true_accepted_and_ignored(*, client: TestClient, db_session: Session) -> None:
-    """Check the rerank flag is accepted and changes nothing until the S6 reranker."""
+    """Check that the rerank flag is accepted and changes nothing until the S7 reranker.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="rerank@example.com")
     seed_document_with_chunks(
@@ -112,7 +138,11 @@ def test_rerank_true_accepted_and_ignored(*, client: TestClient, db_session: Ses
 
 
 def test_answer_empty_project_returns_canned(*, client: TestClient, db_session: Session) -> None:
-    """Check a project with no indexed chunks answers from the can and logs exactly once."""
+    """Check that a project with no indexed chunks answers from the can and logs exactly once.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="empty-api@example.com")
     response = client.post(f"/api/projects/{project_id}/answer", json={"query": "alpha"}, headers=headers)
@@ -126,7 +156,11 @@ def test_answer_empty_project_returns_canned(*, client: TestClient, db_session: 
 
 
 def test_answer_with_conversation_id_round_trips(*, client: TestClient, db_session: Session) -> None:
-    """Check the served conversation id threads a second ask into the same conversation."""
+    """Check that the served conversation id threads a second ask into the same conversation.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="round@example.com")
     seed_document_with_chunks(db=db_session, project_id=UUID(project_id), chunk_texts=["alpha"])
@@ -155,7 +189,10 @@ def test_answer_with_conversation_id_round_trips(*, client: TestClient, db_sessi
 
 
 def test_answer_404_unknown_conversation(*, client: TestClient) -> None:
-    """Check an unowned conversation id answers 404 instead of answering."""
+    """Check that an unowned conversation id answers 404 instead of answering.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers, project_id = _create_project(client=client, email="unknown-conv@example.com")
     response = client.post(
@@ -168,7 +205,11 @@ def test_answer_404_unknown_conversation(*, client: TestClient) -> None:
 
 
 def test_answer_response_shape(*, client: TestClient, db_session: Session) -> None:
-    """Check the response carries exactly the served fields."""
+    """Check that the response carries exactly the served fields.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="shape@example.com")
     seeded = seed_document_with_chunks(
@@ -202,7 +243,12 @@ def test_answer_response_shape(*, client: TestClient, db_session: Session) -> No
 def test_llm_failure_maps_to_502_and_still_logs(
     *, client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check a provider failure answers 502 while the answer-origin log row survives."""
+    """Check that a provider failure answers 502 while the answer-origin log row survives.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param monkeypatch: Fixture that swaps the LLM provider for a failing one.
+    """
 
     headers, project_id = _create_project(client=client, email="llm-down@example.com")
     seed_document_with_chunks(db=db_session, project_id=UUID(project_id), chunk_texts=["alpha"])
@@ -215,7 +261,11 @@ def test_llm_failure_maps_to_502_and_still_logs(
 
 
 def test_error_paths_log_nothing(*, client: TestClient, db_session: Session) -> None:
-    """Check the 401, 404, and 422 paths never write a query log row."""
+    """Check that the 401, 404, and 422 paths never write a query log row.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     alice_headers, project_id = _create_project(client=client, email="alice-logs@example.com")
     stranger_headers = _auth(client=client, email="stranger-logs@example.com")

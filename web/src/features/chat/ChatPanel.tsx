@@ -35,7 +35,7 @@ type Turn = {
   error?: string;
 };
 
-/** Builds the summary label for a chunk: `[i] filename > a > b`. */
+/** Builds the dialog title for a chunk: `[i] filename > a > b`. */
 function chunkLabel(chunk: SnapshotChunk, index: number): string {
   const path = chunk.heading_path.length > 0 ? ` > ${chunk.heading_path.join(" > ")}` : "";
   return `[${index + 1}] ${chunk.filename}${path}`;
@@ -113,7 +113,11 @@ function turnsFromMessages(messages: ConversationMessage[]): Turn[] {
   return mapped;
 }
 
-/** The project chat panel: the owner's persisted conversation, hydrated and continued. */
+/**
+ * The project chat panel: the owner's persisted conversation, hydrated and continued.
+ *
+ * @param {string} projectId - Project whose conversation the panel hydrates and continues.
+ */
 export default function ChatPanel({ projectId }: { projectId: string }): JSX.Element {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [text, setText] = useState("");
