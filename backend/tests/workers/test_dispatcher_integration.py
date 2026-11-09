@@ -30,7 +30,10 @@ _PUBLISH_TIMEOUT_SECONDS = 10.0
 
 @pytest.fixture(scope="module")
 def purged_queues(*, broker_url: str) -> None:
-    """Declare then purge both worker queues so stale messages never leak into these tests."""
+    """Declare then purge both worker queues so stale messages never leak into these tests.
+
+    :param broker_url: Broker URL of the ``rag_test`` vhost the queues are declared on.
+    """
 
     with Connection(broker_url) as connection:
         channel = connection.default_channel
@@ -41,7 +44,12 @@ def purged_queues(*, broker_url: str) -> None:
 
 
 def _seed_event(*, db: Session, event_type: str, payload: dict[str, str]) -> OutboxEvent:
-    """Add one outbox row inside the test's transaction and flush it."""
+    """Add one outbox row inside the test's transaction and flush it.
+
+    :param db: Session the row is added to.
+    :param event_type: Event type the row carries; the routing map keys on it.
+    :param payload: Payload the dispatcher publishes as the task's kwargs.
+    """
 
     event = OutboxEvent(
         event_type=event_type,
@@ -61,7 +69,12 @@ def _ingestion_payload() -> dict[str, str]:
 
 
 def _dispatch(*, db: Session, app: Any, batch_size: int = 20) -> BatchResult:
-    """Run one dispatch batch with the test backoff and publish timeout."""
+    """Run one dispatch batch with the test backoff and publish timeout.
+
+    :param db: Session the batch's transaction runs on.
+    :param app: Celery app the rows are published through.
+    :param batch_size: Maximum number of due rows selected per batch.
+    """
 
     return dispatch_batch(
         db=db,
@@ -73,7 +86,11 @@ def _dispatch(*, db: Session, app: Any, batch_size: int = 20) -> BatchResult:
 
 
 def _drain_one(*, broker_url: str, queue_name: str) -> tuple[str, dict[str, Any]]:
-    """Read exactly one task message off the named queue, returning its task name and kwargs."""
+    """Read exactly one task message off the named queue, returning its task name and kwargs.
+
+    :param broker_url: Broker URL of the ``rag_test`` vhost the queue lives on.
+    :param queue_name: Queue the message is read from.
+    """
 
     with Connection(broker_url) as connection:
         # no_ack keeps a failed assertion from leaving an unacknowledged message behind.
@@ -98,7 +115,12 @@ def test_backoff_delay_doubles_and_caps() -> None:
 
 
 def test_dispatch_publishes_and_marks(*, db_session: Session, broker_url: str, purged_queues: None) -> None:
-    """A dispatched ingestion event is published to the ingestion queue and marked published."""
+    """Check that a dispatched ingestion event is published to the ingestion queue and marked published.
+
+    :param db_session: Transaction-managed session the outbox row is seeded in.
+    :param broker_url: Broker URL of the ``rag_test`` vhost the message lands on.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    """
 
     payload = _ingestion_payload()
     event = _seed_event(db=db_session, event_type=SOURCE_ITEM_INGESTION_REQUESTED, payload=payload)
@@ -114,7 +136,12 @@ def test_dispatch_publishes_and_marks(*, db_session: Session, broker_url: str, p
 def test_dispatch_routes_embed_events_to_embed_queue(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:
-    """A document_ready_for_embedding event lands on the embed queue as embed_document."""
+    """Check that a document_ready_for_embedding event lands on the embed queue as embed_document.
+
+    :param db_session: Transaction-managed session the outbox row is seeded in.
+    :param broker_url: Broker URL of the ``rag_test`` vhost the message lands on.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    """
 
     payload = {"document_id": str(uuid4()), "ingestion_run_id": str(uuid4())}
     _seed_event(db=db_session, event_type=DOCUMENT_READY_FOR_EMBEDDING, payload=payload)
@@ -128,14 +155,24 @@ def test_dispatch_routes_embed_events_to_embed_queue(
 def test_publish_failure_backs_off_the_row(
     *, db_session: Session, broker_url: str, purged_queues: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A failed publish bumps attempts and pushes the row's next attempt into the future."""
+    """Check that a failed publish bumps attempts and pushes the row's next attempt into the future.
+
+    :param db_session: Transaction-managed session the outbox row is seeded in.
+    :param broker_url: Broker URL the publish fails against.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    :param monkeypatch: Fixture replacing the app's publish path with a failing one.
+    """
 
     payload = _ingestion_payload()
     event = _seed_event(db=db_session, event_type=SOURCE_ITEM_INGESTION_REQUESTED, payload=payload)
     app = make_celery_app(broker_url=broker_url)
 
     def _failing_send_task(*args: object, **kwargs: object) -> None:
-        """Stand-in for the app's publish path that simulates a broker outage."""
+        """Stand-in for the app's publish path that simulates a broker outage.
+
+        :param args: Positional arguments the patched call passes; unused here.
+        :param kwargs: Keyword arguments the patched call passes; unused here.
+        """
 
         raise RuntimeError("broker unreachable")
 
@@ -157,14 +194,24 @@ def test_publish_failure_backs_off_the_row(
 def test_publish_failure_with_zero_backoff_retries_next_batch(
     *, db_session: Session, broker_url: str, purged_queues: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A zero backoff leaves the row due immediately, so the next batch publishes it."""
+    """Check that a zero backoff leaves the row due immediately, so the next batch publishes it.
+
+    :param db_session: Transaction-managed session the outbox row is seeded in.
+    :param broker_url: Broker URL the first publish fails against.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    :param monkeypatch: Fixture replacing the app's publish path with a failing one.
+    """
 
     payload = _ingestion_payload()
     event = _seed_event(db=db_session, event_type=SOURCE_ITEM_INGESTION_REQUESTED, payload=payload)
     app = make_celery_app(broker_url=broker_url)
 
     def _failing_send_task(*args: object, **kwargs: object) -> None:
-        """Stand-in for the app's publish path that simulates a broker outage."""
+        """Stand-in for the app's publish path that simulates a broker outage.
+
+        :param args: Positional arguments the patched call passes; unused here.
+        :param kwargs: Keyword arguments the patched call passes; unused here.
+        """
 
         raise RuntimeError("broker unreachable")
 
@@ -188,7 +235,13 @@ def test_publish_failure_with_zero_backoff_retries_next_batch(
 def test_backed_off_row_does_not_block_rows_behind_it(
     *, db_session: Session, broker_url: str, purged_queues: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A backed-off oldest row cannot block the healthy rows behind it."""
+    """Check that a backed-off oldest row cannot block the healthy rows behind it.
+
+    :param db_session: Transaction-managed session the outbox rows are seeded in.
+    :param broker_url: Broker URL of the ``rag_test`` vhost the messages land on.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    :param monkeypatch: Fixture replacing the app's publish path with a failing first publish.
+    """
 
     older = _seed_event(
         db=db_session, event_type=SOURCE_ITEM_INGESTION_REQUESTED, payload=_ingestion_payload()
@@ -204,7 +257,11 @@ def test_backed_off_row_does_not_block_rows_behind_it(
     calls = {"count": 0}
 
     def _failing_first_send_task(*args: object, **kwargs: object) -> None:
-        """Fail only the first publish, simulating one bad broker moment."""
+        """Fail only the first publish, simulating one bad broker moment.
+
+        :param args: Positional arguments the patched call passes; unused here.
+        :param kwargs: Keyword arguments the patched call passes; unused here.
+        """
 
         calls["count"] += 1
         if calls["count"] == 1:
@@ -229,7 +286,12 @@ def test_backed_off_row_does_not_block_rows_behind_it(
 def test_unroutable_rows_cannot_starve_the_outbox(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:
-    """More poison rows than one batch holds cannot starve the valid row behind them."""
+    """Check that more poison rows than one batch holds cannot starve the valid row behind them.
+
+    :param db_session: Transaction-managed session the outbox rows are seeded in.
+    :param broker_url: Broker URL of the ``rag_test`` vhost the message lands on.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    """
 
     app = make_celery_app(broker_url=broker_url)
     now = datetime.now(UTC)
@@ -264,7 +326,12 @@ def test_unroutable_rows_cannot_starve_the_outbox(
 def test_missing_route_bumps_without_breaking(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:
-    """An unroutable event is backed off while a valid row in the same batch still publishes."""
+    """Check that an unroutable event is backed off while a valid row in the same batch still publishes.
+
+    :param db_session: Transaction-managed session the outbox rows are seeded in.
+    :param broker_url: Broker URL of the ``rag_test`` vhost the message lands on.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    """
 
     unknown = _seed_event(db=db_session, event_type="not_a_real_event_type", payload={"junk": "true"})
     payload = _ingestion_payload()
@@ -285,7 +352,12 @@ def test_missing_route_bumps_without_breaking(
 def test_published_task_id_is_the_outbox_row_id(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:
-    """The published message's task id is the outbox row id it was driven from."""
+    """Check that the published message's task id is the outbox row id it was driven from.
+
+    :param db_session: Transaction-managed session the outbox row is seeded in.
+    :param broker_url: Broker URL of the ``rag_test`` vhost the message lands on.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    """
 
     event = _seed_event(
         db=db_session, event_type=SOURCE_ITEM_INGESTION_REQUESTED, payload=_ingestion_payload()
@@ -309,10 +381,16 @@ def test_loop_survives_a_failing_tick(
     settings: SettingsForTests,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A failing first tick does not end the loop, and every tick sleeps a bounded interval.
+    """Check that a failing first tick does not end the loop and every tick sleeps a bounded interval.
 
     A prolonged database outage must not turn the loop into a hot spin: the failing
     tick sleeps the poll interval before trying again, exactly like an idle tick.
+
+    :param db_session: Transaction-managed session the outbox row is seeded in.
+    :param broker_url: Broker URL of the ``rag_test`` vhost the message lands on.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    :param settings: Settings supplying the poll interval the loop sleeps for.
+    :param capsys: Fixture capturing the loop's stderr output.
     """
 
     event = _seed_event(
@@ -348,7 +426,10 @@ def test_loop_survives_a_failing_tick(
 
 
 def _no_sleep(*_seconds: float) -> None:
-    """Drop loop sleeps so tests never wait a poll interval."""
+    """Drop loop sleeps so tests never wait a poll interval.
+
+    :param _seconds: Sleep durations the loop passes; unused here.
+    """
 
     return None
 
@@ -356,7 +437,12 @@ def _no_sleep(*_seconds: float) -> None:
 def test_loop_skips_sleep_after_a_full_batch(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:
-    """A full batch means more work waits, so the loop does not sleep before ticking again."""
+    """Check that a full batch means more work waits, so the loop does not sleep before ticking again.
+
+    :param db_session: Transaction-managed session the outbox rows are seeded in.
+    :param broker_url: Broker URL of the ``rag_test`` vhost the messages land on.
+    :param purged_queues: Fixture that empties both worker queues before the test.
+    """
 
     for _ in range(2):
         _seed_event(db=db_session, event_type=SOURCE_ITEM_INGESTION_REQUESTED, payload=_ingestion_payload())

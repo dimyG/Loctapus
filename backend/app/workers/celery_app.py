@@ -21,6 +21,8 @@ def make_celery_app(*, broker_url: str) -> Celery:
     live in Postgres on the ingestion runs. Both queues are declared durable so a
     broker restart cannot drop a queued message, and new tasks default to the
     ingestion queue.
+
+    :param broker_url: Broker URL the app binds to, one vhost per environment.
     """
 
     app = Celery(broker=broker_url, include=["app.workers.tasks", "app.workers.signals"])

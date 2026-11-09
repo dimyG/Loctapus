@@ -37,7 +37,10 @@ class Backoff:
     max_seconds: float
 
     def delay_seconds(self, *, attempts: int) -> float:
-        """Return the delay after ``attempts`` failed attempts, capped at the maximum."""
+        """Return the delay after ``attempts`` failed attempts, capped at the maximum.
+
+        :param attempts: Failed attempts so far; the first failure is attempt 1.
+        """
 
         delay = self.base_seconds * 2 ** (attempts - 1)
         return delay if delay < self.max_seconds else self.max_seconds
@@ -52,7 +55,12 @@ class BatchResult:
 
 
 def _bump(*, row: OutboxEvent, error: str, backoff: Backoff) -> None:
-    """Record one failed attempt on the row and back its next attempt off."""
+    """Record one failed attempt on the row and back its next attempt off.
+
+    :param row: Outbox row to record the failure on.
+    :param error: Error text to store on the row's ``last_error``.
+    :param backoff: Delay policy the row's next attempt is scheduled by.
+    """
 
     row.attempts += 1
     row.last_error = error
@@ -76,6 +84,12 @@ def dispatch_batch(
     the broker's ``basic.ack`` - so a crash in between re-publishes (duplicate) rather
     than losing the event. Every failure - unroutable rows included - is backed off and
     recorded, never dropped and never blocking the rows behind it.
+
+    :param db: Session the select, publish, and mark run inside one transaction on.
+    :param app: Celery app the rows are published through.
+    :param batch_size: Maximum number of due rows selected per batch.
+    :param backoff: Delay policy a failed row's next attempt is scheduled by.
+    :param publish_timeout_seconds: Bound on each publish and its broker confirmation.
     """
 
     rows = (
@@ -134,6 +148,12 @@ def run_loop(
     line goes to stderr once, after the first successful tick, so a supervisor that
     waits for it never sees readiness the loop cannot back. The loop sleeps only when
     the last batch was not full - a full batch means more due rows are waiting.
+
+    :param app: Celery app the batches are published through.
+    :param settings: Settings supplying the batch size, backoff, timeouts, and poll interval.
+    :param session_factory: Context manager yielding a session per tick; production passes ``session_scope``.
+    :param sleep: Callable that blocks the loop between ticks; production passes ``time.sleep``.
+    :param max_ticks: Optional bound on the loop's ticks; tests pass it, production runs forever.
     """
 
     backoff = Backoff(

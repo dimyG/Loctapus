@@ -33,7 +33,10 @@ from app.workers.celery_app import celery_app
     max_retries=5,
 )
 def ingest_source_item(*, ingestion_run_id: str) -> None:
-    """Ingest one queued run's pinned file version end to end, recording the outcome on the run."""
+    """Ingest one queued run's pinned file version end to end, recording the outcome on the run.
+
+    :param ingestion_run_id: Id of the run row, the payload key the dispatcher publishes.
+    """
 
     settings = get_settings()
     with session_scope() as db:
@@ -55,7 +58,11 @@ def ingest_source_item(*, ingestion_run_id: str) -> None:
     max_retries=5,
 )
 def embed_document(*, document_id: str, ingestion_run_id: str) -> None:
-    """Embed one document's chunks in batches and move its run to ready."""
+    """Embed one document's chunks in batches and move its run to ready.
+
+    :param document_id: Id of the document whose chunks are embedded.
+    :param ingestion_run_id: Id of the run row that moves to ready when embedding completes.
+    """
 
     settings = get_settings()
     with session_scope() as db:

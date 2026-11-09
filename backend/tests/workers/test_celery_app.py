@@ -18,7 +18,10 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def test_make_celery_app_configures_broker_and_acks() -> None:
-    """The app binds the broker, late acks, publisher confirms, and no result backend."""
+    """Check that a new app binds the broker URL and enables late acks and publisher confirms.
+
+    The app configures no result backend, because task outcomes live in Postgres.
+    """
 
     app = make_celery_app(broker_url="amqp://guest:guest@localhost:5672/rag_test")
     assert app.conf.broker_url == "amqp://guest:guest@localhost:5672/rag_test"
@@ -30,7 +33,10 @@ def test_make_celery_app_configures_broker_and_acks() -> None:
 
 
 def test_worker_init_refuses_on_dimension_mismatch(*, db_session: Session) -> None:
-    """The handler turns a dimension mismatch into a SystemExit naming both numbers."""
+    """Check that a dimension mismatch refuses boot with a SystemExit naming both numbers.
+
+    :param db_session: Transaction-managed session the startup checks run on.
+    """
 
     provider = MismatchedEmbeddingProvider(dimension=512)
     with pytest.raises(SystemExit) as excinfo:
@@ -42,14 +48,18 @@ def test_worker_init_refuses_on_dimension_mismatch(*, db_session: Session) -> No
 
 
 def test_worker_init_passes_with_stub(*, db_session: Session, settings: Settings) -> None:
-    """The handler lets the settings-selected stub provider boot against the catalog."""
+    """Check that the settings-selected stub provider boots against the catalog.
+
+    :param db_session: Transaction-managed session the startup checks run on.
+    :param settings: Settings whose ``embedding_provider`` selects the stub provider.
+    """
 
     provider = get_embedding_provider(settings=settings)
     run_worker_startup_checks(db=db_session, embedding_provider=provider)
 
 
 def test_tasks_retry_transient_database_errors() -> None:
-    """Both pipeline tasks autoretry on transient database errors, capped at five."""
+    """Check that both pipeline tasks autoretry on transient database errors, capped at five."""
 
     from typing import Any
 
@@ -67,7 +77,7 @@ def test_tasks_retry_transient_database_errors() -> None:
 
 
 def test_dispatcher_does_not_import_the_pipeline() -> None:
-    """Importing the dispatcher must not pull the ingestion pipeline or its parsers."""
+    """Check that importing the dispatcher does not pull the ingestion pipeline or its parsers."""
 
     code = (
         "import sys, app.workers.dispatcher; "
@@ -80,12 +90,20 @@ def test_dispatcher_does_not_import_the_pipeline() -> None:
 def test_worker_init_refuses_when_provider_resolution_fails(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A provider that cannot be resolved refuses boot instead of starting a worker."""
+    """Check that an unresolvable parser refuses boot instead of starting a worker.
+
+    :param db_session: Transaction-managed session the startup checks run on.
+    :param settings: Settings the resolver is wired to.
+    :param monkeypatch: Fixture replacing the parser factory with one that raises.
+    """
 
     provider = get_embedding_provider(settings=settings)
 
     def _exploding_get_parser(*, settings: Settings) -> object:
-        """Stand-in for the settings-driven parser factory."""
+        """Stand-in for the settings-driven parser factory.
+
+        :param settings: Settings the real factory would dispatch on.
+        """
 
         raise ValueError("no such parser")
 
@@ -95,7 +113,7 @@ def test_worker_init_refuses_when_provider_resolution_fails(
 
 
 def test_celery_app_declares_both_queues() -> None:
-    """The app declares both durable queues and defaults new tasks to ingestion."""
+    """Check that the app declares both durable queues and defaults new tasks to ingestion."""
 
     app = make_celery_app(broker_url="amqp://guest:guest@localhost:5672/rag_test")
     queues = {queue.name: queue for queue in app.conf.task_queues}

@@ -36,6 +36,11 @@ def run_worker_startup_checks(
     worker running. ``db``, ``parser``, and ``embedding_provider`` default to the
     settings-selected wiring on a ``session_scope`` session; tests inject the test
     database and fakes to exercise the refusal paths.
+
+    :param db: Session to run the checks on; defaults to a fresh session on the production wiring.
+    :param parser: Parser to verify; defaults to the settings-selected parser.
+    :param embedding_provider: Embedding provider to verify; defaults to the settings-selected one.
+    :param _kwargs: Celery's signal arguments; unused here.
     """
 
     settings = get_settings()
@@ -63,7 +68,10 @@ def run_worker_startup_checks(
 
 @worker_ready.connect
 def _log_worker_ready(**_kwargs: Any) -> None:
-    """Log the one ready line the e2e webServer entry waits for on stderr."""
+    """Log the one ready line the e2e webServer entry waits for on stderr.
+
+    :param _kwargs: Celery's signal arguments; unused here.
+    """
 
     # WARNING, not INFO: the e2e worker entry starts at Celery's default log level.
     _logger.warning("celery worker ready")
