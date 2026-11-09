@@ -30,8 +30,14 @@ def register(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
-    """Register an account with a default workspace, team, and project, and return a bearer token."""
+    """Register an account with a default workspace, team, and project, and return a bearer token.
 
+    :param body: Registration credentials validated by ``RegisterRequest``.
+    :param db: Session the provisioning transaction commits through.
+    :param settings: Settings supplying the token signing key and TTL.
+    """
+
+    # The token rides the 201 so a new account lands signed in without a second login round trip.
     try:
         result = register_user(db=db, email=body.email, password=body.password)
     except EmailAlreadyRegisteredError:
@@ -47,7 +53,10 @@ def users_me(
     *,
     user: User = Depends(get_current_user),
 ) -> dict[str, str]:
-    """Return the id and email of the authenticated user."""
+    """Return the id and email of the authenticated user.
+
+    :param user: User resolved from the bearer token.
+    """
 
     return {
         "user_id": str(user.id),
@@ -61,7 +70,11 @@ def list_workspaces(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[Workspace]:
-    """List workspaces reachable through the user's team memberships."""
+    """List workspaces reachable through the user's team memberships.
+
+    :param user: User whose memberships scope the listing.
+    :param db: Session the query runs on.
+    """
 
     return list_user_workspaces(db=db, user=user)
 
@@ -73,10 +86,17 @@ def list_workspace_teams_view(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[Team]:
-    """List the user's teams inside ``workspace_id``, raising 404 when the user has none there."""
+    """List the user's teams inside ``workspace_id``, raising 404 when the user has none there.
+
+    :param workspace_id: Workspace whose teams are listed.
+    :param user: User whose memberships scope the listing.
+    :param db: Session the query runs on.
+    """
 
     teams = list_workspace_teams(db=db, user=user, workspace_id=workspace_id)
     if teams is None:
+        # A workspace the user has no team in answers exactly like a missing one, so the
+        # endpoint never reveals which workspace ids exist to an outsider.
         raise HTTPException(404, "workspace not found")
     return teams
 
@@ -88,10 +108,17 @@ def login(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
-    """Verify credentials and return a bearer token, raising 401 when they do not match."""
+    """Verify credentials and return a bearer token, raising 401 when they do not match.
+
+    :param body: Login credentials validated by ``LoginRequest``.
+    :param db: Session the credential lookup runs on.
+    :param settings: Settings supplying the token signing key and TTL.
+    """
 
     user = authenticate_user(db=db, email=body.email, password=body.password)
     if user is None:
+        # Unknown emails and wrong passwords answer with the same detail, so the
+        # endpoint cannot be used to probe which addresses are registered.
         raise HTTPException(401, "invalid credentials")
     return {
         "access_token": create_access_token(user_id=user.id, settings=settings),
@@ -105,7 +132,11 @@ def logout(
     claims: TokenClaims = Depends(get_token_claims),
     db: Session = Depends(get_db),
 ) -> Response:
-    """Revoke the presented bearer token, raising 401 when it is invalid or expired."""
+    """Revoke the presented bearer token, raising 401 when it is invalid or expired.
+
+    :param claims: Verified claims identifying the token to revoke.
+    :param db: Session the revocation commits through.
+    """
 
     revoke_token(db=db, jti=claims.jti, expires_at=claims.exp)
     return Response(status_code=204)

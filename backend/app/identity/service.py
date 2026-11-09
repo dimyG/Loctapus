@@ -29,7 +29,12 @@ class RegistrationResult:
 
 
 def register_user(*, db: Session, email: str, password: str) -> RegistrationResult:
-    """Create a user with a default workspace, team, membership, and project in one transaction."""
+    """Create a user with a default workspace, team, membership, and project in one transaction.
+
+    :param db: Session the provisioning runs on; any failure rolls the whole thing back.
+    :param email: Address to register, unique case-insensitively.
+    :param password: Plaintext password, hashed before it is stored.
+    """
 
     user = User(email=email, password_hash=hash_password(password=password))
     db.add(user)
@@ -58,7 +63,12 @@ def register_user(*, db: Session, email: str, password: str) -> RegistrationResu
 
 
 def authenticate_user(*, db: Session, email: str, password: str) -> User | None:
-    """Return the user when the password matches, otherwise None."""
+    """Return the user when the password matches, otherwise None.
+
+    :param db: Session the email lookup runs on.
+    :param email: Address to look up.
+    :param password: Plaintext password checked against the stored hash.
+    """
 
     user = db.query(User).filter(User.email == email).one_or_none()
     if user is None or not verify_password(password=password, password_hash=user.password_hash):
@@ -67,22 +77,36 @@ def authenticate_user(*, db: Session, email: str, password: str) -> User | None:
 
 
 def revoke_token(*, db: Session, jti: str, expires_at: datetime) -> None:
-    """Record a token as revoked; repeated or concurrent calls with the same jti are a no-op."""
+    """Record a token as revoked; repeated or concurrent calls with the same jti are a no-op.
 
-    # The conflict target is the jti primary key, so a concurrent duplicate insert is a no-op.
+    :param db: Session the insert commits through.
+    :param jti: JWT ID claim identifying the token to revoke.
+    :param expires_at: Expiry of the token, stored beside the jti.
+    """
+
+    # No conflict target is passed: any unique-constraint violation on revoked_tokens is
+    # silently skipped, not only one on the jti primary key.
     statement = insert(RevokedToken).values(jti=jti, expires_at=expires_at).on_conflict_do_nothing()
     db.execute(statement)
     db.commit()
 
 
 def is_token_revoked(*, db: Session, jti: str) -> bool:
-    """Check whether ``jti`` has been revoked."""
+    """Check whether ``jti`` has been revoked.
+
+    :param db: Session the lookup runs on.
+    :param jti: JWT ID claim to look up.
+    """
 
     return db.query(RevokedToken).filter(RevokedToken.jti == jti).first() is not None
 
 
 def list_user_workspaces(*, db: Session, user: User) -> list[Workspace]:
-    """List workspaces reachable through the user's team memberships."""
+    """List workspaces reachable through the user's team memberships.
+
+    :param db: Session the join runs on.
+    :param user: User whose memberships scope the listing.
+    """
 
     return (
         db.query(Workspace)
@@ -95,7 +119,12 @@ def list_user_workspaces(*, db: Session, user: User) -> list[Workspace]:
 
 
 def list_workspace_teams(*, db: Session, user: User, workspace_id: UUID) -> list[Team] | None:
-    """List the user's teams in a workspace, or None when the user has no team there."""
+    """List the user's teams in a workspace, or None when the user has no team there.
+
+    :param db: Session the join runs on.
+    :param user: User whose memberships scope the listing.
+    :param workspace_id: Workspace whose teams are listed.
+    """
 
     teams = (
         db.query(Team)

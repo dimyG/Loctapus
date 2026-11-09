@@ -1,3 +1,7 @@
+/**
+ * Covers the sign-in funnel: required-field validation, error copy mapping,
+ * the pending button state, and the redirect into the latest project's chat.
+ */
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -38,6 +42,7 @@ function renderLogin(preloadedState = initialRootState()) {
   );
 }
 
+/** Fills the email and password fields with the given credentials and submits the form. */
 async function signIn(
   user: ReturnType<typeof userEvent.setup>,
   email = "user@example.test",

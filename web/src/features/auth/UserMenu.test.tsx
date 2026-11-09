@@ -1,3 +1,8 @@
+/**
+ * Covers the account dropdown: the signed-in email subheader, the disabled
+ * Settings entry, and sign-out landing on the public page rather than the
+ * guard's login bounce, even when revocation fails.
+ */
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -41,6 +46,7 @@ function renderMenu() {
   );
 }
 
+/** Opens the account dropdown through its avatar button. */
 async function openMenu(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: /account menu/i }));
 }

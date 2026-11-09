@@ -4,7 +4,10 @@ from fastapi.testclient import TestClient
 
 
 def test_register_returns_jwt(*, client: TestClient) -> None:
-    """Check that registration returns a bearer token."""
+    """Check that registration returns a bearer token.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     r = client.post("/api/auth/register", json={"email": "api@example.com", "password": "password123"})
     assert r.status_code == 201
@@ -13,7 +16,10 @@ def test_register_returns_jwt(*, client: TestClient) -> None:
 
 
 def test_register_duplicate_409(*, client: TestClient) -> None:
-    """Check that registering an existing email answers 409."""
+    """Check that registering an existing email answers 409.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     payload = {"email": "twice@example.com", "password": "password123"}
     assert client.post("/api/auth/register", json=payload).status_code == 201
@@ -23,14 +29,20 @@ def test_register_duplicate_409(*, client: TestClient) -> None:
 
 
 def test_register_short_password_422(*, client: TestClient) -> None:
-    """Check that a short password fails validation."""
+    """Check that a short password fails validation.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     r = client.post("/api/auth/register", json={"email": "short@example.com", "password": "1234567"})
     assert r.status_code == 422
 
 
 def test_login_success_and_failure(*, client: TestClient) -> None:
-    """Check that login succeeds with matching credentials and fails otherwise."""
+    """Check that login succeeds with matching credentials and fails otherwise.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     client.post("/api/auth/register", json={"email": "login@example.com", "password": "password123"})
     ok = client.post("/api/auth/login", json={"email": "login@example.com", "password": "password123"})
@@ -41,7 +53,10 @@ def test_login_success_and_failure(*, client: TestClient) -> None:
 
 
 def test_second_user_registers_and_logs_in(*, client: TestClient) -> None:
-    """Check that a second account can register and log in."""
+    """Check that a second account can register and log in.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     client.post("/api/auth/register", json={"email": "first@example.com", "password": "password123"})
     r = client.post("/api/auth/register", json={"email": "second@example.com", "password": "password123"})
@@ -49,7 +64,10 @@ def test_second_user_registers_and_logs_in(*, client: TestClient) -> None:
 
 
 def test_logout_revokes_token(*, client: TestClient) -> None:
-    """Check that a logged-out token no longer authenticates."""
+    """Check that a logged-out token no longer authenticates.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     r = client.post("/api/auth/register", json={"email": "lo@example.com", "password": "password123"})
     token = r.json()["access_token"]
@@ -59,7 +77,10 @@ def test_logout_revokes_token(*, client: TestClient) -> None:
 
 
 def test_logout_leaves_other_sessions_valid(*, client: TestClient) -> None:
-    """Check that logging out one token leaves other tokens valid."""
+    """Check that logging out one token leaves other tokens valid.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     body = {"email": "two@example.com", "password": "password123"}
     t1 = client.post("/api/auth/register", json=body).json()["access_token"]
@@ -69,7 +90,10 @@ def test_logout_leaves_other_sessions_valid(*, client: TestClient) -> None:
 
 
 def test_revoked_token_rejected_on_projects(*, client: TestClient) -> None:
-    """Check that a revoked token is rejected on protected endpoints beyond /users/me."""
+    """Check that a revoked token is rejected on protected endpoints beyond /users/me.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     token = client.post(
         "/api/auth/register", json={"email": "rev2@example.com", "password": "password123"}
@@ -80,13 +104,19 @@ def test_revoked_token_rejected_on_projects(*, client: TestClient) -> None:
 
 
 def test_logout_requires_auth(*, client: TestClient) -> None:
-    """Check that logout rejects requests without a token."""
+    """Check that logout rejects requests without a token.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     assert client.post("/api/auth/logout").status_code == 401
 
 
 def test_logout_rejects_garbage_token(*, client: TestClient) -> None:
-    """Check that logout answers 401 for a malformed bearer token."""
+    """Check that logout answers 401 for a malformed bearer token.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     r = client.post("/api/auth/logout", headers={"Authorization": "Bearer garbage"})
     assert r.status_code == 401

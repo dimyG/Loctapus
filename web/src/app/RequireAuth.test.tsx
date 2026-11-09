@@ -1,3 +1,7 @@
+/**
+ * Covers RequireAuth's routing for every session status: authenticated,
+ * booting, busy, signed out, and expired-without-token.
+ */
 import { Route, Routes } from "react-router";
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -5,6 +9,7 @@ import { initialRootState } from "./store";
 import { renderWithProviders } from "../test/test-utils";
 import RequireAuth from "./RequireAuth";
 
+/** Renders the guard at /projects inside the routes it redirects between. */
 function renderGuarded(preloadedState = initialRootState()) {
   return renderWithProviders(
     <Routes>

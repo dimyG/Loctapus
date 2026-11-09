@@ -13,8 +13,11 @@ import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import AuthFrame from "../../layouts/AuthFrame";
 import { registerUser, selectUser } from "./authSlice";
 
+/** Prompt shown when any required field is left empty. */
 const REQUIRED_COPY = "All fields are required.";
+/** Prompt shown when the confirmation does not match the password. */
 const MISMATCH_COPY = "Passwords do not match.";
+/** Prompt shown when the register endpoint answers 409. */
 const CONFLICT_COPY = "That email is already registered.";
 
 /** Maps errors to form copy, overriding 409 with the fixed conflict message. */

@@ -1,3 +1,7 @@
+/**
+ * Covers the token storage round trip: save, load, and clear against the
+ * real localStorage.
+ */
 import { beforeEach, describe, expect, it } from "vitest";
 import { clearToken, loadToken, saveToken } from "./tokenStorage";
 

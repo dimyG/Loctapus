@@ -14,7 +14,10 @@ export function loadToken(): string | null {
   return window.localStorage.getItem(TOKEN_KEY);
 }
 
-/** Persists the access token for the next page load. */
+/** Persists the access token for the next page load.
+ *
+ * @param {string} token - Access token issued by login or registration.
+ */
 export function saveToken(token: string): void {
   window.localStorage.setItem(TOKEN_KEY, token);
 }

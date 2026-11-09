@@ -9,6 +9,7 @@ import { sessionCleared, sessionExpired } from "./sessionActions";
 /** Rejections carry the base query error shape so pages can map them to copy. */
 type RejectsApiError = { rejectValue: FetchBaseQueryError };
 
+/** The session user as the API returns it from /users/me. */
 export type AuthUser = { id: string; email: string };
 /**
  * The session lifecycle. "signedout" is distinct from "idle": the auth
@@ -17,7 +18,9 @@ export type AuthUser = { id: string; email: string };
  * re-authenticate. Collapsing them reopens the sign-out race.
  */
 export type AuthStatus = "idle" | "booting" | "busy" | "signedout";
+/** Store shape: the session token, the hydrated user, and the lifecycle status. */
 export type AuthState = { token: string | null; user: AuthUser | null; status: AuthStatus };
+/** Email and password pair posted to the login and register endpoints. */
 export type Credentials = { email: string; password: string };
 
 type TokenResponse = { access_token: string; token_type: string };
@@ -71,7 +74,10 @@ export const bootstrapAuth = createAsyncThunk<AuthUser | null, void, RejectsApiE
   },
 );
 
-/** Logs in, persists the token, and hydrates the user. */
+/** Logs in, persists the token, and hydrates the user.
+ *
+ * @param {Credentials} credentials - Email and password submitted to /auth/login.
+ */
 export const loginUser = createAsyncThunk<AuthUser, Credentials, RejectsApiError>(
   "auth/login",
   async (credentials, context) => {
@@ -97,7 +103,10 @@ export const loginUser = createAsyncThunk<AuthUser, Credentials, RejectsApiError
   },
 );
 
-/** Registers, persists the returned token, and hydrates the user. */
+/** Registers, persists the returned token, and hydrates the user.
+ *
+ * @param {Credentials} credentials - Email and password submitted to /auth/register.
+ */
 export const registerUser = createAsyncThunk<AuthUser, Credentials, RejectsApiError>(
   "auth/register",
   async (credentials, context) => {
@@ -207,22 +216,37 @@ const authSlice = createSlice({
   },
 });
 
+/** Puts a freshly issued token into the store; persisting it to storage is the
+ * issuing thunk's job, not this action's. */
 export const { tokenReceived } = authSlice.actions;
 
 // Selectors take a structural slice key so they work against any state shape
 // that contains auth (the full RootState, or a test-local store).
 type WithAuth = { auth: AuthState };
 
-/** The whole auth slice. */
+/** The whole auth slice.
+ *
+ * @param {WithAuth} state - Store (or test-local state) carrying the auth key.
+ */
 export const selectAuth = (state: WithAuth): AuthState => state.auth;
 
-/** The session lifecycle: idle, booting (token present, user pending), busy, signedout. */
+/** The session lifecycle: idle, booting (token present, user pending), busy, signedout.
+ *
+ * @param {WithAuth} state - Store (or test-local state) carrying the auth key.
+ */
 export const selectAuthStatus = (state: WithAuth): AuthStatus => state.auth.status;
 
-/** The hydrated session user, or null when signed out / still booting. */
+/** The hydrated session user, or null when signed out / still booting.
+ *
+ * @param {WithAuth} state - Store (or test-local state) carrying the auth key.
+ */
 export const selectUser = (state: WithAuth): AuthUser | null => state.auth.user;
 
-/** The session token from the store (never read localStorage directly). */
+/** The session token from the store (never read localStorage directly).
+ *
+ * @param {WithAuth} state - Store (or test-local state) carrying the auth key.
+ */
 export const selectToken = (state: WithAuth): string | null => state.auth.token;
 
+/** The auth reducer to mount under the store's auth key. */
 export default authSlice.reducer;

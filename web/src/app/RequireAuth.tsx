@@ -11,6 +11,8 @@ import { useAppSelector } from "./hooks";
  * landing page, so this can never bounce a sign-out to /login no matter
  * when React commits the navigation. An idle token-less session means the
  * session expired or never existed: that one re-authenticates at /login.
+ *
+ * @param {ReactNode} children - Content rendered only for an authenticated session.
  */
 export default function RequireAuth({ children }: { children: ReactNode }) {
   const status = useAppSelector(selectAuthStatus);

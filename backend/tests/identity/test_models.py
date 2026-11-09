@@ -11,7 +11,11 @@ from app.projects.models import Project, ProjectTeamRole
 
 
 def _make_user(*, db: Session, email: str = "a@example.com") -> tuple[User, Workspace, Team]:
-    """Create a user with a default workspace, team, and membership."""
+    """Create a user with a default workspace, team, and membership.
+
+    :param db: Session the rows are flushed through, left uncommitted.
+    :param email: Address to register the fixture user with.
+    """
 
     user = User(email=email, password_hash="x")
     db.add(user)
@@ -28,14 +32,20 @@ def _make_user(*, db: Session, email: str = "a@example.com") -> tuple[User, Work
 
 
 def test_register_graph_persists(*, db_session: Session) -> None:
-    """Check that the user, workspace, team, and membership rows persist."""
+    """Check that the user, workspace, team, and membership rows persist.
+
+    :param db_session: Transaction-managed session the fixture rows are written through.
+    """
 
     user, ws, team = _make_user(db=db_session)
     assert user.id and ws.owner_user_id == user.id and team.workspace_id == ws.id
 
 
 def test_team_membership_unique(*, db_session: Session) -> None:
-    """Check that a duplicate team membership violates the unique constraint."""
+    """Check that a duplicate team membership violates the unique constraint.
+
+    :param db_session: Transaction-managed session the fixture rows are written through.
+    """
 
     user, ws, team = _make_user(db=db_session)
     db_session.add(TeamMembership(team_id=team.id, user_id=user.id))
@@ -44,7 +54,10 @@ def test_team_membership_unique(*, db_session: Session) -> None:
 
 
 def test_project_team_role_unique_and_role_check(*, db_session: Session) -> None:
-    """Check the role check constraint and the per-team uniqueness of project roles."""
+    """Check the role check constraint and the per-team uniqueness of project roles.
+
+    :param db_session: Transaction-managed session the fixture rows are written through.
+    """
 
     user, ws, team = _make_user(db=db_session)
     project = Project(workspace_id=ws.id, name="p1")
@@ -66,7 +79,10 @@ def test_project_team_role_unique_and_role_check(*, db_session: Session) -> None
 
 
 def test_revoked_token_roundtrip(*, db_session: Session) -> None:
-    """Check that a revoked token row round-trips by jti."""
+    """Check that a revoked token row round-trips by jti.
+
+    :param db_session: Transaction-managed session the token row is written through.
+    """
 
     from app.identity.models import RevokedToken
 
@@ -76,7 +92,10 @@ def test_revoked_token_roundtrip(*, db_session: Session) -> None:
 
 
 def test_timestamps_roundtrip_timezone_aware(*, db_session: Session) -> None:
-    """Check that server and client timestamps come back with timezone info."""
+    """Check that server and client timestamps come back with timezone info.
+
+    :param db_session: Transaction-managed session the rows are written through.
+    """
 
     from app.identity.models import RevokedToken
 
@@ -94,7 +113,10 @@ def test_timestamps_roundtrip_timezone_aware(*, db_session: Session) -> None:
 
 
 def test_relationships_traverse(*, db_session: Session) -> None:
-    """Check that every declared relationship traverses both ways."""
+    """Check that every declared relationship traverses both ways.
+
+    :param db_session: Transaction-managed session the fixture rows are written through.
+    """
 
     user, ws, team = _make_user(db=db_session, email="rel@example.com")
     project = Project(workspace_id=ws.id, name="rel-p")

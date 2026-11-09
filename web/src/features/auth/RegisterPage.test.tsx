@@ -1,3 +1,8 @@
+/**
+ * Covers the registration funnel: required-field and length validation, the
+ * conflict and validation copy, the pending button state, and the redirect
+ * into the latest project's chat.
+ */
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -39,8 +44,10 @@ function renderRegister(preloadedState = initialRootState()) {
   );
 }
 
+/** Field overrides for fillForm; every field defaults to the happy path. */
 type Form = { email?: string; password?: string; confirm?: string };
 
+/** Types the given values into the three registration fields. */
 async function fillForm(
   user: ReturnType<typeof userEvent.setup>,
   { email = "user@example.test", password = "password123", confirm = "password123" }: Form = {},
@@ -50,6 +57,7 @@ async function fillForm(
   await user.type(screen.getByLabelText(/Confirm password/), confirm);
 }
 
+/** Serves successful register responses and returns the captured request list. */
 function trackRegistrations() {
   const requests: unknown[] = [];
   server.use(

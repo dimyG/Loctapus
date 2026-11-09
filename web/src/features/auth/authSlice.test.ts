@@ -1,3 +1,8 @@
+/**
+ * Covers the auth thunks and reducers: token persistence, user hydration,
+ * best-effort revocation, and the signedout-versus-idle distinction the
+ * route guard depends on.
+ */
 import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialRootState, makeStore } from "../../app/store";

@@ -4,14 +4,21 @@ from fastapi.testclient import TestClient
 
 
 def _auth(*, client: TestClient, email: str) -> dict[str, str]:
-    """Register an account and return its bearer headers."""
+    """Register an account and return its bearer headers.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param email: Address to register.
+    """
 
     r = client.post("/api/auth/register", json={"email": email, "password": "password123"})
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
 def test_list_workspaces_and_teams(*, client: TestClient) -> None:
-    """Check that a fresh account lists one default workspace and team."""
+    """Check that a fresh account lists one default workspace and team.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers = _auth(client=client, email="ws@example.com")
     ws = client.get("/api/workspaces", headers=headers).json()
@@ -21,7 +28,10 @@ def test_list_workspaces_and_teams(*, client: TestClient) -> None:
 
 
 def test_workspace_teams_unknown_workspace_404(*, client: TestClient) -> None:
-    """Check that teams in an unknown workspace answer 404."""
+    """Check that teams in an unknown workspace answer 404.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers = _auth(client=client, email="ws2@example.com")
     r = client.get("/api/workspaces/00000000-0000-0000-0000-000000000000/teams", headers=headers)
@@ -30,6 +40,9 @@ def test_workspace_teams_unknown_workspace_404(*, client: TestClient) -> None:
 
 
 def test_workspaces_require_auth(*, client: TestClient) -> None:
-    """Check that the workspace endpoints reject unauthenticated requests."""
+    """Check that the workspace endpoints reject unauthenticated requests.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     assert client.get("/api/workspaces").status_code == 401
