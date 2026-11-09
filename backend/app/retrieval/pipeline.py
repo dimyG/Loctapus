@@ -43,6 +43,10 @@ def fuse_rrf(*, vector: list[StageCandidate], fts: list[StageCandidate], rrf_k: 
     Each leg contributes ``1 / (rrf_k + rank)`` per chunk it returned; ties
     order by descending fused score, then the chunk's best single-leg rank,
     then the ascending chunk id, so the result is always deterministic.
+
+    :param vector: Vector leg's candidates in rank order, first position rank 1.
+    :param fts: Full-text leg's candidates in rank order, first position rank 1.
+    :param rrf_k: RRF constant that dampens each leg's rank contribution.
     """
 
     states: dict[UUID, _Fusion] = {}
@@ -73,6 +77,10 @@ def select_final(
     ``max_chunks_per_document=None`` never skips. The walk may underfill when
     every document reaches its cap before ``top_k`` - a short answer beats a
     repeated-document one.
+
+    :param fused: Candidates in fused order to walk.
+    :param top_k: Maximum number of candidates to return.
+    :param max_chunks_per_document: Per-document cap, or None for no cap.
     """
 
     per_document: dict[UUID, int] = {}

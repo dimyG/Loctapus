@@ -16,7 +16,10 @@ from tests.factories import seed_document_with_chunks, seed_project
 
 
 def _seed_user(*, db: Session) -> User:
-    """Seed one bare user row so the query log's foreign key resolves."""
+    """Seed one bare user row so the query log's foreign key resolves.
+
+    :param db: Transaction-managed session the user row is written through.
+    """
 
     user = User(email=f"{uuid4()}@example.com", password_hash="x")
     db.add(user)
@@ -25,7 +28,10 @@ def _seed_user(*, db: Session) -> User:
 
 
 def test_vector_leg_orders_by_cosine_distance(*, db_session: Session) -> None:
-    """Check the vector leg returns chunks by ascending cosine distance."""
+    """Check that the vector leg returns chunks by ascending cosine distance.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="vector@example.com")
     seeded = seed_document_with_chunks(
@@ -39,7 +45,10 @@ def test_vector_leg_orders_by_cosine_distance(*, db_session: Session) -> None:
 
 
 def test_fts_leg_orders_by_ts_rank(*, db_session: Session) -> None:
-    """Check the fts leg ranks a repeated lexeme above a single one."""
+    """Check that the fts leg ranks a repeated lexeme above a single one.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="fts@example.com")
     seeded = seed_document_with_chunks(
@@ -55,7 +64,10 @@ def test_fts_leg_orders_by_ts_rank(*, db_session: Session) -> None:
 
 
 def test_fts_leg_excludes_null_embeddings(*, db_session: Session) -> None:
-    """Check a document still being embedded surfaces through neither leg."""
+    """Check that a document still being embedded surfaces through neither leg.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     project_id = seed_project(db=db_session, email="null-embed@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["quick fox"], embed=False)
@@ -71,7 +83,11 @@ def test_fts_leg_excludes_null_embeddings(*, db_session: Session) -> None:
 
 
 def test_stopword_only_query_uses_vector_leg_only(*, db_session: Session, settings: Settings) -> None:
-    """Check an all-stopword query degrades to the vector leg and still answers."""
+    """Check that an all-stopword query degrades to the vector leg and still answers.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="stopword@example.com")
     seeded = seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["the the"])
@@ -89,7 +105,11 @@ def test_stopword_only_query_uses_vector_leg_only(*, db_session: Session, settin
 
 
 def test_malformed_websearch_syntax_is_tolerated(*, db_session: Session, settings: Settings) -> None:
-    """Check stray quotes and operators parse instead of raising."""
+    """Check that stray quotes and operators parse instead of raising.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="malformed@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
@@ -105,7 +125,11 @@ def test_malformed_websearch_syntax_is_tolerated(*, db_session: Session, setting
 
 
 def test_legs_are_scoped_to_the_project(*, db_session: Session, settings: Settings) -> None:
-    """Check another project's chunks never surface in either leg."""
+    """Check that another project's chunks never surface in either leg.
+
+    :param db_session: Transaction-managed session the queries run on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_a = seed_project(db=db_session, email="scope-a@example.com")
     project_b = seed_project(db=db_session, email="scope-b@example.com")
@@ -131,7 +155,11 @@ def test_legs_are_scoped_to_the_project(*, db_session: Session, settings: Settin
 
 
 def test_retrieve_applies_max_chunks_per_document(*, db_session: Session, settings: Settings) -> None:
-    """Check the walk skips same-document chunks past the cap and resumes others."""
+    """Check that the walk skips same-document chunks past the cap and resumes others.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="cap@example.com")
     doc_a = seed_document_with_chunks(
@@ -155,7 +183,11 @@ def test_retrieve_applies_max_chunks_per_document(*, db_session: Session, settin
 
 
 def test_retrieve_writes_one_query_log_row(*, db_session: Session, settings: Settings) -> None:
-    """Check one retrieve writes exactly one log row echoing the request and stages."""
+    """Check that one retrieve writes exactly one log row echoing the request and stages.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="log@example.com")
     seed_document_with_chunks(
@@ -196,7 +228,11 @@ def test_retrieve_writes_one_query_log_row(*, db_session: Session, settings: Set
 
 
 def test_retrieve_logs_origin_direct_by_default(*, db_session: Session, settings: Settings) -> None:
-    """Check a plain retrieve records the default origin in the log row."""
+    """Check that a plain retrieve records the default origin in the log row.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="origin-default@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
@@ -217,7 +253,11 @@ def test_retrieve_logs_origin_direct_by_default(*, db_session: Session, settings
 
 
 def test_log_context_merges_into_params(*, db_session: Session, settings: Settings) -> None:
-    """Check the answer round's routing context rides the log row's params."""
+    """Check that the answer round's routing context rides the log row's params.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="log-context@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
@@ -239,7 +279,11 @@ def test_log_context_merges_into_params(*, db_session: Session, settings: Settin
 
 
 def test_retrieved_chunk_carries_document_hash(*, db_session: Session, settings: Settings) -> None:
-    """Check the final rows carry their document's content hash for citations."""
+    """Check that the final rows carry their document's content hash for citations.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="doc-hash@example.com")
     seeded = seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha alpha"])
@@ -256,7 +300,11 @@ def test_retrieved_chunk_carries_document_hash(*, db_session: Session, settings:
 
 
 def test_retrieve_records_explicit_origin(*, db_session: Session, settings: Settings) -> None:
-    """Check an explicit origin passes through to the log row."""
+    """Check that an explicit origin passes through to the log row.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="origin-answer@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
@@ -274,7 +322,11 @@ def test_retrieve_records_explicit_origin(*, db_session: Session, settings: Sett
 
 
 def test_retrieve_enriches_filename_and_source_item(*, db_session: Session, settings: Settings) -> None:
-    """Check the final rows carry their document's item id and filename."""
+    """Check that the final rows carry their document's item id and filename.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="enrich@example.com")
     seeded = seed_document_with_chunks(
@@ -302,7 +354,11 @@ def test_retrieve_enriches_filename_and_source_item(*, db_session: Session, sett
 
 
 def test_retrieve_empty_project_returns_empty_and_logs(*, db_session: Session, settings: Settings) -> None:
-    """Check a project with no indexed chunks answers empty and still logs."""
+    """Check that a project with no indexed chunks answers empty and still logs.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="empty@example.com")
     user = _seed_user(db=db_session)
@@ -319,7 +375,11 @@ def test_retrieve_empty_project_returns_empty_and_logs(*, db_session: Session, s
 
 
 def test_zero_norm_query_degrades_to_fts_only(*, db_session: Session, settings: Settings) -> None:
-    """Check a zero-norm query vector skips the vector leg and still serves via fts."""
+    """Check that a zero-norm query vector skips the vector leg and still serves via fts.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="zero-query@example.com")
     seeded = seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["w25 w35 note"])
@@ -339,7 +399,11 @@ def test_zero_norm_query_degrades_to_fts_only(*, db_session: Session, settings: 
 
 
 def test_zero_norm_embedding_chunk_is_excluded(*, db_session: Session, settings: Settings) -> None:
-    """Check a stored zero-norm chunk embedding never surfaces as a NaN score."""
+    """Check that a stored zero-norm chunk embedding never surfaces as a NaN score.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="zero-chunk@example.com")
     seeded = seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["w25 w35"])
@@ -358,7 +422,11 @@ def test_zero_norm_embedding_chunk_is_excluded(*, db_session: Session, settings:
 
 
 def test_retrieve_result_rows_are_retrieved_chunks(*, db_session: Session, settings: Settings) -> None:
-    """Check the service returns domain rows, not response schemas."""
+    """Check that the service returns domain rows, not response schemas.
+
+    :param db_session: Transaction-managed session the query runs on.
+    :param settings: Test settings selecting the stub embeddings.
+    """
 
     project_id = seed_project(db=db_session, email="rows@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])

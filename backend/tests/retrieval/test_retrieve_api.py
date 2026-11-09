@@ -13,7 +13,11 @@ from tests.helpers import _auth, _default_team_id
 
 
 def _create_project(*, client: TestClient, email: str) -> tuple[dict[str, str], str]:
-    """Register one account and create one named project; return its auth headers and id."""
+    """Register one account and create one named project; return its auth headers and id.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param email: Address to register the project owner with.
+    """
 
     headers = _auth(client=client, email=email)
     team_id = _default_team_id(client=client, headers=headers)
@@ -24,14 +28,20 @@ def _create_project(*, client: TestClient, email: str) -> tuple[dict[str, str], 
 
 
 def test_retrieve_requires_auth(*, client: TestClient) -> None:
-    """Check the endpoint answers 401 without a bearer token."""
+    """Check that the endpoint answers 401 without a bearer token.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     response = client.post(f"/api/projects/{uuid4()}/retrieve", json={"query": "alpha"})
     assert response.status_code == 401
 
 
 def test_retrieve_404_for_invisible_project(*, client: TestClient) -> None:
-    """Check a non-member gets 404 for another user's private project."""
+    """Check that a non-member gets 404 for another user's private project.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     _headers, project_id = _create_project(client=client, email="alice-404@example.com")
     bob_headers = _auth(client=client, email="bob-404@example.com")
@@ -43,7 +53,11 @@ def test_retrieve_404_for_invisible_project(*, client: TestClient) -> None:
 
 
 def test_retrieve_works_for_public_project_non_member(*, client: TestClient, db_session: Session) -> None:
-    """Check a non-member can query a project the owner made public."""
+    """Check that a non-member can query a project the owner made public.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     alice_headers, project_id = _create_project(client=client, email="alice-pub@example.com")
     seed_document_with_chunks(
@@ -61,6 +75,7 @@ def test_retrieve_works_for_public_project_non_member(*, client: TestClient, db_
 
 @pytest.mark.parametrize(
     "body",
+    # Each case exercises one boundary: the shared query contract, then the numeric bounds.
     [
         {"query": "   "},
         {"query": "x" * 2001},
@@ -71,7 +86,11 @@ def test_retrieve_works_for_public_project_non_member(*, client: TestClient, db_
     ],
 )
 def test_retrieve_validation_errors(*, client: TestClient, body: dict[str, object]) -> None:
-    """Check malformed bodies answer 422."""
+    """Check that malformed bodies answer 422.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param body: One malformed request body from the parametrize list.
+    """
 
     headers, project_id = _create_project(client=client, email=f"val-{uuid4()}@example.com")
     response = client.post(f"/api/projects/{project_id}/retrieve", json=body, headers=headers)
@@ -79,7 +98,11 @@ def test_retrieve_validation_errors(*, client: TestClient, body: dict[str, objec
 
 
 def test_retrieve_strips_and_matches(*, client: TestClient, db_session: Session) -> None:
-    """Check a padded query strips and still matches its chunk."""
+    """Check that a padded query strips and still matches its chunk.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="strip@example.com")
     seed_document_with_chunks(db=db_session, project_id=UUID(project_id), chunk_texts=["alpha alpha"])
@@ -91,7 +114,11 @@ def test_retrieve_strips_and_matches(*, client: TestClient, db_session: Session)
 
 
 def test_rerank_true_accepted_and_ignored(*, client: TestClient, db_session: Session) -> None:
-    """Check the rerank flag is accepted and changes nothing until the S6 reranker."""
+    """Check that the rerank flag is accepted and changes nothing until the S7 reranker.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="rerank@example.com")
     seed_document_with_chunks(
@@ -109,7 +136,11 @@ def test_rerank_true_accepted_and_ignored(*, client: TestClient, db_session: Ses
 
 
 def test_retrieve_empty_project_returns_empty_list(*, client: TestClient, db_session: Session) -> None:
-    """Check a project with no indexed chunks answers an empty list and still logs."""
+    """Check that a project with no indexed chunks answers an empty list and still logs.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the log row is read through.
+    """
 
     headers, project_id = _create_project(client=client, email="empty-api@example.com")
     response = client.post(f"/api/projects/{project_id}/retrieve", json={"query": "alpha"}, headers=headers)
@@ -120,10 +151,15 @@ def test_retrieve_empty_project_returns_empty_list(*, client: TestClient, db_ses
 
 
 def test_error_paths_log_nothing(*, client: TestClient, db_session: Session) -> None:
-    """Check the 401, 404, and 422 paths never write a query log row."""
+    """Check that the 401, 404, and 422 paths never write a query log row.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the log query runs on.
+    """
 
     alice_headers, project_id = _create_project(client=client, email="alice-logs@example.com")
     stranger_headers = _auth(client=client, email="stranger-logs@example.com")
+    # The three calls walk the 401, 404, and 422 paths in order.
     client.post(f"/api/projects/{project_id}/retrieve", json={"query": "alpha"})
     client.post(f"/api/projects/{project_id}/retrieve", json={"query": "alpha"}, headers=stranger_headers)
     client.post(f"/api/projects/{project_id}/retrieve", json={"query": "   "}, headers=alice_headers)
@@ -131,7 +167,11 @@ def test_error_paths_log_nothing(*, client: TestClient, db_session: Session) -> 
 
 
 def test_retrieve_response_shape(*, client: TestClient, db_session: Session) -> None:
-    """Check the response items carry exactly the served fields."""
+    """Check that the response items carry exactly the served fields.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="shape@example.com")
     seeded = seed_document_with_chunks(
@@ -172,7 +212,10 @@ def test_retrieve_response_shape(*, client: TestClient, db_session: Session) -> 
 
 
 def test_length_limit_applies_after_strip(*, client: TestClient) -> None:
-    """Check the character cap counts the stripped query, not the padded one."""
+    """Check that the character cap counts the stripped query, not the padded one.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    """
 
     headers, project_id = _create_project(client=client, email="strip-len@example.com")
     response = client.post(
@@ -184,12 +227,17 @@ def test_length_limit_applies_after_strip(*, client: TestClient) -> None:
 
 
 def test_top_k_defaults_and_limits(*, client: TestClient, db_session: Session) -> None:
-    """Check the default top_k caps the answer at ten of twelve chunks."""
+    """Check that the default top_k caps the answer at ten of twelve chunks.
+
+    :param client: TestClient wired to the app with the rollback-managed session.
+    :param db_session: Transaction-managed session the seed rows are written through.
+    """
 
     headers, project_id = _create_project(client=client, email="topk@example.com")
     seed_document_with_chunks(
         db=db_session,
         project_id=UUID(project_id),
+        # Twelve chunks beat the default top_k of ten, so the cap must be doing the work.
         chunk_texts=[f"alpha {i}" for i in range(12)],
     )
     response = client.post(f"/api/projects/{project_id}/retrieve", json={"query": "alpha"}, headers=headers)

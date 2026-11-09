@@ -15,12 +15,20 @@ class _MismatchedProvider:
 
 
 def test_lifespan_runs_startup_checks(*, engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check the lifespan runs the dimension guard once at startup."""
+    """Check that the lifespan runs the dimension guard once at startup.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    :param monkeypatch: Redirects ``app.main.SessionLocal`` and installs the recording guard.
+    """
 
     calls: list[object] = []
 
     def _record_call(*, db: object, embedding_provider: object) -> None:
-        """Record one startup-guard call so this test can assert it ran."""
+        """Record one startup-guard call so this test can assert it ran.
+
+        :param db: Session the guard would have run on.
+        :param embedding_provider: Provider whose dimension the guard would check.
+        """
 
         calls.append(db)
 
@@ -32,7 +40,11 @@ def test_lifespan_runs_startup_checks(*, engine: Engine, monkeypatch: pytest.Mon
 
 
 def test_guard_refuses_mismatched_dimension(*, engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Check a provider dimension that disagrees with the catalog refuses startup."""
+    """Check that a provider dimension that disagrees with the catalog refuses startup.
+
+    :param engine: Session-scoped engine bound to the migration-built test database.
+    :param monkeypatch: Redirects ``app.main.SessionLocal`` and injects the mismatched provider.
+    """
 
     monkeypatch.setattr("app.main.SessionLocal", sessionmaker(bind=engine, expire_on_commit=False))
     monkeypatch.setattr("app.main.get_embedding_provider", _mismatched_provider)
@@ -41,6 +53,9 @@ def test_guard_refuses_mismatched_dimension(*, engine: Engine, monkeypatch: pyte
 
 
 def _mismatched_provider(*, settings: object) -> _MismatchedProvider:
-    """Return the mismatched provider the refusal test injects."""
+    """Return the mismatched provider the refusal test injects.
+
+    :param settings: Settings the factory would dispatch on; unused by this fake.
+    """
 
     return _MismatchedProvider()

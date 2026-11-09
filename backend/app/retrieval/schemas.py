@@ -31,7 +31,7 @@ class RetrieveIn(BaseModel):
 
     query: QueryText
     top_k: int = Field(default=10, ge=1, le=50)
-    # Accepted and ignored until the S6 reranker lands; logged so history stays honest.
+    # Accepted and ignored until the S7 reranker lands; logged so history stays honest.
     rerank: bool = False
     # The S5 answer round resolves an omitted cap against answer_max_chunks_per_document;
     # a direct /retrieve request stays unbounded by default.

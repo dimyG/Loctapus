@@ -46,6 +46,11 @@ def _search_vector_leg(
 
     NaN distances come from zero-norm chunk embeddings: cosine distance is
     undefined there, so those rows drop instead of ranking or logging as NaN.
+
+    :param db: Session the vector search runs on.
+    :param project_id: Project whose chunks are searched.
+    :param query_vector: Query embedding on the chunks' dimension.
+    :param limit: Maximum number of candidates to return.
     """
 
     distance = Chunk.embedding.cosine_distance(query_vector)
@@ -64,7 +69,13 @@ def _search_vector_leg(
 
 
 def _search_fts_leg(*, db: Session, project_id: UUID, query: str, limit: int) -> list[StageCandidate]:
-    """Return the project's indexed chunks ranked by ts_rank for the websearch query."""
+    """Return the project's indexed chunks ranked by ts_rank for the websearch query.
+
+    :param db: Session the full-text search runs on.
+    :param project_id: Project whose chunks are searched.
+    :param query: Query text parsed as a Postgres websearch query.
+    :param limit: Maximum number of candidates to return.
+    """
 
     tsquery = func.websearch_to_tsquery("english", query)
     rank = func.ts_rank(Chunk.search_vector, tsquery)
@@ -86,7 +97,11 @@ def _search_fts_leg(*, db: Session, project_id: UUID, query: str, limit: int) ->
 
 
 def _enrich(*, db: Session, rows: list[FusedCandidate]) -> list[RetrievedChunk]:
-    """Join the final chunks with their document's source item for serving fields."""
+    """Join the final chunks with their document's source item for serving fields.
+
+    :param db: Session the enrichment join runs on.
+    :param rows: Selected candidates in fused order.
+    """
 
     final_ids = [row.chunk_id for row in rows]
     joined = (
@@ -136,6 +151,19 @@ def _log_query(
 
     ``log_context`` merges string keys into ``params`` top level so the answer
     round can label its routing without this module knowing answer concepts.
+
+    :param db: Session the log row is written and committed on.
+    :param project_id: Project the query ran against.
+    :param user_id: User who asked the query.
+    :param params: Request echo carried into the log row.
+    :param settings: Settings whose snapshot is logged with the request.
+    :param origin: Calling surface label recorded on the log row.
+    :param latency_ms: Embed-through-selection latency in milliseconds.
+    :param vector: Vector leg candidates in their rank order.
+    :param fts: Full-text leg candidates in their rank order.
+    :param fused: Fused candidates in their fused order.
+    :param final: Candidates selected by the diversity walk.
+    :param log_context: Extra string keys merged into ``params``, or None.
     """
 
     log = RetrieveLog(
@@ -169,7 +197,10 @@ def _log_query(
 
 
 def _is_zero_vector(*, vector: list[float]) -> bool:
-    """Return True when every component is zero, so cosine distance is undefined."""
+    """Return True when every component is zero, so cosine distance is undefined.
+
+    :param vector: Query embedding to check.
+    """
 
     return not any(vector)
 
@@ -190,6 +221,14 @@ def retrieve(
     string keys to that row's ``params``; the answer round labels its routing
     with it. An all-stopword query degrades to the vector leg alone; a project
     with no indexed chunks returns an empty list and still writes its log row.
+
+    :param db: Session the searches and the log row run on.
+    :param project_id: Project whose chunks are searched.
+    :param user_id: User who asked the query.
+    :param params: Request body carrying the query, top_k, and cap.
+    :param settings: Settings selecting the embedding provider and the fusion knobs.
+    :param origin: Calling surface label recorded on the log row.
+    :param log_context: Extra string keys merged into the log row's ``params``, or None.
     """
 
     started = time.perf_counter()

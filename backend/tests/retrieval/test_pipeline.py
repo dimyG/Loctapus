@@ -10,19 +10,25 @@ RRF_K = 60
 
 
 def _stage(*, document_id: UUID) -> StageCandidate:
-    """Return one leg candidate with a fresh chunk id and an ignored raw score."""
+    """Return one leg candidate with a fresh chunk id and an ignored raw score.
+
+    :param document_id: Document the candidate belongs to.
+    """
 
     return StageCandidate(chunk_id=uuid4(), document_id=document_id, score=0.5)
 
 
 def _fused(*, document_id: UUID) -> FusedCandidate:
-    """Return one fused candidate row for the walk tests."""
+    """Return one fused candidate row for the walk tests.
+
+    :param document_id: Document the candidate belongs to.
+    """
 
     return FusedCandidate(chunk_id=uuid4(), document_id=document_id, score=1.0)
 
 
 def test_fuse_sums_both_legs() -> None:
-    """Check a chunk seen by both legs scores the sum of both rank contributions."""
+    """Check that a chunk seen by both legs scores the sum of both rank contributions."""
 
     doc = uuid4()
     shared_chunk = uuid4()
@@ -42,7 +48,7 @@ def test_fuse_sums_both_legs() -> None:
 
 
 def test_fuse_uses_one_based_ranks() -> None:
-    """Check a leg's first position contributes 1/(rrf_k+1), not 1/rrf_k."""
+    """Check that a leg's first position contributes 1/(rrf_k+1), not 1/rrf_k."""
 
     chunk = _stage(document_id=uuid4())
     fused = fuse_rrf(vector=[chunk], fts=[], rrf_k=RRF_K)
@@ -51,7 +57,7 @@ def test_fuse_uses_one_based_ranks() -> None:
 
 
 def test_fuse_orders_by_score_then_best_rank_then_id() -> None:
-    """Check fused ties fall through to the ascending chunk id."""
+    """Check that fused ties fall through to the ascending chunk id."""
 
     low = UUID(int=10)
     high = UUID(int=20)
@@ -66,7 +72,7 @@ def test_fuse_orders_by_score_then_best_rank_then_id() -> None:
 
 
 def test_fuse_orders_equal_scores_by_best_rank() -> None:
-    """Check equal fused scores fall back to the best single-leg rank before the id."""
+    """Check that equal fused scores fall back to the best single-leg rank before the id."""
 
     # Ranks (3, 24) and (12, 12) fuse to bit-identical 1/36, so only best_rank
     # separates the two chunks; the larger id must not win the tie.
@@ -85,7 +91,7 @@ def test_fuse_orders_equal_scores_by_best_rank() -> None:
 
 
 def test_fuse_handles_empty_leg() -> None:
-    """Check one empty leg still fuses the other leg's candidates in rank order."""
+    """Check that one empty leg still fuses the other leg's candidates in rank order."""
 
     first = _stage(document_id=uuid4())
     second = _stage(document_id=uuid4())
@@ -94,7 +100,7 @@ def test_fuse_handles_empty_leg() -> None:
 
 
 def test_select_final_preserves_fused_order_and_truncates() -> None:
-    """Check the walk keeps fused order and stops at top_k."""
+    """Check that the walk keeps fused order and stops at top_k."""
 
     rows = [_fused(document_id=uuid4()) for _ in range(3)]
     selected = select_final(fused=rows, top_k=2, max_chunks_per_document=None)
@@ -102,7 +108,7 @@ def test_select_final_preserves_fused_order_and_truncates() -> None:
 
 
 def test_select_final_caps_per_document() -> None:
-    """Check the walk skips past-cap documents and resumes uncapped ones."""
+    """Check that the walk skips past-cap documents and resumes uncapped ones."""
 
     doc_a = uuid4()
     doc_b = uuid4()
@@ -121,7 +127,7 @@ def test_select_final_caps_per_document() -> None:
 
 
 def test_select_final_null_cap_never_skips() -> None:
-    """Check cap None keeps the fused top_k head under any document skew."""
+    """Check that cap None keeps the fused top_k head under any document skew."""
 
     doc_a = uuid4()
     rows = [
@@ -135,7 +141,7 @@ def test_select_final_null_cap_never_skips() -> None:
 
 
 def test_select_final_underfills_short_pool() -> None:
-    """Check a pool smaller than top_k returns every candidate, not an error."""
+    """Check that a pool smaller than top_k returns every candidate, not an error."""
 
     rows = [_fused(document_id=uuid4()), _fused(document_id=uuid4())]
     selected = select_final(fused=rows, top_k=10, max_chunks_per_document=1)

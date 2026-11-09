@@ -17,7 +17,10 @@ router = APIRouter()
 
 
 def _to_out(*, chunk: RetrievedChunk) -> RetrievedChunkOut:
-    """Map one retrieved chunk into its response body."""
+    """Map one retrieved chunk into its response body.
+
+    :param chunk: Domain row carrying the fields the response serves.
+    """
 
     return RetrievedChunkOut(
         id=chunk.id,
@@ -41,7 +44,14 @@ def retrieve_chunks(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> list[RetrievedChunkOut]:
-    """Return fused, diversity-selected grounded chunks for one query."""
+    """Return fused, diversity-selected grounded chunks for one query.
+
+    :param project_id: Project whose indexed chunks are searched.
+    :param body: Request body carrying the query, top_k, and cap.
+    :param user: Authenticated caller; the log row's user.
+    :param db: Session the retrieval runs on.
+    :param settings: Settings selecting the embedding provider and the fusion knobs.
+    """
 
     project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
     if project is None:
