@@ -1,7 +1,9 @@
 """Tests for the answer service, against the real Postgres and the stub LLM."""
 
+import threading
 from uuid import UUID, uuid4
 
+import anyio
 import pytest
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -37,7 +39,7 @@ def _seed_user(*, db: Session) -> User:
     return user
 
 
-def _answer(
+async def _answer(
     *,
     db: Session,
     provider: LLMProvider | None = None,
@@ -56,7 +58,7 @@ def _answer(
     :param settings: Test settings selecting the stub LLM provider.
     """
 
-    result = generate_answer(
+    result = await generate_answer(
         db=db,
         provider=provider or StubLLMProvider(),
         project_id=project_id,
@@ -68,7 +70,8 @@ def _answer(
     return result
 
 
-def test_answer_chunks_equal_retrieval_final_chunks(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_answer_chunks_equal_retrieval_final_chunks(*, db_session: Session, settings: Settings) -> None:
     """Check that the answer grounds in exactly the chunks the answer-origin retrieve returns.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -86,7 +89,7 @@ def test_answer_chunks_equal_retrieval_final_chunks(*, db_session: Session, sett
         settings=settings,
         origin="answer",
     )
-    result = _answer(
+    result = await _answer(
         db=db_session,
         project_id=project_id,
         user_id=user.id,
@@ -97,7 +100,8 @@ def test_answer_chunks_equal_retrieval_final_chunks(*, db_session: Session, sett
     assert [chunk.id for chunk in result.chunks] == [chunk.id for chunk in expected]
 
 
-def test_empty_index_returns_canned_answer_without_llm_call(
+@pytest.mark.anyio
+async def test_empty_index_returns_canned_answer_without_llm_call(
     *, db_session: Session, settings: Settings
 ) -> None:
     """Check that an empty index answers from the canned row and never calls the LLM.
@@ -109,7 +113,7 @@ def test_empty_index_returns_canned_answer_without_llm_call(
     project_id = seed_project(db=db_session, email="answer-empty@example.com")
     user = _seed_user(db=db_session)
     provider = RecordingLLMProvider(answer="never served")
-    result = _answer(
+    result = await _answer(
         db=db_session,
         provider=provider,
         project_id=project_id,
@@ -122,7 +126,8 @@ def test_empty_index_returns_canned_answer_without_llm_call(
     assert provider.calls == []
 
 
-def test_answer_logs_origin_answer(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_answer_logs_origin_answer(*, db_session: Session, settings: Settings) -> None:
     """Check that the answer round labels its query log row with the answer origin.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -132,7 +137,7 @@ def test_answer_logs_origin_answer(*, db_session: Session, settings: Settings) -
     project_id = seed_project(db=db_session, email="answer-origin@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
     user = _seed_user(db=db_session)
-    generate_answer(
+    await generate_answer(
         db=db_session,
         provider=StubLLMProvider(),
         project_id=project_id,
@@ -144,7 +149,8 @@ def test_answer_logs_origin_answer(*, db_session: Session, settings: Settings) -
     assert log.params["origin"] == "answer"
 
 
-def test_request_overrides_beat_settings(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_request_overrides_beat_settings(*, db_session: Session, settings: Settings) -> None:
     """Check that a request top_k override beats the settings default.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -156,7 +162,7 @@ def test_request_overrides_beat_settings(*, db_session: Session, settings: Setti
         db=db_session, project_id=project_id, chunk_texts=[f"alpha {i}" for i in range(12)]
     )
     user = _seed_user(db=db_session)
-    result = _answer(
+    result = await _answer(
         db=db_session,
         project_id=project_id,
         user_id=user.id,
@@ -167,7 +173,8 @@ def test_request_overrides_beat_settings(*, db_session: Session, settings: Setti
     assert result.text == STUB_ANSWER
 
 
-def test_settings_defaults_apply_when_request_omits(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_settings_defaults_apply_when_request_omits(*, db_session: Session, settings: Settings) -> None:
     """Check that omitted request overrides resolve against the answer settings defaults.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -183,7 +190,7 @@ def test_settings_defaults_apply_when_request_omits(*, db_session: Session, sett
             filename=f"defaults-{doc}.pdf",
         )
     user = _seed_user(db=db_session)
-    spread = _answer(
+    spread = await _answer(
         db=db_session,
         project_id=spread_project,
         user_id=user.id,
@@ -200,7 +207,7 @@ def test_settings_defaults_apply_when_request_omits(*, db_session: Session, sett
         chunk_texts=[f"alpha {i}" for i in range(5)],
         filename="capped.pdf",
     )
-    capped = _answer(
+    capped = await _answer(
         db=db_session,
         project_id=capped_project,
         user_id=user.id,
@@ -211,7 +218,8 @@ def test_settings_defaults_apply_when_request_omits(*, db_session: Session, sett
     assert len(capped.chunks) == 3
 
 
-def test_settings_answer_context_chunks_caps_when_request_omits(*, db_session: Session) -> None:
+@pytest.mark.anyio
+async def test_settings_answer_context_chunks_caps_when_request_omits(*, db_session: Session) -> None:
     """Check that a non-default answer_context_chunks setting caps an omitted request top_k.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -226,7 +234,7 @@ def test_settings_answer_context_chunks_caps_when_request_omits(*, db_session: S
             filename=f"setting-source-{doc}.pdf",
         )
     user = _seed_user(db=db_session)
-    result = _answer(
+    result = await _answer(
         db=db_session,
         project_id=project_id,
         user_id=user.id,
@@ -238,7 +246,8 @@ def test_settings_answer_context_chunks_caps_when_request_omits(*, db_session: S
     assert result.text == STUB_ANSWER
 
 
-def test_retrieve_route_answers_from_fresh_chunks(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_retrieve_route_answers_from_fresh_chunks(*, db_session: Session, settings: Settings) -> None:
     """Check that a retrieve turn rewrites the query, answers grounded, and persists snapshots.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -254,7 +263,7 @@ def test_retrieve_route_answers_from_fresh_chunks(*, db_session: Session, settin
         answer="grounded [1]",
         route_response=RouteDecision(route="retrieve", rewritten_query="alpha standalone"),
     )
-    result = _answer(
+    result = await _answer(
         db=db_session,
         provider=provider,
         project_id=project_id,
@@ -296,7 +305,8 @@ def test_retrieve_route_answers_from_fresh_chunks(*, db_session: Session, settin
     assert snapshot.document_content_hash
 
 
-def test_direct_route_skips_retrieval_and_logs(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_direct_route_skips_retrieval_and_logs(*, db_session: Session, settings: Settings) -> None:
     """Check that a direct turn answers from history alone with no retrieval and no log row.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -310,7 +320,7 @@ def test_direct_route_skips_retrieval_and_logs(*, db_session: Session, settings:
         answer="from history",
         route_response=RouteDecision(route="direct", rewritten_query=None),
     )
-    result = _answer(
+    result = await _answer(
         db=db_session,
         provider=provider,
         project_id=project_id,
@@ -331,7 +341,8 @@ def test_direct_route_skips_retrieval_and_logs(*, db_session: Session, settings:
     assert assistant.route == "direct"
 
 
-def test_reuse_route_gathers_conversation_snapshots(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_reuse_route_gathers_conversation_snapshots(*, db_session: Session, settings: Settings) -> None:
     """Check that a reuse turn re-uses the conversation's earlier evidence without retrieval.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -364,7 +375,7 @@ def test_reuse_route_gathers_conversation_snapshots(*, db_session: Session, sett
         answer="reused [1]",
         route_response=RouteDecision(route="reuse", rewritten_query=None),
     )
-    result = _answer(
+    result = await _answer(
         db=db_session,
         provider=provider,
         project_id=project_id,
@@ -391,7 +402,10 @@ def test_reuse_route_gathers_conversation_snapshots(*, db_session: Session, sett
     assert "cached passage" in final.content
 
 
-def test_reuse_with_zero_snapshots_falls_back_to_retrieve(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_reuse_with_zero_snapshots_falls_back_to_retrieve(
+    *, db_session: Session, settings: Settings
+) -> None:
     """Check that a reuse turn with nothing gathered degrades to retrieval with the raw question.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -407,7 +421,7 @@ def test_reuse_with_zero_snapshots_falls_back_to_retrieve(*, db_session: Session
         answer="fallback grounded [1]",
         route_response=RouteDecision(route="reuse", rewritten_query=None),
     )
-    result = _answer(
+    result = await _answer(
         db=db_session,
         provider=provider,
         project_id=project_id,
@@ -423,7 +437,8 @@ def test_reuse_with_zero_snapshots_falls_back_to_retrieve(*, db_session: Session
     assert result.chunks
 
 
-def test_router_error_falls_back_to_retrieve_raw(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_router_error_falls_back_to_retrieve_raw(*, db_session: Session, settings: Settings) -> None:
     """Check that a failed router call retrieves the raw question and logs the fallback (Focus 3).
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -436,7 +451,7 @@ def test_router_error_falls_back_to_retrieve_raw(*, db_session: Session, setting
     )
     user = _seed_user(db=db_session)
     provider = RecordingLLMProvider(answer="fallback answer [1]", route_error=True)
-    result = _answer(
+    result = await _answer(
         db=db_session,
         provider=provider,
         project_id=project_id,
@@ -453,7 +468,8 @@ def test_router_error_falls_back_to_retrieve_raw(*, db_session: Session, setting
     assert result.route == "retrieve"
 
 
-def test_failed_answer_call_persists_nothing(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_failed_answer_call_persists_nothing(*, db_session: Session, settings: Settings) -> None:
     """Check that a failed generate leaves no conversation, not even an empty one.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -464,7 +480,7 @@ def test_failed_answer_call_persists_nothing(*, db_session: Session, settings: S
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
     user = _seed_user(db=db_session)
     with pytest.raises(LLMError):
-        generate_answer(
+        await generate_answer(
             db=db_session,
             provider=RaisingLLMProvider(),
             project_id=project_id,
@@ -476,7 +492,8 @@ def test_failed_answer_call_persists_nothing(*, db_session: Session, settings: S
     assert db_session.scalars(select(ConversationMessage)).all() == []
 
 
-def test_conversation_id_null_resolves_latest(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_conversation_id_null_resolves_latest(*, db_session: Session, settings: Settings) -> None:
     """Check that a null conversation_id appends to the caller's latest conversation.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -486,7 +503,7 @@ def test_conversation_id_null_resolves_latest(*, db_session: Session, settings: 
     project_id = seed_project(db=db_session, email="s6-latest@example.com")
     user = _seed_user(db=db_session)
     created = create_conversation(db=db_session, project_id=project_id, user_id=user.id)
-    result = _answer(
+    result = await _answer(
         db=db_session,
         project_id=project_id,
         user_id=user.id,
@@ -501,7 +518,8 @@ def test_conversation_id_null_resolves_latest(*, db_session: Session, settings: 
     assert count == 1
 
 
-def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: Settings) -> None:
     """Check that another user's conversation id resolves to None for the 404.
 
     :param db_session: Transaction-managed session the seed rows are written through.
@@ -512,7 +530,7 @@ def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: 
     owner = _seed_user(db=db_session)
     stranger = _seed_user(db=db_session)
     created = create_conversation(db=db_session, project_id=project_id, user_id=owner.id)
-    result = generate_answer(
+    result = await generate_answer(
         db=db_session,
         provider=StubLLMProvider(),
         project_id=project_id,
@@ -523,7 +541,8 @@ def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: 
     assert result is None
 
 
-def test_llm_calls_run_with_no_open_transaction(*, db_session: Session, settings: Settings) -> None:
+@pytest.mark.anyio
+async def test_llm_calls_run_with_no_open_transaction(*, db_session: Session, settings: Settings) -> None:
     """Check that no DB transaction stays open on the session across the router and answer calls.
 
     The history and REUSE reads commit before the LLM calls on purpose (spec
@@ -561,7 +580,7 @@ def test_llm_calls_run_with_no_open_transaction(*, db_session: Session, settings
     class TxnRecordingLLMProvider:
         """Provider that records the session's transaction state during each call."""
 
-        def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
+        async def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
             """Record the transaction state, then route the turn to reuse.
 
             :param system: System prompt the router call carries.
@@ -571,7 +590,7 @@ def test_llm_calls_run_with_no_open_transaction(*, db_session: Session, settings
             recorded["route"].append(db_session.in_transaction())
             return RouteDecision(route="reuse", rewritten_query=None)
 
-        def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
+        async def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
             """Record the transaction state, then answer.
 
             :param system: System prompt the answer call carries.
@@ -586,7 +605,7 @@ def test_llm_calls_run_with_no_open_transaction(*, db_session: Session, settings
 
             del self
 
-    _answer(
+    await _answer(
         db=db_session,
         provider=TxnRecordingLLMProvider(),
         project_id=project_id,
@@ -597,7 +616,93 @@ def test_llm_calls_run_with_no_open_transaction(*, db_session: Session, settings
     assert recorded == {"route": [False], "generate": [False]}
 
 
-def test_reuse_answers_from_snapshots_after_chunk_replacement(
+@pytest.mark.anyio
+async def test_cancellation_never_interrupts_the_append_commit(
+    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Check that a request cancelled during the append still commits the whole turn.
+
+    anyio's default lets a running thread step finish, so a cancelled request
+    persists its turn rather than abandoning the commit halfway.
+
+    :param db_session: Transaction-managed session the seed rows are written through.
+    :param settings: Test settings selecting the stub embeddings and LLM.
+    :param monkeypatch: Fixture that blocks the append until the test releases it.
+    """
+
+    project_id = seed_project(db=db_session, email="cancel-append@example.com")
+    user = _seed_user(db=db_session)
+    started = threading.Event()
+    release = threading.Event()
+    real_append_turn = append_turn
+
+    def blocking_append_turn(
+        *,
+        db: Session,
+        conversation: Conversation,
+        question: str,
+        answer: str,
+        route: str,
+        snapshots: list[SnapshotIn],
+    ) -> None:
+        """Signal the test that the append started, then wait before committing.
+
+        :param db: Session the real append commits through.
+        :param conversation: Conversation the turn is appended to.
+        :param question: User question being persisted.
+        :param answer: Assistant answer being persisted.
+        :param route: Route the turn took.
+        :param snapshots: Evidence snapshot rows the turn cites.
+        """
+
+        started.set()
+        release.wait(5)
+        real_append_turn(
+            db=db,
+            conversation=conversation,
+            question=question,
+            answer=answer,
+            route=route,
+            snapshots=snapshots,
+        )
+
+    monkeypatch.setattr("app.answers.service.append_turn", blocking_append_turn)
+
+    async def run_answer(**kwargs: object) -> None:
+        """Run one answer round inside the task group the test cancels.
+
+        :param kwargs: Unused; start_soon passes none.
+        """
+
+        del kwargs
+
+        await _answer(
+            db=db_session,
+            provider=RecordingLLMProvider(
+                answer="kept [1]", route_response=RouteDecision(route="direct", rewritten_query=None)
+            ),
+            project_id=project_id,
+            user_id=user.id,
+            params=AnswerIn(query="hello"),
+            settings=settings,
+        )
+
+    async with anyio.create_task_group() as group:
+        group.start_soon(run_answer)
+        await anyio.to_thread.run_sync(started.wait)
+        group.cancel_scope.cancel()
+        release.set()
+    count = db_session.scalar(
+        select(func.count())
+        .select_from(ConversationMessage)
+        .join(Conversation)
+        .where(Conversation.user_id == user.id)
+    )
+    assert count == 2
+
+
+@pytest.mark.anyio
+async def test_reuse_answers_from_snapshots_after_chunk_replacement(
     *, db_session: Session, settings: Settings
 ) -> None:
     """Check that REUSE answers from the inline snapshot once the cited chunk row is gone (Focus 5).
@@ -637,7 +742,7 @@ def test_reuse_answers_from_snapshots_after_chunk_replacement(
         answer="stale but readable [1]",
         route_response=RouteDecision(route="reuse", rewritten_query=None),
     )
-    result = _answer(
+    result = await _answer(
         db=db_session,
         provider=provider,
         project_id=project_id,

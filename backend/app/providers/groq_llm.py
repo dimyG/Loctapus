@@ -41,9 +41,9 @@ class GroqLLMProvider:
         max_tokens: int,
         route_max_tokens: int,
         route_timeout_seconds: float,
-        transport: httpx.BaseTransport | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        """Store the endpoint config and build one shared httpx client.
+        """Store the endpoint config and build one shared async httpx client.
 
         One client serves every generate and route call, and the application
         lifespan closes it at shutdown, so connections pool for the whole
@@ -64,14 +64,16 @@ class GroqLLMProvider:
         self._timeout_seconds = timeout_seconds
         self._route_max_tokens = route_max_tokens
         self._route_timeout_seconds = route_timeout_seconds
-        self._client = httpx.Client(
+        self._client = httpx.AsyncClient(
             base_url=base_url,
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=timeout_seconds,
             transport=transport,
         )
 
-    def _complete(self, *, messages: list[dict[str, str]], max_tokens: int, timeout_seconds: float) -> str:
+    async def _complete(
+        self, *, messages: list[dict[str, str]], max_tokens: int, timeout_seconds: float
+    ) -> str:
         """Post one chat completion with its own budget and timeout; return the message text.
 
         :param messages: OpenAI-style message dicts, system prompt first.
@@ -82,7 +84,7 @@ class GroqLLMProvider:
         payload = {"model": self._model, "messages": messages, "max_tokens": max_tokens}
 
         try:
-            response = self._client.post("/chat/completions", json=payload, timeout=timeout_seconds)
+            response = await self._client.post("/chat/completions", json=payload, timeout=timeout_seconds)
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
         except (httpx.HTTPError, ValueError, LookupError, TypeError) as error:
@@ -97,27 +99,27 @@ class GroqLLMProvider:
             raise LLMError(GROQ_ERROR_COPY)
         return content
 
-    def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
+    async def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
         """Post one chat completion and return its message text.
 
         :param system: System prompt steering the completion.
         :param messages: Prior turns in send order, oldest first.
         """
 
-        return self._complete(
+        return await self._complete(
             messages=_message_dicts(system=system, messages=messages),
             max_tokens=self._max_tokens,
             timeout_seconds=self._timeout_seconds,
         )
 
-    def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
+    async def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
         """Post one router completion and parse its strict JSON into a RouteDecision.
 
         :param system: Router prompt requiring the strict JSON shape.
         :param messages: Prior turns in send order, oldest first.
         """
 
-        content = self._complete(
+        content = await self._complete(
             messages=_message_dicts(system=system, messages=messages),
             max_tokens=self._route_max_tokens,
             timeout_seconds=self._route_timeout_seconds,
@@ -148,4 +150,4 @@ class GroqLLMProvider:
         :param: None.
         """
 
-        self._client.close()
+        await self._client.aclose()

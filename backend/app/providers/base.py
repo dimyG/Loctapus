@@ -98,9 +98,14 @@ class RouteDecision:
 
 
 class LLMProvider(Protocol):
-    """Interface every LLM provider implements."""
+    """Interface every LLM provider implements.
 
-    def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
+    Unlike ``Parser`` and ``EmbeddingProvider``, this interface is async: an LLM
+    call waits on the network for seconds, so it must not hold a threadpool
+    thread while it waits.
+    """
+
+    async def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
         """Generate one completion from a system prompt and the chat turns.
 
         Raises ``LLMError`` with user-safe copy on any upstream failure.
@@ -111,7 +116,7 @@ class LLMProvider(Protocol):
 
         ...
 
-    def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
+    async def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
         """Choose the answer path for one turn from the router prompt and the turns.
 
         Raises ``LLMError`` with user-safe copy when the reply breaks the

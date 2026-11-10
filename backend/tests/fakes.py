@@ -56,7 +56,7 @@ class RecordingLLMProvider:
         self.calls: list[tuple[str, list[ChatMessage]]] = []
         self.route_calls: list[tuple[str, list[ChatMessage]]] = []
 
-    def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
+    async def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
         """Record one (system, messages) call and return the fixed answer.
 
         :param system: System prompt the answer call carries.
@@ -66,7 +66,7 @@ class RecordingLLMProvider:
         self.calls.append((system, messages))
         return self.answer
 
-    def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
+    async def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
         """Record one router call, then raise or return the fixed decision.
 
         :param system: System prompt the router call carries.
@@ -90,7 +90,7 @@ class RecordingLLMProvider:
 class RaisingLLMProvider:
     """LLM provider whose every call raises; pins the 502 mapping and the router fallback."""
 
-    def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
+    async def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
         """Raise the maintenance error every caller maps to a 502.
 
         :param system: System prompt the call carries; ignored by the raise.
@@ -99,7 +99,7 @@ class RaisingLLMProvider:
 
         raise LLMError("The answer service is down for maintenance.")
 
-    def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
+    async def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
         """Raise so the answer service falls back to retrieval with the raw question.
 
         :param system: System prompt the call carries; ignored by the raise.

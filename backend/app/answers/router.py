@@ -1,9 +1,11 @@
 """Grounded-answer HTTP endpoint."""
 
 import logging
+from functools import partial
 from typing import Literal, cast
 from uuid import UUID
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -43,7 +45,7 @@ def _to_out(*, chunk: RetrievedChunk | ConversationMessageChunk) -> SnapshotChun
 
 
 @router.post("/projects/{project_id}/answer", response_model=AnswerOut)
-def answer_question(
+async def answer_question(
     *,
     project_id: UUID,
     body: AnswerIn,
@@ -62,11 +64,13 @@ def answer_question(
     :param provider: LLM provider the application lifespan owns.
     """
 
-    project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
+    project = await anyio.to_thread.run_sync(
+        partial(get_project_visible_to_user, db=db, user=user, project_id=project_id)
+    )
     if project is None:
         raise HTTPException(404, "project not found")
     try:
-        answer = generate_answer(
+        answer = await generate_answer(
             db=db,
             provider=provider,
             project_id=project.id,

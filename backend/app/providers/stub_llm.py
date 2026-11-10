@@ -12,7 +12,7 @@ STUB_ANSWER: Final = "This is a stub answer grounded in the supplied context pas
 class StubLLMProvider:
     """Deterministic offline LLM for local development and tests."""
 
-    def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
+    async def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
         """Return the fixed stub answer, ignoring both prompts.
 
         :param system: System prompt, accepted for the interface and ignored.
@@ -21,7 +21,7 @@ class StubLLMProvider:
 
         return STUB_ANSWER
 
-    def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
+    async def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
         """Route to retrieval with the raw question so offline runs keep today's behavior.
 
         :param system: Router prompt, accepted for the interface and ignored.

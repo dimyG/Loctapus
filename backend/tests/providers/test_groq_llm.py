@@ -106,7 +106,8 @@ async def test_aclose_closes_the_transport() -> None:
     assert transport.closed is True
 
 
-def test_generate_returns_message_content() -> None:
+@pytest.mark.anyio
+async def test_generate_returns_message_content() -> None:
     """Check that a 200 completion returns its message content verbatim."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
@@ -119,12 +120,15 @@ def test_generate_returns_message_content() -> None:
 
     provider = _provider(handler=handler)
     assert (
-        provider.generate(system="be brief", messages=[ChatMessage(role="user", content="rotate the key")])
+        await provider.generate(
+            system="be brief", messages=[ChatMessage(role="user", content="rotate the key")]
+        )
         == "Rotate the key. [1]"
     )
 
 
-def test_generate_sends_model_key_and_messages() -> None:
+@pytest.mark.anyio
+async def test_generate_sends_model_key_and_messages() -> None:
     """Check that one POST carries the endpoint path, the bearer key, and the ordered messages."""
 
     captured: list[httpx.Request] = []
@@ -139,7 +143,7 @@ def test_generate_sends_model_key_and_messages() -> None:
         return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
 
     provider = _provider(handler=handler, base_url="https://groq.test/openai/v1")
-    provider.generate(system="be brief", messages=[ChatMessage(role="user", content="rotate the key")])
+    await provider.generate(system="be brief", messages=[ChatMessage(role="user", content="rotate the key")])
 
     request = captured[0]
     assert request.url.path == "/openai/v1/chat/completions"
@@ -154,7 +158,8 @@ def test_generate_sends_model_key_and_messages() -> None:
 
 
 @pytest.mark.parametrize("status_code", [429, 500])
-def test_non_2xx_raises_user_safe_llm_error(*, status_code: int) -> None:
+@pytest.mark.anyio
+async def test_non_2xx_raises_user_safe_llm_error(*, status_code: int) -> None:
     """Check that a non-2xx response surfaces as the one fixed user-safe copy.
 
     :param status_code: Upstream HTTP status the fake transport answers with.
@@ -170,11 +175,12 @@ def test_non_2xx_raises_user_safe_llm_error(*, status_code: int) -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
+        await provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
-def test_timeout_raises_llm_error() -> None:
+@pytest.mark.anyio
+async def test_timeout_raises_llm_error() -> None:
     """Check that a connect timeout surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
@@ -187,11 +193,12 @@ def test_timeout_raises_llm_error() -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
+        await provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
-def test_malformed_body_raises_llm_error() -> None:
+@pytest.mark.anyio
+async def test_malformed_body_raises_llm_error() -> None:
     """Check that a 200 with a non-JSON body surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
@@ -204,11 +211,12 @@ def test_malformed_body_raises_llm_error() -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
+        await provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
-def test_missing_choices_raises_llm_error() -> None:
+@pytest.mark.anyio
+async def test_missing_choices_raises_llm_error() -> None:
     """Check that a 200 body without choices surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
@@ -221,11 +229,12 @@ def test_missing_choices_raises_llm_error() -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
+        await provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
-def test_empty_choices_raises_llm_error() -> None:
+@pytest.mark.anyio
+async def test_empty_choices_raises_llm_error() -> None:
     """Check that a 200 body with an empty choices list surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
@@ -238,12 +247,13 @@ def test_empty_choices_raises_llm_error() -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
+        await provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
 @pytest.mark.parametrize("content", ["", "   "])
-def test_empty_content_raises_llm_error(*, content: str) -> None:
+@pytest.mark.anyio
+async def test_empty_content_raises_llm_error(*, content: str) -> None:
     """Check that a 200 whose message content is blank surfaces as the one fixed user-safe copy.
 
     :param content: Blank or whitespace message content the fake completion returns.
@@ -259,55 +269,61 @@ def test_empty_content_raises_llm_error(*, content: str) -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
+        await provider.generate(system="s", messages=[ChatMessage(role="user", content="u")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
-def test_route_parses_valid_decision() -> None:
+@pytest.mark.anyio
+async def test_route_parses_valid_decision() -> None:
     """Check that a strict-JSON router reply parses into one RouteDecision."""
 
     content = '{"route": "retrieve", "rewritten_query": "standalone q"}'
     provider = _provider(handler=_router_reply(content=content))
-    decision = provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+    decision = await provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
     assert decision == RouteDecision(route="retrieve", rewritten_query="standalone q")
 
 
-def test_route_rejects_garbage_json() -> None:
+@pytest.mark.anyio
+async def test_route_rejects_garbage_json() -> None:
     """Check that a router reply that is not JSON surfaces as the user-safe LLMError."""
 
     provider = _provider(handler=_router_reply(content="route: retrieve"))
     with pytest.raises(LLMError) as excinfo:
-        provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+        await provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
-def test_route_rejects_unknown_route_literal() -> None:
+@pytest.mark.anyio
+async def test_route_rejects_unknown_route_literal() -> None:
     """Check that a router reply naming an unknown route surfaces as the user-safe LLMError."""
 
     provider = _provider(handler=_router_reply(content='{"route": "teleport"}'))
     with pytest.raises(LLMError) as excinfo:
-        provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+        await provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
-def test_route_rejects_blank_rewritten_query() -> None:
+@pytest.mark.anyio
+async def test_route_rejects_blank_rewritten_query() -> None:
     """Check that a retrieval turn with a blank rewrite surfaces as the user-safe LLMError."""
 
     provider = _provider(handler=_router_reply(content='{"route": "retrieve", "rewritten_query": "  "}'))
     with pytest.raises(LLMError) as excinfo:
-        provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+        await provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
     assert str(excinfo.value) == GROQ_ERROR_COPY
 
 
-def test_route_accepts_missing_rewritten_query_on_reuse() -> None:
+@pytest.mark.anyio
+async def test_route_accepts_missing_rewritten_query_on_reuse() -> None:
     """Check that a reuse turn may omit the rewrite; the field is only required on retrieve."""
 
     provider = _provider(handler=_router_reply(content='{"route": "reuse"}'))
-    decision = provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+    decision = await provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
     assert decision == RouteDecision(route="reuse", rewritten_query=None)
 
 
-def test_route_payload_carries_route_max_tokens_and_timeout() -> None:
+@pytest.mark.anyio
+async def test_route_payload_carries_route_max_tokens_and_timeout() -> None:
     """Check that the router POST carries its own max_tokens and per-call timeout."""
 
     captured: list[httpx.Request] = []
@@ -322,14 +338,15 @@ def test_route_payload_carries_route_max_tokens_and_timeout() -> None:
         return httpx.Response(200, json={"choices": [{"message": {"content": '{"route": "direct"}'}}]})
 
     provider = _provider(handler=handler)
-    provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+    await provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
 
     body = json.loads(captured[0].content)
     assert body["max_tokens"] == 128
     assert captured[0].extensions["timeout"]["read"] == 10.0
 
 
-def test_route_maps_http_errors_to_llm_error() -> None:
+@pytest.mark.anyio
+async def test_route_maps_http_errors_to_llm_error() -> None:
     """Check that a non-2xx router reply surfaces as the one fixed user-safe copy."""
 
     def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0917
@@ -342,5 +359,5 @@ def test_route_maps_http_errors_to_llm_error() -> None:
 
     provider = _provider(handler=handler)
     with pytest.raises(LLMError) as excinfo:
-        provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
+        await provider.route(system="route the turn", messages=[ChatMessage(role="user", content="q")])
     assert str(excinfo.value) == GROQ_ERROR_COPY

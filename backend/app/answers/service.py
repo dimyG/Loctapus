@@ -2,9 +2,11 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import Final
 from uuid import UUID
 
+import anyio
 from sqlalchemy.orm import Session
 
 from app.answers.prompt import (
@@ -16,7 +18,7 @@ from app.answers.prompt import (
     build_route_messages,
 )
 from app.answers.schemas import AnswerIn
-from app.conversations.models import ConversationMessageChunk
+from app.conversations.models import Conversation, ConversationMessageChunk
 from app.conversations.service import (
     SnapshotIn,
     append_turn,
@@ -41,6 +43,52 @@ class Answer:
     route: str
     conversation_id: UUID
     chunks: Sequence[RetrievedChunk | ConversationMessageChunk]
+
+
+@dataclass(frozen=True)
+class _TurnContext:
+    """The conversation a turn extends plus the reads that predate any LLM call."""
+
+    conversation: Conversation
+    history: list[ChatMessage]
+    gathered: list[ConversationMessageChunk]
+
+
+def _load_turn_context(
+    *,
+    db: Session,
+    project_id: UUID,
+    user_id: UUID,
+    conversation_id: UUID | None,
+    settings: Settings,
+) -> _TurnContext | None:
+    """Resolve the conversation and load its history and gathered snapshots.
+
+    Returns ``None`` only when an explicit ``conversation_id`` is not the
+    caller's. Every read commits before this returns, so no transaction is open
+    when the LLM calls run.
+
+    :param db: Session the reads run and commit through.
+    :param project_id: Project the conversation belongs to.
+    :param user_id: User who asked, owning the conversation.
+    :param conversation_id: Explicit conversation id, or null for the caller's latest.
+    :param settings: Settings supplying the history and snapshot limits.
+    """
+
+    conversation = resolve_conversation(
+        db=db, project_id=project_id, user_id=user_id, conversation_id=conversation_id
+    )
+    if conversation is None:
+        return None
+    # A pending row (null path, first turn) has no id yet: its history and REUSE set are empty.
+    history: list[ChatMessage] = []
+    gathered: list[ConversationMessageChunk] = []
+    if conversation.id is not None:
+        history = load_history(db=db, conversation_id=conversation.id, limit=settings.answer_history_messages)
+        gathered = gather_snapshots(
+            db=db, conversation_id=conversation.id, max_chunks=settings.answer_reuse_max_chunks
+        )
+    return _TurnContext(conversation=conversation, history=history, gathered=gathered)
 
 
 def _resolve_retrieve_in(*, query: str, params: AnswerIn, settings: Settings) -> RetrieveIn:
@@ -103,7 +151,7 @@ def _snapshot_from(*, chunk: RetrievedChunk | ConversationMessageChunk) -> Snaps
     )
 
 
-def generate_answer(
+async def generate_answer(
     *,
     db: Session,
     provider: LLMProvider,
@@ -113,6 +161,9 @@ def generate_answer(
     settings: Settings,
 ) -> Answer | None:
     """Route one turn, answer along its path, and persist the whole turn.
+
+    Database steps run in the threadpool; LLM calls are awaited so neither waits
+    on a thread.
 
     Returns ``None`` only when an explicit ``conversation_id`` is not the
     caller's; the router maps that to a 404.
@@ -125,23 +176,26 @@ def generate_answer(
     :param settings: Settings supplying the answer and retrieval defaults.
     """
 
-    conversation = resolve_conversation(
-        db=db, project_id=project_id, user_id=user_id, conversation_id=params.conversation_id
-    )
-    if conversation is None:
-        return None
-    # A pending row (null path, first turn) has no id yet: its history and REUSE set are empty.
-    history: list[ChatMessage] = []
-    gathered: list[ConversationMessageChunk] = []
-    if conversation.id is not None:
-        history = load_history(db=db, conversation_id=conversation.id, limit=settings.answer_history_messages)
-        gathered = gather_snapshots(
-            db=db, conversation_id=conversation.id, max_chunks=settings.answer_reuse_max_chunks
+    # These database steps share one Session. They run one after another, never
+    # concurrently: a second thread using the Session while one holds it would
+    # corrupt the request's transaction state.
+    context = await anyio.to_thread.run_sync(
+        partial(
+            _load_turn_context,
+            db=db,
+            project_id=project_id,
+            user_id=user_id,
+            conversation_id=params.conversation_id,
+            settings=settings,
         )
+    )
+    if context is None:
+        return None
+    conversation, history, gathered = context.conversation, context.history, context.gathered
 
     router_fallback = False
     try:
-        decision = provider.route(
+        decision = await provider.route(
             system=ROUTER_SYSTEM_PROMPT,
             messages=build_route_messages(
                 question=params.query, history=history, evidence=_context_blocks(chunks=gathered)
@@ -159,13 +213,13 @@ def generate_answer(
 
     answer_chunks: Sequence[RetrievedChunk | ConversationMessageChunk]
     if route == "direct":
-        text = provider.generate(
+        text = await provider.generate(
             system=SYSTEM_PROMPT_DIRECT,
             messages=[*history, ChatMessage(role="user", content=params.query)],
         )
         answer_chunks = []
     elif route == "reuse":
-        text = provider.generate(
+        text = await provider.generate(
             system=SYSTEM_PROMPT,
             messages=build_answer_messages(
                 question=params.query, history=history, blocks=_context_blocks(chunks=gathered)
@@ -173,33 +227,39 @@ def generate_answer(
         )
         answer_chunks = list(gathered)
     else:
-        fresh = retrieve(
-            db=db,
-            project_id=project_id,
-            user_id=user_id,
-            params=_resolve_retrieve_in(
-                query=_effective_question(raw=params.query, decision=decision),
-                params=params,
+        fresh = await anyio.to_thread.run_sync(
+            partial(
+                retrieve,
+                db=db,
+                project_id=project_id,
+                user_id=user_id,
+                params=_resolve_retrieve_in(
+                    query=_effective_question(raw=params.query, decision=decision),
+                    params=params,
+                    settings=settings,
+                ),
                 settings=settings,
-            ),
-            settings=settings,
-            origin="answer",
-            log_context={
-                "route": route,
-                "raw_query": params.query,
-                **({"router_fallback": "true"} if router_fallback else {}),
-            },
+                origin="answer",
+                log_context={
+                    "route": route,
+                    "raw_query": params.query,
+                    **({"router_fallback": "true"} if router_fallback else {}),
+                },
+            )
         )
         if not fresh:
             # An empty index answers from the canned row; the LLM never sees a
             # question with no context passages to ground it.
-            append_turn(
-                db=db,
-                conversation=conversation,
-                question=params.query,
-                answer=CANNED_EMPTY_ANSWER,
-                route=route,
-                snapshots=[],
+            await anyio.to_thread.run_sync(
+                partial(
+                    append_turn,
+                    db=db,
+                    conversation=conversation,
+                    question=params.query,
+                    answer=CANNED_EMPTY_ANSWER,
+                    route=route,
+                    snapshots=[],
+                )
             )
             return Answer(
                 text=CANNED_EMPTY_ANSWER,
@@ -207,7 +267,7 @@ def generate_answer(
                 conversation_id=conversation.id,
                 chunks=[],
             )
-        text = provider.generate(
+        text = await provider.generate(
             system=SYSTEM_PROMPT,
             messages=build_answer_messages(
                 question=params.query, history=history, blocks=_context_blocks(chunks=fresh)
@@ -215,13 +275,16 @@ def generate_answer(
         )
         answer_chunks = fresh
 
-    append_turn(
-        db=db,
-        conversation=conversation,
-        question=params.query,
-        answer=text,
-        route=route,
-        snapshots=[_snapshot_from(chunk=chunk) for chunk in answer_chunks],
+    await anyio.to_thread.run_sync(
+        partial(
+            append_turn,
+            db=db,
+            conversation=conversation,
+            question=params.query,
+            answer=text,
+            route=route,
+            snapshots=[_snapshot_from(chunk=chunk) for chunk in answer_chunks],
+        )
     )
     return Answer(
         text=text,
