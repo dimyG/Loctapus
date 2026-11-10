@@ -631,5 +631,8 @@ From the Task 11 cross-cutting sweep that closes the rewrite (spec
   explains why the test exists and what would silently break without it
   (spec decision 14), which one line cannot hold.
 - `backend/tests/answers/test_answer_api.py` no longer carries any stale
-  `(spec N.N)` reference; the last one in the repo, in
-  `web/e2e/enforcement.spec.ts`, was dropped (commit `9ee2b6f`).
+  `(spec N.N)` reference; the last stale one, in `web/e2e/enforcement.spec.ts`,
+  was dropped (commit `9ee2b6f`). The remaining `(spec 6.x)` references
+  (`web/src/features/auth/authSlice.ts`, `UserMenu.tsx`, `LandingPage.tsx`,
+  `lib/tokenStorage.ts`) were re-validated as correct: they resolve to the S2
+  spec's §6.1/§6.2.

@@ -213,7 +213,7 @@ def test_heading_text_not_duplicated_into_chunk_text() -> None:
 
 
 def test_no_chunk_exceeds_max_tokens() -> None:
-    """Re-assert the max-token invariant across every fixture's chunked output."""
+    """Check that no chunk exceeds the max-token limit in any fixture's chunked output."""
 
     for elements in _all_fixtures():
         for chunk in _chunk(elements=elements):

@@ -346,6 +346,7 @@ def _commit_document_set(
         )
         return
     except _TRANSIENT_DATABASE_ERRORS:
+        # Roll back so the task's autoretry re-drives the run from a clean session.
         db.rollback()
         raise
     try:
