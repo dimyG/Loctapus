@@ -8,6 +8,8 @@ import type { JSX } from "react";
  * from the wordmark text alone. The root is inline-level so a centered parent
  * (the auth frame's home link) still centers the lockup as text-align does
  * not reach block-level flex children.
+ *
+ * @param {number} size - Logo size in px, shared by all placements.
  */
 export default function BrandMark({ size = 28 }: { size?: number }): JSX.Element {
   return (

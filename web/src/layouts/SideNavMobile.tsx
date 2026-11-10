@@ -13,7 +13,12 @@ type SideNavMobileProps = {
   onClose: () => void;
 };
 
-/** The xs-only slide-in sidebar; choosing a destination closes it. */
+/**
+ * The xs-only slide-in sidebar; choosing a destination closes it.
+ *
+ * @param {boolean} open - Whether the drawer is visible.
+ * @param {() => void} onClose - Closes the drawer: backdrop, escape, or a picked destination.
+ */
 export default function SideNavMobile({ open, onClose }: SideNavMobileProps) {
   return (
     <Drawer

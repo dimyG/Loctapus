@@ -9,7 +9,11 @@ import { useColorScheme } from "@mui/material/styles";
 import { Fragment, useState } from "react";
 import type { MouseEvent } from "react";
 
-/** Color-mode switcher: an icon button opening a system/light/dark menu. */
+/**
+ * Color-mode switcher: an icon button opening a system/light/dark menu.
+ *
+ * @param {IconButtonOwnProps} props - Icon button sizing and slot props.
+ */
 export default function ColorModeIconDropdown(props: IconButtonOwnProps) {
   const { mode, systemMode, setMode } = useColorScheme();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -25,6 +29,8 @@ export default function ColorModeIconDropdown(props: IconButtonOwnProps) {
     handleClose();
   };
   if (!mode) {
+    // useColorScheme has not settled yet; the placeholder keeps the topbar's
+    // icon button slot steady until the switcher can render.
     return (
       <Box
         data-screenshot="toggle-mode"

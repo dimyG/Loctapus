@@ -40,6 +40,8 @@ export const navigationCustomizations: Components<Theme> = {
         marginTop: "4px",
         borderRadius: (theme.vars || theme).shape.borderRadius,
         border: `1px solid ${(theme.vars || theme).palette.divider}`,
+        // MUI darkens paper with an elevation overlay per scheme; the menu
+        // instead pins pure white in light mode and gray[900] in dark mode.
         backgroundImage: "none",
         background: "hsl(0, 0%, 100%)",
         boxShadow:
@@ -59,6 +61,7 @@ export const navigationCustomizations: Components<Theme> = {
   },
   MuiSelect: {
     defaultProps: {
+      // The up-down chevrons read as "unfold" rather than a dropdown arrow.
       IconComponent: forwardRef<SVGSVGElement, SvgIconProps>((props, ref) => (
         <UnfoldMoreRoundedIcon fontSize="small" {...props} ref={ref} />
       )),
@@ -233,6 +236,7 @@ export const navigationCustomizations: Components<Theme> = {
         width: 12,
         height: 12,
         borderRadius: "50%",
+        // The dot is a pure status indicator; the step numbers are hidden.
         "& text": {
           display: "none",
         },

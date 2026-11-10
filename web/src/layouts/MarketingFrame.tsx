@@ -39,6 +39,8 @@ const StyledToolbar = styled(Toolbar)(({ theme }) => ({
  * The marketing frame: the template's floating navbar above the children, the
  * wordmark-and-copyright footer pinned to the viewport bottom below. Pages
  * bring their own sections and containers.
+ *
+ * @param {ReactNode} children - The page sections rendered between the navbar and the footer.
  */
 export default function MarketingFrame({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);

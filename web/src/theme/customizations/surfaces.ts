@@ -104,6 +104,8 @@ export const surfacesCustomizations: Components<Theme> = {
   MuiCardContent: {
     styleOverrides: {
       root: {
+        // The card's own padding controls spacing; the sub-slots are zeroed
+        // so it does not double up on the card's 16px.
         padding: 0,
         "&:last-child": { paddingBottom: 0 },
       },

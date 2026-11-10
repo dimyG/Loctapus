@@ -31,8 +31,10 @@ declare module "@mui/material/styles" {
   }
 }
 
+// The reference theme the type scale and the shadow scale are computed against.
 const defaultTheme = createTheme();
 
+/** The Loctapus blue ramp; primary and info palette colors derive from it. */
 export const brand = {
   50: "hsl(210, 100%, 95%)",
   100: "hsl(210, 100%, 92%)",
@@ -46,6 +48,7 @@ export const brand = {
   900: "hsl(210, 100%, 21%)",
 };
 
+/** The neutral ramp; palette greys, backgrounds, text, and dividers derive from it. */
 export const gray = {
   50: "hsl(220, 35%, 97%)",
   100: "hsl(220, 30%, 94%)",
@@ -59,6 +62,7 @@ export const gray = {
   900: "hsl(220, 35%, 3%)",
 };
 
+/** The success ramp; the success palette and success chips use it. */
 export const green = {
   50: "hsl(120, 80%, 98%)",
   100: "hsl(120, 75%, 94%)",
@@ -72,6 +76,7 @@ export const green = {
   900: "hsl(120, 87%, 6%)",
 };
 
+/** The warning ramp; the warning palette and the default alert skin use it. */
 export const orange = {
   50: "hsl(45, 100%, 97%)",
   100: "hsl(45, 92%, 90%)",
@@ -85,6 +90,7 @@ export const orange = {
   900: "hsl(45, 93%, 12%)",
 };
 
+/** The error ramp; the error palette and error chips use it. */
 export const red = {
   50: "hsl(0, 100%, 97%)",
   100: "hsl(0, 92%, 90%)",
@@ -98,6 +104,10 @@ export const red = {
   900: "hsl(0, 93%, 6%)",
 };
 
+/**
+ * Light and dark palettes assembled from the ramps; AppTheme feeds them to
+ * createTheme, and the CSS variables resolve them per scheme.
+ */
 export const colorSchemes = {
   light: {
     palette: {
@@ -200,6 +210,7 @@ export const colorSchemes = {
   },
 };
 
+/** The Inter type scale; pxToRem keeps the sizes relative to the root font size. */
 export const typography = {
   fontFamily: "Inter, sans-serif",
   h1: {
@@ -250,6 +261,7 @@ export const typography = {
   },
 };
 
+/** The default corner radius; component overrides read it through theme.shape. */
 export const shape = {
   borderRadius: 8,
 };
@@ -258,4 +270,6 @@ export const shape = {
 // variable resolves it per color scheme, so both schemes share one scale.
 const defaultShadows: Shadows = [...defaultTheme.shadows];
 defaultShadows[1] = "var(--template-palette-baseShadow)";
+
+/** The elevation scale the template's component overrides read from. */
 export const shadows = defaultShadows;

@@ -7,6 +7,8 @@ export const feedbackCustomizations: Components<Theme> = {
   MuiAlert: {
     styleOverrides: {
       root: ({ theme }) => ({
+        // The template's only alert skin is the warning ramp; severity props
+        // are not overridden, so every alert renders in this orange.
         borderRadius: 10,
         backgroundColor: orange[100],
         color: (theme.vars || theme).palette.text.primary,

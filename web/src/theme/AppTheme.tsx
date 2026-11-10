@@ -17,6 +17,9 @@ interface AppThemeProps {
 /**
  * Wraps the app in the ported shared theme: CSS-variable color schemes plus
  * the template's component customizations, extendable via themeComponents.
+ *
+ * @param {ReactNode} children - Content rendered under the theme provider.
+ * @param {ThemeOptions["components"]} themeComponents - Extra component overrides merged after the built-in ones.
  */
 export default function AppTheme(props: AppThemeProps) {
   const { children, themeComponents } = props;
@@ -24,6 +27,8 @@ export default function AppTheme(props: AppThemeProps) {
     return createTheme({
       // For details about CSS variables configuration, see
       // https://mui.com/material-ui/customization/css-theme-variables/configuration/.
+      // The "template" prefix matches the var(--template-palette-baseShadow)
+      // the shadow scale in themePrimitives.ts swaps in.
       cssVariables: {
         colorSchemeSelector: "data-mui-color-scheme",
         cssVarPrefix: "template",
@@ -43,6 +48,7 @@ export default function AppTheme(props: AppThemeProps) {
     });
   }, [themeComponents]);
   return (
+    // The color scheme flips instantly; transitions would otherwise animate the whole palette.
     <ThemeProvider theme={theme} disableTransitionOnChange>
       {children}
     </ThemeProvider>

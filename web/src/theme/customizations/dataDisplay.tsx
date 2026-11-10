@@ -30,6 +30,8 @@ export const dataDisplayCustomizations: Components<Theme> = {
         [`& .${typographyClasses.root}`]: {
           fontWeight: 500,
         },
+        // The row is dimmed until selected; the selected row lifts to full
+        // opacity so the active item stands out in a list.
         [`& .${buttonBaseClasses.root}`]: {
           display: "flex",
           gap: 8,
@@ -83,6 +85,7 @@ export const dataDisplayCustomizations: Components<Theme> = {
   MuiListItemIcon: {
     styleOverrides: {
       root: {
+        // MUI's default 56px minimum width would misalign compact lists.
         minWidth: 0,
       },
     },
@@ -95,6 +98,8 @@ export const dataDisplayCustomizations: Components<Theme> = {
       root: ({ theme }) => ({
         border: "1px solid",
         borderRadius: "999px",
+        // Both sizes use the caption-size label so chips stay compact;
+        // the "small" variant additionally caps the height at 20px.
         [`& .${chipClasses.label}`]: {
           fontWeight: 600,
         },

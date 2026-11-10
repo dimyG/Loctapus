@@ -31,6 +31,8 @@ const FrameStack = styled(Stack)(({ theme }) => ({
  * The auth frame: the sign-in template's shell around the page's form. The
  * mode switcher is pinned top-right; the wordmark and the outlined card are
  * centered in an xs column.
+ *
+ * @param {ReactNode} children - The form page rendered inside the outlined card.
  */
 export default function AuthFrame({ children }: { children: ReactNode }) {
   return (

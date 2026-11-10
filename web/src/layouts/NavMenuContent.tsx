@@ -22,7 +22,11 @@ function latestProject(projects: Project[] | undefined): Project | undefined {
   );
 }
 
-/** The section nav shared by the permanent sidebar and the mobile drawer. */
+/**
+ * The section nav shared by the permanent sidebar and the mobile drawer.
+ *
+ * @param {() => void} onNavigate - Closes the mobile drawer when a destination is chosen.
+ */
 export default function NavMenuContent({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation();
   const { data: projects } = useGetProjectsQuery();

@@ -14,7 +14,12 @@ type Options = {
   preloadedState?: RootState;
 } & Omit<RenderOptions, "wrapper">;
 
-/** Renders ui inside the router, store, and theme the real app composes. */
+/**
+ * Renders ui inside the router, store, and theme the real app composes.
+ *
+ * @param {ReactElement} ui - The element to render.
+ * @param {Options} options - Router entry, preloaded state, and render options.
+ */
 export function renderWithProviders(ui: ReactElement, options: Options = {}) {
   const { route = "/", preloadedState, ...renderOptions } = options;
   const testStore: AppStore = makeStore(preloadedState);

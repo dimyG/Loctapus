@@ -13,6 +13,8 @@ import { brand, gray } from "../themePrimitives";
 export const inputsCustomizations: Components<Theme> = {
   MuiButtonBase: {
     defaultProps: {
+      // The flat design skips ripples; the focus outline below is the only
+      // pressed-activation feedback.
       disableTouchRipple: true,
       disableRipple: true,
     },
