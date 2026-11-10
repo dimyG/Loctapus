@@ -1,4 +1,4 @@
-/* The Inter weights the app's typography and component overrides set. */
+/* The three Inter weights imported here are the ones the app's typography and component overrides use. */
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";

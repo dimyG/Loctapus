@@ -96,10 +96,10 @@ export const dataDisplayCustomizations: Components<Theme> = {
     },
     styleOverrides: {
       root: ({ theme }) => ({
-        border: "1px solid",
-        borderRadius: "999px",
         // Both sizes use the caption-size label so chips stay compact;
         // the "small" variant additionally caps the height at 20px.
+        border: "1px solid",
+        borderRadius: "999px",
         [`& .${chipClasses.label}`]: {
           fontWeight: 600,
         },
