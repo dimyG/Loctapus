@@ -29,7 +29,7 @@ export default function ColorModeIconDropdown(props: IconButtonOwnProps) {
     handleClose();
   };
   if (!mode) {
-    // useColorScheme has not settled yet; the placeholder keeps the topbar's
+    // The useColorScheme hook has not settled yet; the placeholder keeps the topbar's
     // icon button slot steady until the switcher can render.
     return (
       <Box

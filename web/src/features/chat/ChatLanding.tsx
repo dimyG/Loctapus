@@ -41,7 +41,7 @@ export default function ChatLanding(): JSX.Element {
     const handles: Array<{ unsubscribe: () => void }> = [];
     void (async () => {
       for (const project of ordered) {
-        // forceRefetch: statuses cached by an earlier visit can be stale,
+        // Pass forceRefetch: statuses cached by an earlier visit can be stale,
         // so the decision must come from what the server says now.
         const handle = dispatch(
           uploadsApi.endpoints.getUploads.initiate(project.id, { forceRefetch: true }),

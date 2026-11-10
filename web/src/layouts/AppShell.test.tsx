@@ -89,7 +89,7 @@ describe("AppShell", () => {
 
   it("renders the sidebar, the topbar controls, and the routed page", async () => {
     renderShell();
-    // jsdom does not evaluate the media-query CSS the drawer's responsive
+    // The jsdom environment does not evaluate the media-query CSS the drawer's responsive
     // display generates, so the permanent sidebar's items answer role
     // queries either way; the hidden-inclusive query also reaches them.
     expect(screen.getByRole("link", { name: "Sources", hidden: true })).toHaveAttribute(
@@ -171,7 +171,7 @@ describe("AppShell", () => {
     expect(await screen.findByText("brief.pdf")).toBeInTheDocument();
     expect(screen.getByText("report.docx")).toBeInTheDocument();
     await switchProject("Research");
-    // p-2's uploads fetch fails with nothing cached: the error card must
+    // The p-2 uploads fetch fails with nothing cached: the error card must
     // show, and p-1's rows must not survive the switch.
     expect(await screen.findByText("Could not load the source items.")).toBeInTheDocument();
     expect(screen.queryByText("brief.pdf")).not.toBeInTheDocument();

@@ -190,7 +190,7 @@ describe("ChatLanding", () => {
   });
 
   it("refetches stale cached statuses", async () => {
-    // p-2 must be non-chattable here: the walk stops at the first chattable
+    // The p-2 fixture must be non-chattable here: the walk stops at the first chattable
     // project, so a chattable p-2 would never reach the stale p-1 entry.
     projectsAndUploads([queuedP1], [queuedP2]);
     renderLanding("/prime");

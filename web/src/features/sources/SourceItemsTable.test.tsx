@@ -31,7 +31,7 @@ const failedUpload: Upload = {
 };
 const uploadRows: Upload[] = [queuedUpload, readyUpload, failedUpload];
 
-// jsdom implements neither window.open nor the blob URL API. The URL subclass
+// The jsdom environment implements neither window.open nor the blob URL API. The URL subclass
 // keeps the constructor working for MSW's own request parsing while the two
 // blob methods become spies; everything is restored after each test.
 const createObjectURLMock = vi.fn<(obj: Blob | MediaSource) => string>(() => "blob:mock");
