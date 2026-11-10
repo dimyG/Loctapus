@@ -22,8 +22,8 @@ test.describe("route enforcement", () => {
   });
 
   test("logged-out project-scoped routes redirect to /login", async ({ page }) => {
-    // The nested project URL must hit the same guard, so a wrong matcher
-    // cannot protect /projects while leaving deeper routes open.
+    // The guard must cover nested project URLs too: a matcher that protects
+    // only /projects would leave deeper routes open to logged-out visitors.
     await page.goto("/projects/p-1/sources");
     await expect(page).toHaveURL(/\/login$/);
   });
@@ -45,7 +45,7 @@ test.describe("route enforcement", () => {
     await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page).toHaveURL("http://localhost:5173/");
 
-    // After sign-out the protected routes redirect to login (spec 8.2).
+    // After sign-out the protected routes redirect to login.
     await page.goto("/projects");
     await expect(page).toHaveURL(/\/login$/);
 
