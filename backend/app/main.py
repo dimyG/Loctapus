@@ -1,4 +1,8 @@
-"""FastAPI application assembly: startup checks, CORS policy, and every feature router."""
+"""FastAPI application assembly: startup checks, CORS policy, and every feature router.
+
+No route behavior lives here; even the lifespan's DB session comes through the
+SessionLocal factory so tests can swap it.
+"""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
