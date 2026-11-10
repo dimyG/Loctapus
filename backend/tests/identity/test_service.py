@@ -36,7 +36,7 @@ def test_register_rolls_back_if_project_creation_fails(
     def boom(*args: object, **kwargs: object) -> None:
         """Fail project creation to exercise the rollback path.
 
-        :param args: Positional arguments the patched call passes; unused here.
+        :param args: Unused catch-all; the real call is keyword-only, so it stays empty.
         :param kwargs: Keyword arguments the patched call passes; unused here.
         """
 
@@ -71,7 +71,7 @@ def test_register_provisioning_failure_not_email_conflict(
     def boom(*args: object, **kwargs: object) -> None:
         """Fail provisioning to exercise the propagation path.
 
-        :param args: Positional arguments the patched call passes; unused here.
+        :param args: Unused catch-all; the real call is keyword-only, so it stays empty.
         :param kwargs: Keyword arguments the patched call passes; unused here.
         """
 
