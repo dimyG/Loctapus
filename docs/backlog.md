@@ -534,8 +534,8 @@ New deferrals from the 2026-10-14 review fixes:
 ## 2026-11-10 - async /answer (branch `async-answer`) follow-ups
 
 Residuals from the 2026-11-10 async `/answer` work
-(`../specs/2026-11-10-async-answer-design.md`, its plan
-`../superpowers/plans/2026-11-10-async-answer.md`):
+(`superpowers/specs/2026-11-10-async-answer-design.md`, its plan
+`superpowers/plans/2026-11-10-async-answer.md`):
 
 - `5790200` - the remote embedding and rerank calls stay sync; when a network
   embedding provider or the S7 reranker arrives, make that one remote call async

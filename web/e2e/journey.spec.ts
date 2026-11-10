@@ -112,8 +112,8 @@ test.describe("journey", () => {
       // First visit to the upload route transforms its modules on the fly, so
       // the rows can land well past the 5s default on a cold stack - the Ready
       // assertion below carries the same headroom for the pipeline itself.
-      // exact: the per-row delete cell is named "Delete <file>" and would
-      // otherwise collide with the filename cell under substring matching.
+      // Exact matching avoids colliding with the per-row delete cell named
+      // "Delete <file>", which substring matching would also select.
       await expect(page.getByRole("cell", { name: "tiny.pdf", exact: true })).toBeVisible({
         timeout: 20_000,
       });

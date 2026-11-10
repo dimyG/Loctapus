@@ -3,6 +3,8 @@
 These are ``Protocol`` classes: implementations satisfy them structurally and
 do not inherit from them. Ingestion uses ``Parser`` and ``EmbeddingProvider``,
 retrieval uses ``EmbeddingProvider``, and answers uses ``LLMProvider``.
+``LLMProvider`` is the one async interface: an LLM call waits on the network
+for seconds, so it must not hold a threadpool thread while it waits.
 """
 
 from dataclasses import dataclass
