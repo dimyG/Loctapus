@@ -580,9 +580,10 @@ New deferrals from the 2026-10-14 review fixes:
 ## 2026-10-09 - deferred minors in `fix-deferred-minors-2`, kept open by its final review
 
 - `revoke_token` calls `on_conflict_do_nothing()` without a conflict target, so the
-  SQL suppresses violations of every unique constraint on `revoked_tokens` while the
-  comment names only the jti primary key; pass `index_elements=[RevokedToken.jti]`
-  (from commit `c9942f7`).
+  SQL suppresses violations of every unique constraint on `revoked_tokens`; the code
+  comment now records this silent-skip behavior truthfully (rewritten 2026-11-09,
+  commit `ea86e89`), so pass `index_elements=[RevokedToken.jti]` if only the primary
+  key should be targeted (from commit `c9942f7`).
 ## 2026-10-28 - Hetzner deployment-session follow-ups
 
 From the live deployment of https://loctapus.com (CX23 in hel1, Ubuntu 24.04.4,
@@ -607,3 +608,28 @@ green):
   was up, all connection-refused (Garage :3900, RabbitMQ :5672/:15672); a line
   documenting the required services next to the AGENTS.md verification block
   would prevent it.
+
+## 2026-11-09 - comment/docstring rewrite (branch `comment-docstring-rewrite`) follow-ups
+
+From the Task 11 cross-cutting sweep that closes the rewrite (spec
+`superpowers/specs/2026-11-09-comment-docstring-rewrite-design.md`):
+
+- The three code comments pointing at "S7" for same-name replacement were
+  corrected to S8 (commit `38fdd84`): the 2026-10-23 roadmap re-cut moved the
+  stale-chunk replacement work from S7 to S8, and the reranker references that
+  stayed on S7 were re-validated as correct. Some older backlog entries above
+  (for example the 2026-10-23 S6 final-review residuals) still name S7 for the
+  replacement work under the pre-re-cut numbering; read them with the re-cut in
+  mind.
+- The `revoke_token` conflict-target item above is updated, not resolved: the
+  comment was rewritten in slice 2 (commit `ea86e89`) to describe the actual
+  silent-skip behavior, and the entry's wording now matches the rewritten
+  comment; the `index_elements=[RevokedToken.jti]` fix itself stays open.
+- The parameterized test docstring in `backend/tests/answers/test_service.py`
+  (`test_llm_calls_run_with_no_open_transaction`) keeps its detail paragraph,
+  a recorded deviation from the "one-line test voice" default: the paragraph
+  explains why the test exists and what would silently break without it
+  (spec decision 14), which one line cannot hold.
+- `backend/tests/answers/test_answer_api.py` no longer carries any stale
+  `(spec N.N)` reference; the last one in the repo, in
+  `web/e2e/enforcement.spec.ts`, was dropped (commit `9ee2b6f`).
