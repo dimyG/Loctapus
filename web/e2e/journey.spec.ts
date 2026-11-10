@@ -38,8 +38,7 @@ async function register(page: import("@playwright/test").Page, email: string) {
   await expect(page).toHaveURL(/\/projects\/[^/]+\/sources$/);
 }
 
-// example.test is a special-use TLD that email-validator rejects; the
-// backend's own API tests use example.com.
+// example.test is a special-use TLD that email-validator rejects; the backend's API tests use example.com.
 const E2E_EMAIL = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
 
 test.describe("journey", () => {

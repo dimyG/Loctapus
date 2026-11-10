@@ -2,12 +2,13 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /**
- * Locates the backend virtualenv's python. `RAG_E2E_PYTHON` wins when set, so
- * checkouts whose venv the walk cannot reach (for example a worktree on
- * another drive) can point at it explicitly. Otherwise the walk looks for
- * `.venv/Scripts/python.exe` upward from `web/`: in a normal checkout the venv
- * sits at the repo root; inside a `.worktrees/<name>` worktree it lives in the
- * main checkout, further up.
+ * Locates the backend virtualenv's python interpreter.
+ *
+ * `RAG_E2E_PYTHON` wins when set, so checkouts whose venv the walk cannot
+ * reach (for example a worktree on another drive) can point at it explicitly.
+ * Otherwise the walk looks for `.venv/Scripts/python.exe` upward from `web/`:
+ * in a normal checkout the venv sits at the repo root; inside a
+ * `.worktrees/<name>` worktree it lives in the main checkout, further up.
  */
 export function findVenvPython(): string {
   const override = process.env.RAG_E2E_PYTHON;
@@ -32,4 +33,5 @@ export function findVenvPython(): string {
   throw new Error("Could not locate .venv/Scripts/python.exe (the backend virtualenv).");
 }
 
+/** Resolved once at import time so every spec shares the same interpreter. */
 export const PYTHON = findVenvPython();

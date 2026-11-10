@@ -7,8 +7,7 @@ const execFileAsync = promisify(execFile);
 
 const E2E_DB_SCRIPT = "../backend/scripts/e2e_db.py";
 
-// example.test is a special-use TLD that email-validator rejects; the
-// backend's own API tests use example.com.
+// example.test is a special-use TLD that email-validator rejects; the backend's API tests use example.com.
 const E2E_EMAIL = () => `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
 
 test.describe("route enforcement", () => {
@@ -17,11 +16,14 @@ test.describe("route enforcement", () => {
   });
 
   test("logged-out /projects redirects to /login", async ({ page }) => {
+    // With no session the guard redirects before the projects page can fetch.
     await page.goto("/projects");
     await expect(page).toHaveURL(/\/login$/);
   });
 
   test("logged-out project-scoped routes redirect to /login", async ({ page }) => {
+    // The nested project URL must hit the same guard, so a wrong matcher
+    // cannot protect /projects while leaving deeper routes open.
     await page.goto("/projects/p-1/sources");
     await expect(page).toHaveURL(/\/login$/);
   });
