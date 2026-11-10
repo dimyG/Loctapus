@@ -254,7 +254,7 @@ def test_indexed_file_cannot_be_replaced_yet(
     run = db_session.query(IngestionRun).one()
     assert document is not None
     assert run.status == RunStatus.INDEXING
-    # The latest run fails after the document exists: replacement stays S7's job.
+    # The latest run fails after the document exists: replacement stays S8's job.
     mark_failed(db=db_session, run_id=run.id, expected=RunStatus.INDEXING, error="boom")
     db_session.commit()
 

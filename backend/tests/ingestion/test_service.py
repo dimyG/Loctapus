@@ -433,7 +433,7 @@ def test_older_run_uses_its_own_version(
         filename="report.docx",
         content=content_v1,
     )
-    # Simulate S7: the item moves to a v2 version while the v1 run is still queued.
+    # Simulate S8: the item moves to a v2 version while the v1 run is still queued.
     content_v2 = _make_docx(heading="Version Two", paragraphs=["Version two prose."])
     item = db_session.get(SourceItem, seeded.source_item_id)
     assert item is not None

@@ -155,7 +155,7 @@ def upload_file(
     a client header. The read transaction ends before the storage PUT (no transaction
     spans it), then one write transaction covers source, item, run, and event. A
     same-name item is retried only when its latest run failed with no document indexed
-    (R2); otherwise the upload is a duplicate and replacement stays S7's
+    (R2); otherwise the upload is a duplicate and replacement stays S8's
     replace-only-after-success path.
 
     :param db: Session the item, run, and event are written through.
