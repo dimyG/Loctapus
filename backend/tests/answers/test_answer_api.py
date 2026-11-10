@@ -138,7 +138,7 @@ def test_rerank_true_accepted_and_ignored(*, client: TestClient, db_session: Ses
 
 
 def test_answer_empty_project_returns_canned(*, client: TestClient, db_session: Session) -> None:
-    """Check that a project with no indexed chunks answers from the can and logs exactly once.
+    """Check that a project with no indexed chunks answers from the canned row and logs exactly once.
 
     :param client: TestClient wired to the app with the rollback-managed session.
     :param db_session: Transaction-managed session the seed rows are written through.

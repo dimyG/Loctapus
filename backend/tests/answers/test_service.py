@@ -84,7 +84,7 @@ def test_answer_chunks_equal_retrieval_final_chunks(*, db_session: Session, sett
 def test_empty_index_returns_canned_answer_without_llm_call(
     *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Check that an empty index answers from the can and never calls the LLM.
+    """Check that an empty index answers from the canned row and never calls the LLM.
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
