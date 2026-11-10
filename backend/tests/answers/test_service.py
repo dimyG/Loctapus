@@ -191,7 +191,7 @@ def test_settings_defaults_apply_when_request_omits(*, db_session: Session, sett
         params=AnswerIn(query="alpha"),
         settings=settings,
     )
-    # answer_max_chunks_per_document (3) caps a document that top_k=10 alone would not.
+    # The answer_max_chunks_per_document setting (3) caps a document that top_k=10 alone would not.
     assert len(capped.chunks) == 3
 
 
