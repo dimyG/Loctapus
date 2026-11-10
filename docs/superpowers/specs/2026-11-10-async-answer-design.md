@@ -1,7 +1,8 @@
 # Async `/answer` - Design
 
 Date: 2026-11-10
-Status: Approved design, pending implementation on the `async-answer` branch.
+Status: Implemented 2026-11-10 on the `async-answer` branch (`c5f454a`..`5790200`),
+under `../plans/2026-11-10-async-answer.md`. Frozen: decisions below are as built.
 Source of truth: `2026-10-06-roadmap.md` (the "slices spec"). This document supersedes S5
 decision 7's "sync `generate`" clause (`2026-10-20-s5-answer-chat-design.md`) and S5/S6's
 per-request `get_llm_provider` call inside the answer service. Every other S5/S6 decision

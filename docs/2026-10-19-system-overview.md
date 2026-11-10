@@ -71,7 +71,9 @@ schema always exists before the app tier starts.
 The FastAPI app under uvicorn, serving every HTTP route in this document. On
 upload it PUTs the bytes into Garage and records the domain rows plus an outbox
 event in Postgres; it never publishes to RabbitMQ itself - that is the
-dispatcher's job (transactional outbox).
+dispatcher's job (transactional outbox). `/answer` is the one async route (2026-11-10):
+its LLM provider is built once per process at startup and closed at shutdown, and its
+database steps run in the threadpool, so an answer waiting on the LLM holds no thread.
 
 #### worker
 
@@ -148,8 +150,10 @@ Runtime flow of one question:
    server serves one) to `/api/projects/{project_id}/answer`. The api resolves the
    conversation - null means the owner's latest in the project, else one pending new
    row - loads the last `answer_history_messages` history messages and the REUSE
-   snapshot set, and closes the read before any LLM call.
-2. The router LLM call (`route()`) decides the turn: `DIRECT` (answer from history
+   snapshot set, and closes the read before any LLM call. These reads run in the
+   threadpool, never on the event loop.
+2. The router LLM call (`route()`) decides the turn: it is awaited, so no thread
+   is held while it waits on the provider. `DIRECT` (answer from history
    alone), `REUSE` (answer from history plus the conversation's gathered earlier
    evidence), or `RETRIEVE` (a rewritten standalone query, fresh retrieval). A
    failed router call degrades to `RETRIEVE` with the raw question, logged on the

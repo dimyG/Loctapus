@@ -348,6 +348,8 @@ Residuals from the 2026-10-20 whole-branch review of the S5 answer slice
   `jwt_secret`/`s3_secret_key` precedent for credential settings.
 - `79335bc` - `get_llm_provider` builds a fresh `httpx.Client` per answer request and
   never closes it; S6 (real providers + API keys) should own the provider lifecycle.
+  Resolved on 2026-11-10 in `async-answer` (`c5f454a`): the lifespan builds one
+  provider per process and closes it at shutdown.
 - `dd76d6b` - `test_rerank_true_accepted_and_ignored` compares omitted-vs-`true` instead
   of `false`-vs-`true`; the status codes are asserted as of this fix wave, but the
   full-body equality caveat stays.
@@ -527,6 +529,20 @@ New deferrals from the 2026-10-14 review fixes:
 - `RequireAuth`'s `signedout` destination and `UserMenu`'s sign-out
   `navigate("/")` are string-coupled; a shared constant would make the
   coupling structural. Both docstrings document it today.
+
+
+## 2026-11-10 - async /answer (branch `async-answer`) follow-ups
+
+Residuals from the 2026-11-10 async `/answer` work
+(`../specs/2026-11-10-async-answer-design.md`, its plan
+`../superpowers/plans/2026-11-10-async-answer.md`):
+
+- `5790200` - the remote embedding and rerank calls stay sync; when a network
+  embedding provider or the S7 reranker arrives, make that one remote call async
+  (spec decision 2).
+- `5790200` - nothing limits concurrent in-flight answers. Their database steps
+  still share the 40-token threadpool and the 15-connection pool (30s pool
+  timeout), and the LLM's rate limits apply (spec section 7).
 
 
 ## Todo later
