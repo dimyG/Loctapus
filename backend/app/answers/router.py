@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.answers.dependencies import get_app_llm_provider
 from app.answers.schemas import AnswerIn, AnswerOut
 from app.answers.service import Answer, generate_answer
 from app.conversations.models import ConversationMessageChunk
@@ -17,6 +18,7 @@ from app.identity.dependencies import get_current_user
 from app.identity.models import User
 from app.projects.service import get_project_visible_to_user
 from app.providers import LLMError
+from app.providers.base import LLMProvider
 from app.retrieval.service import RetrievedChunk
 
 _logger = logging.getLogger(__name__)
@@ -48,6 +50,7 @@ def answer_question(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    provider: LLMProvider = Depends(get_app_llm_provider),
 ) -> AnswerOut:
     """Generate one grounded answer for one query, raising 401, 404, 422, or 502.
 
@@ -56,6 +59,7 @@ def answer_question(
     :param user: User resolved from the bearer token.
     :param db: Session the answer round commits through.
     :param settings: Settings supplying the answer and retrieval defaults.
+    :param provider: LLM provider the application lifespan owns.
     """
 
     project = get_project_visible_to_user(db=db, user=user, project_id=project_id)
@@ -63,7 +67,12 @@ def answer_question(
         raise HTTPException(404, "project not found")
     try:
         answer = generate_answer(
-            db=db, project_id=project.id, user_id=user.id, params=body, settings=settings
+            db=db,
+            provider=provider,
+            project_id=project.id,
+            user_id=user.id,
+            params=body,
+            settings=settings,
         )
     except LLMError as error:
         # The failure is the upstream's, not the caller's: 502 separates a dead

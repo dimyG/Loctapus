@@ -80,6 +80,12 @@ class RecordingLLMProvider:
             return RouteDecision(route="retrieve", rewritten_query=None)
         return self.route_response
 
+    async def aclose(self) -> None:
+        """Hold no resources, so closing does nothing.
+
+        :param: None.
+        """
+
 
 class RaisingLLMProvider:
     """LLM provider whose every call raises; pins the 502 mapping and the router fallback."""
@@ -101,3 +107,9 @@ class RaisingLLMProvider:
         """
 
         raise LLMError("The answer service is down for maintenance.")
+
+    async def aclose(self) -> None:
+        """Hold no resources, so closing does nothing.
+
+        :param: None.
+        """

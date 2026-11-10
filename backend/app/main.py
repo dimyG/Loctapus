@@ -20,16 +20,19 @@ from app.core.db import SessionLocal
 from app.identity.router import router as identity_router
 from app.ingestion.schema_guard import run_startup_checks
 from app.projects.router import router as projects_router
-from app.providers import get_embedding_provider
+from app.providers import get_embedding_provider, get_llm_provider
 from app.retrieval.router import router as retrieval_router
 from app.sources.router import router as sources_router
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Run the startup checks once per process, before the app serves anything.
+async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:  # noqa: PLR0917
+    """Run the startup checks, own the LLM provider, and release it at shutdown.
 
-    :param _: The FastAPI instance; unused because the checks need no app state.
+    The provider is built only after the startup checks pass, so a refused boot
+    creates nothing that would need closing.
+
+    :param fastapi_app: The FastAPI instance whose state holds the provider.
     """
 
     # The module-level SessionLocal indirection keeps the factory swappable for
@@ -39,7 +42,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         run_startup_checks(db=session, embedding_provider=get_embedding_provider(settings=get_settings()))
     finally:
         session.close()
-    yield
+    provider = get_llm_provider(settings=get_settings())
+    fastapi_app.state.llm_provider = provider
+    try:
+        yield
+    finally:
+        await provider.aclose()
 
 
 app = FastAPI(

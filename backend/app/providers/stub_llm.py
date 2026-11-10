@@ -29,3 +29,9 @@ class StubLLMProvider:
         """
 
         return RouteDecision(route="retrieve", rewritten_query=None)
+
+    async def aclose(self) -> None:
+        """Hold no resources, so closing does nothing.
+
+        :param: None.
+        """

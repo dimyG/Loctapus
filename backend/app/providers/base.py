@@ -122,3 +122,9 @@ class LLMProvider(Protocol):
         """
 
         ...
+
+    async def aclose(self) -> None:
+        """Release the provider's network resources.
+
+        The application lifespan calls this once, at shutdown.
+        """

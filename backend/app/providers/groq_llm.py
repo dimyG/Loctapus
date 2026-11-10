@@ -45,8 +45,9 @@ class GroqLLMProvider:
     ) -> None:
         """Store the endpoint config and build one shared httpx client.
 
-        One client serves every generate and route call so connections pool
-        for the provider's lifetime.
+        One client serves every generate and route call, and the application
+        lifespan closes it at shutdown, so connections pool for the whole
+        app process.
 
         :param api_key: Groq API key sent as the bearer token.
         :param base_url: OpenAI-compatible base URL; ``/chat/completions`` is appended.
@@ -140,3 +141,11 @@ class GroqLLMProvider:
             route=decision["route"],
             rewritten_query=rewritten_query if isinstance(rewritten_query, str) else None,
         )
+
+    async def aclose(self) -> None:
+        """Close the shared client, ending its pooled connections.
+
+        :param: None.
+        """
+
+        self._client.close()

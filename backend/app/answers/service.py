@@ -25,8 +25,8 @@ from app.conversations.service import (
     resolve_conversation,
 )
 from app.core.config import Settings
-from app.providers import RouteDecision, get_llm_provider
-from app.providers.base import ChatMessage, LLMError
+from app.providers import RouteDecision
+from app.providers.base import ChatMessage, LLMError, LLMProvider
 from app.retrieval.schemas import RetrieveIn
 from app.retrieval.service import RetrievedChunk, retrieve
 
@@ -104,7 +104,13 @@ def _snapshot_from(*, chunk: RetrievedChunk | ConversationMessageChunk) -> Snaps
 
 
 def generate_answer(
-    *, db: Session, project_id: UUID, user_id: UUID, params: AnswerIn, settings: Settings
+    *,
+    db: Session,
+    provider: LLMProvider,
+    project_id: UUID,
+    user_id: UUID,
+    params: AnswerIn,
+    settings: Settings,
 ) -> Answer | None:
     """Route one turn, answer along its path, and persist the whole turn.
 
@@ -112,6 +118,7 @@ def generate_answer(
     caller's; the router maps that to a 404.
 
     :param db: Session the history reads and the append transaction commit through.
+    :param provider: LLM provider the router and answer calls run through.
     :param project_id: Project whose chunks are searched.
     :param user_id: User who asked, owning the conversation.
     :param params: Request body with the query and any retrieval overrides.
@@ -132,7 +139,6 @@ def generate_answer(
             db=db, conversation_id=conversation.id, max_chunks=settings.answer_reuse_max_chunks
         )
 
-    provider = get_llm_provider(settings=settings)
     router_fallback = False
     try:
         decision = provider.route(

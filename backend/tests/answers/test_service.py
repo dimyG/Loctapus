@@ -15,8 +15,8 @@ from app.core.config import Settings
 from app.identity.models import User
 from app.ingestion.models import Chunk
 from app.providers import LLMError
-from app.providers.base import ChatMessage, RouteDecision
-from app.providers.stub_llm import STUB_ANSWER
+from app.providers.base import ChatMessage, LLMProvider, RouteDecision
+from app.providers.stub_llm import STUB_ANSWER, StubLLMProvider
 from app.retrieval.models import RetrieveLog
 from app.retrieval.schemas import RetrieveIn
 from app.retrieval.service import retrieve
@@ -37,17 +37,33 @@ def _seed_user(*, db: Session) -> User:
     return user
 
 
-def _answer(*, db: Session, project_id: UUID, user_id: UUID, params: AnswerIn, settings: Settings) -> Answer:
+def _answer(
+    *,
+    db: Session,
+    provider: LLMProvider | None = None,
+    project_id: UUID,
+    user_id: UUID,
+    params: AnswerIn,
+    settings: Settings,
+) -> Answer:
     """Call generate_answer and pin the returned answer; the None path has its own test.
 
     :param db: Transaction-managed session the answer round commits through.
+    :param provider: Provider the answer runs through; the stub when omitted.
     :param project_id: Project the question is asked against.
     :param user_id: User who asked the question.
     :param params: Request body with the query and any retrieval overrides.
     :param settings: Test settings selecting the stub LLM provider.
     """
 
-    result = generate_answer(db=db, project_id=project_id, user_id=user_id, params=params, settings=settings)
+    result = generate_answer(
+        db=db,
+        provider=provider or StubLLMProvider(),
+        project_id=project_id,
+        user_id=user_id,
+        params=params,
+        settings=settings,
+    )
     assert result is not None
     return result
 
@@ -82,21 +98,20 @@ def test_answer_chunks_equal_retrieval_final_chunks(*, db_session: Session, sett
 
 
 def test_empty_index_returns_canned_answer_without_llm_call(
-    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+    *, db_session: Session, settings: Settings
 ) -> None:
     """Check that an empty index answers from the canned row and never calls the LLM.
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
-    :param monkeypatch: Fixture that installs a recording provider.
     """
 
     project_id = seed_project(db=db_session, email="answer-empty@example.com")
     user = _seed_user(db=db_session)
     provider = RecordingLLMProvider(answer="never served")
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: provider)
     result = _answer(
         db=db_session,
+        provider=provider,
         project_id=project_id,
         user_id=user.id,
         params=AnswerIn(query="alpha"),
@@ -119,6 +134,7 @@ def test_answer_logs_origin_answer(*, db_session: Session, settings: Settings) -
     user = _seed_user(db=db_session)
     generate_answer(
         db=db_session,
+        provider=StubLLMProvider(),
         project_id=project_id,
         user_id=user.id,
         params=AnswerIn(query="alpha"),
@@ -222,14 +238,11 @@ def test_settings_answer_context_chunks_caps_when_request_omits(*, db_session: S
     assert result.text == STUB_ANSWER
 
 
-def test_retrieve_route_answers_from_fresh_chunks(
-    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_retrieve_route_answers_from_fresh_chunks(*, db_session: Session, settings: Settings) -> None:
     """Check that a retrieve turn rewrites the query, answers grounded, and persists snapshots.
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
-    :param monkeypatch: Fixture that installs a recording provider.
     """
 
     project_id = seed_project(db=db_session, email="s6-retrieve@example.com")
@@ -241,9 +254,9 @@ def test_retrieve_route_answers_from_fresh_chunks(
         answer="grounded [1]",
         route_response=RouteDecision(route="retrieve", rewritten_query="alpha standalone"),
     )
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: provider)
     result = _answer(
         db=db_session,
+        provider=provider,
         project_id=project_id,
         user_id=user.id,
         params=AnswerIn(query="alpha"),
@@ -283,14 +296,11 @@ def test_retrieve_route_answers_from_fresh_chunks(
     assert snapshot.document_content_hash
 
 
-def test_direct_route_skips_retrieval_and_logs(
-    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_direct_route_skips_retrieval_and_logs(*, db_session: Session, settings: Settings) -> None:
     """Check that a direct turn answers from history alone with no retrieval and no log row.
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
-    :param monkeypatch: Fixture that installs a recording provider.
     """
 
     project_id = seed_project(db=db_session, email="s6-direct@example.com")
@@ -300,9 +310,9 @@ def test_direct_route_skips_retrieval_and_logs(
         answer="from history",
         route_response=RouteDecision(route="direct", rewritten_query=None),
     )
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: provider)
     result = _answer(
         db=db_session,
+        provider=provider,
         project_id=project_id,
         user_id=user.id,
         params=AnswerIn(query="alpha"),
@@ -321,14 +331,11 @@ def test_direct_route_skips_retrieval_and_logs(
     assert assistant.route == "direct"
 
 
-def test_reuse_route_gathers_conversation_snapshots(
-    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_reuse_route_gathers_conversation_snapshots(*, db_session: Session, settings: Settings) -> None:
     """Check that a reuse turn re-uses the conversation's earlier evidence without retrieval.
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
-    :param monkeypatch: Fixture that installs a recording provider.
     """
 
     project_id = seed_project(db=db_session, email="s6-reuse@example.com")
@@ -357,9 +364,9 @@ def test_reuse_route_gathers_conversation_snapshots(
         answer="reused [1]",
         route_response=RouteDecision(route="reuse", rewritten_query=None),
     )
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: provider)
     result = _answer(
         db=db_session,
+        provider=provider,
         project_id=project_id,
         user_id=user.id,
         params=AnswerIn(query="follow-up"),
@@ -384,14 +391,11 @@ def test_reuse_route_gathers_conversation_snapshots(
     assert "cached passage" in final.content
 
 
-def test_reuse_with_zero_snapshots_falls_back_to_retrieve(
-    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_reuse_with_zero_snapshots_falls_back_to_retrieve(*, db_session: Session, settings: Settings) -> None:
     """Check that a reuse turn with nothing gathered degrades to retrieval with the raw question.
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
-    :param monkeypatch: Fixture that installs a recording provider.
     """
 
     project_id = seed_project(db=db_session, email="s6-reuse-empty@example.com")
@@ -403,9 +407,9 @@ def test_reuse_with_zero_snapshots_falls_back_to_retrieve(
         answer="fallback grounded [1]",
         route_response=RouteDecision(route="reuse", rewritten_query=None),
     )
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: provider)
     result = _answer(
         db=db_session,
+        provider=provider,
         project_id=project_id,
         user_id=user.id,
         params=AnswerIn(query="alpha"),
@@ -419,14 +423,11 @@ def test_reuse_with_zero_snapshots_falls_back_to_retrieve(
     assert result.chunks
 
 
-def test_router_error_falls_back_to_retrieve_raw(
-    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_router_error_falls_back_to_retrieve_raw(*, db_session: Session, settings: Settings) -> None:
     """Check that a failed router call retrieves the raw question and logs the fallback (Focus 3).
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
-    :param monkeypatch: Fixture that installs a recording provider.
     """
 
     project_id = seed_project(db=db_session, email="s6-fallback@example.com")
@@ -435,9 +436,9 @@ def test_router_error_falls_back_to_retrieve_raw(
     )
     user = _seed_user(db=db_session)
     provider = RecordingLLMProvider(answer="fallback answer [1]", route_error=True)
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: provider)
     result = _answer(
         db=db_session,
+        provider=provider,
         project_id=project_id,
         user_id=user.id,
         params=AnswerIn(query="alpha"),
@@ -452,23 +453,20 @@ def test_router_error_falls_back_to_retrieve_raw(
     assert result.route == "retrieve"
 
 
-def test_failed_answer_call_persists_nothing(
-    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_failed_answer_call_persists_nothing(*, db_session: Session, settings: Settings) -> None:
     """Check that a failed generate leaves no conversation, not even an empty one.
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
-    :param monkeypatch: Fixture that installs a failing provider.
     """
 
     project_id = seed_project(db=db_session, email="s6-nothing@example.com")
     seed_document_with_chunks(db=db_session, project_id=project_id, chunk_texts=["alpha"])
     user = _seed_user(db=db_session)
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: RaisingLLMProvider())
     with pytest.raises(LLMError):
         generate_answer(
             db=db_session,
+            provider=RaisingLLMProvider(),
             project_id=project_id,
             user_id=user.id,
             params=AnswerIn(query="alpha"),
@@ -516,6 +514,7 @@ def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: 
     created = create_conversation(db=db_session, project_id=project_id, user_id=owner.id)
     result = generate_answer(
         db=db_session,
+        provider=StubLLMProvider(),
         project_id=project_id,
         user_id=stranger.id,
         params=AnswerIn(query="alpha", conversation_id=created.id),
@@ -524,9 +523,7 @@ def test_foreign_conversation_id_returns_none(*, db_session: Session, settings: 
     assert result is None
 
 
-def test_llm_calls_run_with_no_open_transaction(
-    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_llm_calls_run_with_no_open_transaction(*, db_session: Session, settings: Settings) -> None:
     """Check that no DB transaction stays open on the session across the router and answer calls.
 
     The history and REUSE reads commit before the LLM calls on purpose (spec
@@ -535,7 +532,6 @@ def test_llm_calls_run_with_no_open_transaction(
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
-    :param monkeypatch: Fixture that installs a transaction-recording provider.
     """
 
     project_id = seed_project(db=db_session, email="s6-txn@example.com")
@@ -585,9 +581,14 @@ def test_llm_calls_run_with_no_open_transaction(
             recorded["generate"].append(db_session.in_transaction())
             return "reused [1]"
 
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: TxnRecordingLLMProvider())
+        async def aclose(self) -> None:
+            """Hold no resources, so closing does nothing."""
+
+            del self
+
     _answer(
         db=db_session,
+        provider=TxnRecordingLLMProvider(),
         project_id=project_id,
         user_id=user.id,
         params=AnswerIn(query="follow-up", conversation_id=conversation.id),
@@ -597,13 +598,12 @@ def test_llm_calls_run_with_no_open_transaction(
 
 
 def test_reuse_answers_from_snapshots_after_chunk_replacement(
-    *, db_session: Session, settings: Settings, monkeypatch: pytest.MonkeyPatch
+    *, db_session: Session, settings: Settings
 ) -> None:
     """Check that REUSE answers from the inline snapshot once the cited chunk row is gone (Focus 5).
 
     :param db_session: Transaction-managed session the seed rows are written through.
     :param settings: Test settings selecting the stub embeddings and LLM.
-    :param monkeypatch: Fixture that installs a recording provider.
     """
 
     project_id = seed_project(db=db_session, email="s6-reuse-stale@example.com")
@@ -637,9 +637,9 @@ def test_reuse_answers_from_snapshots_after_chunk_replacement(
         answer="stale but readable [1]",
         route_response=RouteDecision(route="reuse", rewritten_query=None),
     )
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: provider)
     result = _answer(
         db=db_session,
+        provider=provider,
         project_id=project_id,
         user_id=user.id,
         params=AnswerIn(query="what did it say?", conversation_id=conversation.id),

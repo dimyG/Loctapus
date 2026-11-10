@@ -74,6 +74,9 @@ def get_embedding_provider(*, settings: Settings) -> EmbeddingProvider:
 def get_llm_provider(*, settings: Settings) -> LLMProvider:
     """Return the LLM provider selected by ``settings.llm_provider``.
 
+    The application lifespan calls this once per process and closes the result
+    at shutdown.
+
     :param settings: Settings selecting the implementation and supplying any Groq endpoint knobs.
     """
 

@@ -58,6 +58,54 @@ def _router_reply(*, content: str) -> Callable[[httpx.Request], httpx.Response]:
     return handler
 
 
+class _RecordingTransport(httpx.MockTransport):
+    """MockTransport recording whether anything closed it."""
+
+    def __init__(self, handler: Callable[[httpx.Request], httpx.Response]) -> None:  # noqa: PLR0917
+        """Serve the handler and start open.
+
+        :param handler: Handler answering every request.
+        """
+
+        super().__init__(handler)
+        self.closed = False
+
+    def close(self) -> None:
+        """Mark the transport closed.
+
+        :param: None.
+        """
+
+        self.closed = True
+
+    async def aclose(self) -> None:
+        """Mark the transport closed.
+
+        :param: None.
+        """
+
+        self.closed = True
+
+
+@pytest.mark.anyio
+async def test_aclose_closes_the_transport() -> None:
+    """Check that closing the provider closes its transport."""
+
+    transport = _RecordingTransport(_router_reply(content="{}"))
+    provider = GroqLLMProvider(
+        api_key="gsk-test",
+        base_url="https://groq.test",
+        model="openai/gpt-oss-20b",
+        timeout_seconds=30.0,
+        max_tokens=1024,
+        route_max_tokens=128,
+        route_timeout_seconds=10.0,
+        transport=transport,
+    )
+    await provider.aclose()
+    assert transport.closed is True
+
+
 def test_generate_returns_message_content() -> None:
     """Check that a 200 completion returns its message content verbatim."""
 

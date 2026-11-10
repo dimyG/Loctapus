@@ -19,6 +19,14 @@ from app.storage.service import StorageService
 from scripts.broker_admin import ensure_broker_vhost
 from tests.helpers import SettingsForTests
 
+
+@pytest.fixture(scope="session")
+def anyio_backend() -> str:
+    """Return the only backend async tests run on in this suite."""
+
+    return "asyncio"
+
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
 DEFAULT_TEST_BROKER_URL = "amqp://guest:guest@localhost:5672/rag_test"

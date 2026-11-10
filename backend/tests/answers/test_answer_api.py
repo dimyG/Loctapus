@@ -7,8 +7,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.answers.dependencies import get_app_llm_provider
 from app.answers.service import CANNED_EMPTY_ANSWER
 from app.ingestion.models import Document
+from app.main import app
 from app.providers.stub_llm import STUB_ANSWER
 from app.retrieval.models import RetrieveLog
 from tests.factories import seed_document_with_chunks
@@ -240,24 +242,30 @@ def test_answer_response_shape(*, client: TestClient, db_session: Session) -> No
     assert item["document_content_hash"] == db_content_hash
 
 
-def test_llm_failure_maps_to_502_and_still_logs(
-    *, client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_llm_failure_maps_to_502_and_still_logs(*, client: TestClient, db_session: Session) -> None:
     """Check that a provider failure answers 502 while the answer-origin log row survives.
 
     :param client: TestClient wired to the app with the rollback-managed session.
     :param db_session: Transaction-managed session the seed rows are written through.
-    :param monkeypatch: Fixture that swaps the LLM provider for a failing one.
     """
 
     headers, project_id = _create_project(client=client, email="llm-down@example.com")
     seed_document_with_chunks(db=db_session, project_id=UUID(project_id), chunk_texts=["alpha"])
-    monkeypatch.setattr("app.answers.service.get_llm_provider", lambda *, settings: RaisingLLMProvider())
+    app.dependency_overrides[get_app_llm_provider] = _failing_llm_provider
     response = client.post(f"/api/projects/{project_id}/answer", json={"query": "alpha"}, headers=headers)
     assert response.status_code == 502
     assert response.json()["detail"] == "The answer service is down for maintenance."
     log = db_session.scalars(select(RetrieveLog).where(RetrieveLog.project_id == UUID(project_id))).one()
     assert log.params["origin"] == "answer"
+
+
+async def _failing_llm_provider() -> RaisingLLMProvider:
+    """Return the provider whose every call raises the 502 detail.
+
+    :param: None.
+    """
+
+    return RaisingLLMProvider()
 
 
 def test_error_paths_log_nothing(*, client: TestClient, db_session: Session) -> None:
