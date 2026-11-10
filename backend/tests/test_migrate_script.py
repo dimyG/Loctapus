@@ -25,7 +25,11 @@ def _head_revision() -> str:
 
 
 def _run_migrate(*, database_url: str, cwd: Path) -> subprocess.CompletedProcess[str]:
-    """Run the script as a real subprocess against ``database_url`` from ``cwd``."""
+    """Run the script as a real subprocess against ``database_url`` from ``cwd``.
+
+    :param database_url: Database URL the script's environment points at.
+    :param cwd: Working directory the subprocess runs from.
+    """
 
     env = {**os.environ, "RAG_DATABASE_URL": database_url}
     return subprocess.run(
@@ -38,7 +42,10 @@ def _run_migrate(*, database_url: str, cwd: Path) -> subprocess.CompletedProcess
 
 
 def test_migrate_applies_head_from_any_cwd(*, tmp_path: Path) -> None:
-    """Check that the script migrates a scratch database to head from outside backend/."""
+    """Check that the script migrates a scratch database to head from outside backend/.
+
+    :param tmp_path: Scratch directory the subprocess runs from.
+    """
 
     url = os.environ.get("RAG_TEST_DATABASE_URL", DEFAULT_TEST_URL)
     admin_url = url.rsplit("/", 1)[0] + "/postgres"
@@ -68,7 +75,10 @@ def test_migrate_applies_head_from_any_cwd(*, tmp_path: Path) -> None:
 
 
 def test_migrate_exits_nonzero_on_unreachable_database(*, tmp_path: Path) -> None:
-    """Check that a failed migration exits non-zero - the status compose gates on."""
+    """Check that a failed migration exits non-zero - the status compose gates on.
+
+    :param tmp_path: Scratch directory the subprocess runs from.
+    """
 
     result = _run_migrate(
         database_url="postgresql+psycopg://rag:rag@localhost:5433/rag_unreachable",

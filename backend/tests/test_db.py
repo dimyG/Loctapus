@@ -22,6 +22,9 @@ def test_make_engine_connects(*, settings: Settings, engine: Engine) -> None:
 
     The session-scoped ``engine`` fixture is requested so the migrated test database
     exists before the direct connection is attempted.
+
+    :param settings: Test settings carrying the test database URL.
+    :param engine: Session-scoped fixture engine that guarantees the migrated database.
     """
 
     settings_engine = make_engine(database_url=settings.database_url)
@@ -31,6 +34,9 @@ def test_make_engine_connects(*, settings: Settings, engine: Engine) -> None:
 
 
 def test_db_session_fixture_works(*, db_session: Session) -> None:
-    """Check that the rollback-managed session can select."""
+    """Check that the rollback-managed session can select.
+
+    :param db_session: Transaction-managed session the fixture provides.
+    """
 
     assert db_session.execute(text("SELECT 1")).scalar() == 1

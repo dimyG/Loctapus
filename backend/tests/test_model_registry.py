@@ -35,7 +35,10 @@ def _registry_imports() -> set[str]:
 
 
 def _run_fresh(*, code: str) -> None:
-    """Run ``code`` in a fresh interpreter from BACKEND_DIR and require success."""
+    """Run ``code`` in a fresh interpreter from BACKEND_DIR and require success.
+
+    :param code: Python source the fresh interpreter executes.
+    """
 
     subprocess.run([sys.executable, "-c", code], cwd=BACKEND_DIR, check=True)
 
@@ -54,7 +57,10 @@ def test_registry_imports_every_models_module() -> None:
 
 @pytest.mark.parametrize("entry_point", ENTRY_POINTS)
 def test_entry_point_loads_the_registry(*, entry_point: str) -> None:
-    """Check in a fresh interpreter that the entry point pulls in the registry."""
+    """Check in a fresh interpreter that the entry point pulls in the registry.
+
+    :param entry_point: Module import the fresh interpreter runs.
+    """
 
     _run_fresh(code=f"import sys, {entry_point}; assert 'app.models' in sys.modules")
 

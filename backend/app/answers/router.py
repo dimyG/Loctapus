@@ -77,7 +77,10 @@ def answer_question(
 
 
 def _to_answer_out(*, answer: Answer) -> AnswerOut:
-    """Map one service answer into its response body."""
+    """Map one service answer into its response body.
+
+    :param answer: Service answer the response body is built from.
+    """
 
     return AnswerOut(
         answer=answer.text,

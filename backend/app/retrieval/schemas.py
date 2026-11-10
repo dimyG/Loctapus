@@ -10,7 +10,10 @@ MAX_QUERY_CHARS: Final = 2000
 
 # Pydantic's AfterValidator calls the value positionally; keyword-only is impossible here.
 def _reject_nul(value: str) -> str:  # noqa: PLR0917
-    """Reject NUL bytes, which Postgres text parameters cannot carry."""
+    """Reject NUL bytes, which Postgres text parameters cannot carry.
+
+    :param value: Query text Pydantic hands the validator after stripping and bounding.
+    """
 
     if "\x00" in value:
         raise ValueError("query must not contain NUL bytes")

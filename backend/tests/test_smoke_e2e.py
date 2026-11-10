@@ -4,7 +4,10 @@ from fastapi.testclient import TestClient
 
 
 def test_register_login_project_lifecycle(*, client: TestClient) -> None:
-    """Drive register, login, project create, fetch, and delete through the API."""
+    """Check that register, login, project create, fetch, and delete all work through the API.
+
+    :param client: TestClient wired to the assembled application.
+    """
 
     token = client.post(
         "/api/auth/register",

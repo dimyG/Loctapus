@@ -22,7 +22,11 @@ from app.storage.service import build_raw_object_key
 
 
 def seed_project(*, db: Session, email: str) -> UUID:
-    """Register a user through the real service and return their default project id."""
+    """Register a user through the real service and return their default project id.
+
+    :param db: Transaction-managed session the registration rows are written through.
+    :param email: Address to register the owner with.
+    """
 
     registration = register_user(db=db, email=email, password="password123")
     return registration.project.id
@@ -61,6 +65,12 @@ def seed_document_with_chunks(
     Embeddings come from the stub provider so both retrieval legs see the rows.
     The caller owns the transaction: nothing is committed here. ``filename`` must
     stay unique inside the project per call, exactly as the uploads API guarantees.
+
+    :param db: Transaction-managed session the rows are written through.
+    :param project_id: Project the document and its chunks belong to.
+    :param chunk_texts: Chunk texts to store, in order.
+    :param filename: Filename the item and chunk metadata carry; unique per project.
+    :param embed: When false, chunks keep a null embedding for vector-leg-absent tests.
     """
 
     source_id = db.scalar(select(Source.id).where(Source.project_id == project_id, Source.type == "upload"))
@@ -138,6 +148,11 @@ def seed_upload(
     needs real bytes in Garage. Rows flush in FK order because the unit of work
     orders INSERTs of unrelated mappers by table name. The item reuses the project's
     one upload source, creating it when missing, exactly as the uploads API does.
+
+    :param db: Transaction-managed session the rows are written through.
+    :param project_id: Project the upload belongs to.
+    :param filename: Filename the item carries; unique per project.
+    :param content: File bytes the item's content hash fingerprints.
     """
 
     source_id = db.scalar(select(Source.id).where(Source.project_id == project_id, Source.type == "upload"))

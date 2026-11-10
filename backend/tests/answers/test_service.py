@@ -566,13 +566,21 @@ def test_llm_calls_run_with_no_open_transaction(
         """Provider that records the session's transaction state during each call."""
 
         def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
-            """Record the transaction state, then route the turn to reuse."""
+            """Record the transaction state, then route the turn to reuse.
+
+            :param system: System prompt the router call carries.
+            :param messages: Message list the router call carries.
+            """
 
             recorded["route"].append(db_session.in_transaction())
             return RouteDecision(route="reuse", rewritten_query=None)
 
         def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
-            """Record the transaction state, then answer."""
+            """Record the transaction state, then answer.
+
+            :param system: System prompt the answer call carries.
+            :param messages: Message list the answer call carries.
+            """
 
             recorded["generate"].append(db_session.in_transaction())
             return "reused [1]"

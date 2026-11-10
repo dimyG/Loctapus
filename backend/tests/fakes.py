@@ -9,17 +9,26 @@ class MismatchedEmbeddingProvider:
     dimension: int
 
     def __init__(self, *, dimension: int) -> None:
-        """Record the deliberately mismatching dimension."""
+        """Record the deliberately mismatching dimension.
+
+        :param dimension: Vector width the fake reports instead of the migrated column's.
+        """
 
         self.dimension = dimension
 
     def embed_documents(self, *, texts: list[str]) -> list[list[float]]:
-        """Return zero vectors of the declared dimension."""
+        """Return zero vectors of the declared dimension.
+
+        :param texts: Texts to embed; only their count shapes the returned matrix.
+        """
 
         return [[0.0] * self.dimension for _ in texts]
 
     def embed_query(self, *, text: str) -> list[float]:
-        """Return a zero vector of the declared dimension."""
+        """Return a zero vector of the declared dimension.
+
+        :param text: Query text to embed; ignored beyond keeping the provider protocol.
+        """
 
         return [0.0] * self.dimension
 
@@ -34,7 +43,12 @@ class RecordingLLMProvider:
         route_response: RouteDecision | None = None,
         route_error: bool = False,
     ) -> None:
-        """Store the fixed responses and flags, and open the call logs."""
+        """Store the fixed responses and flags, and open the call logs.
+
+        :param answer: Text every generate call returns.
+        :param route_response: Decision every route call returns when ``route_error`` is false.
+        :param route_error: When true, every route call raises instead of answering.
+        """
 
         self.answer = answer
         self.route_response = route_response
@@ -43,13 +57,21 @@ class RecordingLLMProvider:
         self.route_calls: list[tuple[str, list[ChatMessage]]] = []
 
     def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
-        """Record one (system, messages) call and return the fixed answer."""
+        """Record one (system, messages) call and return the fixed answer.
+
+        :param system: System prompt the answer call carries.
+        :param messages: Message list the answer call carries.
+        """
 
         self.calls.append((system, messages))
         return self.answer
 
     def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
-        """Record one router call, then raise or return the fixed decision."""
+        """Record one router call, then raise or return the fixed decision.
+
+        :param system: System prompt the router call carries.
+        :param messages: Message list the router call carries.
+        """
 
         self.route_calls.append((system, messages))
         if self.route_error:
@@ -63,11 +85,19 @@ class RaisingLLMProvider:
     """LLM provider whose every call raises; pins the 502 mapping and the router fallback."""
 
     def generate(self, *, system: str, messages: list[ChatMessage]) -> str:
-        """Raise the maintenance error every caller maps to a 502."""
+        """Raise the maintenance error every caller maps to a 502.
+
+        :param system: System prompt the call carries; ignored by the raise.
+        :param messages: Message list the call carries; ignored by the raise.
+        """
 
         raise LLMError("The answer service is down for maintenance.")
 
     def route(self, *, system: str, messages: list[ChatMessage]) -> RouteDecision:
-        """Raise so the answer service falls back to retrieval with the raw question."""
+        """Raise so the answer service falls back to retrieval with the raw question.
+
+        :param system: System prompt the call carries; ignored by the raise.
+        :param messages: Message list the call carries; ignored by the raise.
+        """
 
         raise LLMError("The answer service is down for maintenance.")

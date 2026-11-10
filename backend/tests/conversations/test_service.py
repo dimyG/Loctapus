@@ -214,7 +214,10 @@ def test_append_turn_concurrent_sends_serialize(*, engine: Engine) -> None:
         setup.close()
 
     def send(*, index: int) -> None:
-        """Append one turn through a private session so the row lock serializes for real."""
+        """Append one turn through a private session so the row lock serializes for real.
+
+        :param index: Sender number naming the question and answer the turn carries.
+        """
 
         session = factory()
         try:
