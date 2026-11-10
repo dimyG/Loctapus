@@ -143,7 +143,7 @@ def test_ingest_end_to_end(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check the full happy path into the single indexing transaction.
+    """Check that the full happy path lands in the single indexing transaction.
 
     :param db_session: Transaction-managed session the pipeline rows are read through.
     :param settings: Test settings selecting the stub parser.
@@ -519,7 +519,7 @@ def test_identical_version_conflict_is_idempotent_noop(
     settings: Settings,
     storage: StorageService,
 ) -> None:
-    """Check the unique backstop: a second identical run ends ready on the stored document.
+    """Check that the unique backstop ends a second identical run ready on the stored document.
 
     :param db_session: Transaction-managed session both runs are driven on.
     :param settings: Test settings selecting the stub parser.

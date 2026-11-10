@@ -14,7 +14,7 @@ from tests.fakes import MismatchedEmbeddingProvider
 
 
 def test_dimension_guard(*, db_session: Session) -> None:
-    """Check the catalog dimension query and the comparison against the provider.
+    """Check that the catalog dimension query matches what the provider comparison expects.
 
     :param db_session: Transaction-managed session the catalog query runs on.
     """

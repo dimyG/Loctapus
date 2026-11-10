@@ -54,7 +54,7 @@ def test_team_membership_unique(*, db_session: Session) -> None:
 
 
 def test_project_team_role_unique_and_role_check(*, db_session: Session) -> None:
-    """Check the role check constraint and the per-team uniqueness of project roles.
+    """Check that the role check constraint and the per-team uniqueness of project roles hold.
 
     :param db_session: Transaction-managed session the fixture rows are written through.
     """

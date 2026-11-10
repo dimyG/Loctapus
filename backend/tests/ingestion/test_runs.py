@@ -73,7 +73,7 @@ def test_disallowed_transition_raises_without_touching_the_row(*, db_session: Se
 
 
 def test_transitions_follow_the_pipeline(*, db_session: Session) -> None:
-    """Check the guarded pipeline transitions and that a claimed run cannot be re-claimed.
+    """Check that the guarded pipeline transitions hold and a claimed run cannot be re-claimed.
 
     :param db_session: Transaction-managed session the transitions run on.
     """

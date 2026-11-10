@@ -79,7 +79,7 @@ def _upload(
 def test_upload_creates_item_run_and_event(
     *, client: TestClient, db_session: Session, storage: StorageService
 ) -> None:
-    """Check the upload happy path: 201 UploadOut shape plus the rows and the raw object.
+    """Check that the upload happy path answers 201 with the UploadOut shape plus the rows and the raw object.
 
     :param client: TestClient wired to the app with the rollback-managed session.
     :param db_session: Transaction-managed session the seeded rows are read through.
@@ -323,7 +323,7 @@ def test_extension_check_is_case_insensitive(*, client: TestClient, db_session: 
 
 
 def test_uploads_list_derives_the_latest_status(*, client: TestClient, db_session: Session) -> None:
-    """Check the list derives each item's status from its latest run, newest first, one row each.
+    """Check that the list derives each item's status from its latest run, newest first, one row each.
 
     :param client: TestClient wired to the app with the rollback-managed session.
     :param db_session: Transaction-managed session the tied runs are written through.
@@ -457,7 +457,7 @@ def test_upload_storage_failure_returns_503(
 
 
 def test_upload_validates_extension_empty_and_size(*, client: TestClient) -> None:
-    """Check the friendly 422s for a wrong extension, an empty file, and an oversized body.
+    """Check that the friendly 422s cover a wrong extension, an empty file, and an oversized body.
 
     :param client: TestClient wired to the app with the rollback-managed session.
     """
@@ -636,7 +636,7 @@ def test_project_delete_cascades_fully_ingested_source(
 
 
 def test_upload_raw_returns_the_stored_bytes(*, client: TestClient) -> None:
-    """Check the raw happy path: 200 with the stored bytes, PDF type, and inline disposition.
+    """Check that the raw happy path answers 200 with the stored bytes, PDF type, and inline disposition.
 
     :param client: TestClient wired to the app with the rollback-managed session.
     """
@@ -777,7 +777,7 @@ def test_upload_raw_storage_failure_returns_503(
 def test_delete_upload_removes_rows_and_the_stored_object(
     *, client: TestClient, db_session: Session, settings: Settings, storage: StorageService
 ) -> None:
-    """Check the delete happy path: 204, every pipeline row gone, and the object gone.
+    """Check that the delete happy path answers 204 with every pipeline row gone and the object gone.
 
     :param client: TestClient wired to the app with the rollback-managed session.
     :param db_session: Transaction-managed session the pipeline rows are counted on.
