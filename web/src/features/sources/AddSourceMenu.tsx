@@ -35,7 +35,7 @@ const SOURCE_TYPES: SourceType[] = [
 /**
  * The sources toolbar's primary action: pick a source type to add.
  *
- * @param {{ projectId: string }} props - Project the chosen source type is added to.
+ * @param {string} projectId - Project the chosen source type is added to.
  */
 export default function AddSourceMenu({ projectId }: { projectId: string }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);

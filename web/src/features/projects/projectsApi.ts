@@ -30,5 +30,9 @@ export const projectsApi = api.injectEndpoints({
  * Generated hooks for the project endpoints: list all projects, fetch one by
  * id, and create a project on a team. Creating invalidates the Project tag,
  * so the list and detail queries refetch.
+ *
+ * @param {string} projectId - Project to fetch, passed to useGetProjectQuery.
+ * @param {{ name: string; team_id: string }} body - New project's name and team,
+ *   passed to useCreateProjectMutation.
  */
 export const { useCreateProjectMutation, useGetProjectsQuery, useGetProjectQuery } = projectsApi;

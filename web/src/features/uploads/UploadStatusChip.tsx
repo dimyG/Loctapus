@@ -6,7 +6,7 @@ import type { RowStatus } from "./uploadsApi";
 /**
  * The upload's status chip; spins while the ingestion pipeline can still move it.
  *
- * @param {{ status: RowStatus }} props - Status a sources-table row currently shows.
+ * @param {RowStatus} status - Status a sources-table row currently shows.
  */
 export default function UploadStatusChip({ status }: { status: RowStatus }) {
   // Terminal statuses decided an outcome, so only in-flight ones earn a spinner.
