@@ -112,8 +112,12 @@ test.describe("journey", () => {
       // First visit to the upload route transforms its modules on the fly, so
       // the rows can land well past the 5s default on a cold stack - the Ready
       // assertion below carries the same headroom for the pipeline itself.
-      await expect(page.getByRole("cell", { name: "tiny.pdf" })).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByRole("cell", { name: "sample.docx" })).toBeVisible();
+      // exact: the per-row delete cell is named "Delete <file>" and would
+      // otherwise collide with the filename cell under substring matching.
+      await expect(page.getByRole("cell", { name: "tiny.pdf", exact: true })).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(page.getByRole("cell", { name: "sample.docx", exact: true })).toBeVisible();
 
       // The default 5s expect timeout does not cover the full pipeline, so the
       // assertion carries an explicit one inside the 30s test budget.
