@@ -1,6 +1,6 @@
 # System overview
 
-Snapshot as of 2026-10-29, covering the service topology, the HTTP API, the
+Snapshot as of 2026-11-09, covering the service topology, the HTTP API, the
 web UI shell, and the database schema. Sources: `deploy/docker-compose.yml`,
 `backend/app/main.py` and the six routers it mounts, `web/Caddyfile`,
 `web/src/app/api.ts`, the RTK Query feature APIs plus
@@ -683,3 +683,31 @@ deferred - the 2026-10-23 backlog entry).
   surface as the friendly 502.
 - `alembic_version` also exists in the database: one framework-managed row with
   the current migration revision, not an ORM model.
+
+## Code comments and docstrings
+
+As of 2026-11-09 the whole codebase (backend and web) follows one comment
+standard, defined in
+`docs/superpowers/specs/2026-11-09-comment-docstring-rewrite-design.md`:
+
+- Every Python module, class, function, and method has a docstring, and every
+  parameterized function carries a Sphinx-style `:param name:` list (one line
+  per parameter, no `:type:` lines; types live in the signature). Module
+  docstrings state the module's role plus its one non-obvious boundary rule.
+- Test docstrings use the imperative "Check that ..." voice and name the
+  behavior verified.
+- Frontend exports carry JSDoc, with `@param {type} name - ...` lines where an
+  export takes parameters; inline `//` comments follow the same rules as
+  Python's `#` comments.
+- Inline comments explain why (an invariant, a constraint, a non-obvious
+  behavior), never restate the code, start capitalized, and end with a
+  period; a comment repeated three or more times per file collapses to one
+  copy where it is most load-bearing.
+- Spec and slice IDs inside comments are kept only where they still resolve
+  against the specs; a comment that disagrees with the code is rewritten to
+  describe the actual behavior and the discrepancy lands in `docs/backlog.md`.
+
+Enforcement: ruff's pydocstyle rules plus `backend/tests/test_style.py`
+(docstring presence on every definition, blank line after, line length 110)
+run with every backend verification. The JSDoc and inline-comment rules are
+convention-only and were applied by the 2026-11-09 rewrite's review rounds.
