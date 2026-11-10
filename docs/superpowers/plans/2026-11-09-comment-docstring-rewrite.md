@@ -320,4 +320,4 @@ git commit -m "docs(sweep): validate stale references and update overview"
 
 - [ ] **Step 6: Fresh-context review**
 
-Dispatch a fresh-context review of the whole branch using **only** `opencode/mimo-v2.6-flash-free`; fix findings, one commit per concern.
+Dispatch a fresh-context review of the whole branch using **only** GLM 5.3 flash (paid variant `openrouter/z-ai/glm-5.3-flash`); fix findings, one commit per concern.
