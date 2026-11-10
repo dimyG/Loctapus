@@ -165,7 +165,7 @@ def test_oversize_element_hard_splits_with_overlap() -> None:
 
     chunks = _chunk(elements=_oversize_elements())
     words = _paragraph(word_count=60, tag="big").split()
-    # floor(40 * 3 / 4) = 30 words per window, stepping back the 8-word overlap.
+    # Each window holds floor(40 * 3 / 4) = 30 words, stepping back the 8-word overlap.
     assert [chunk.text for chunk in chunks] == [
         " ".join(words[0:30]),
         " ".join(words[22:52]),

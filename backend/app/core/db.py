@@ -29,7 +29,7 @@ def make_engine(*, database_url: str) -> Engine:
 
 
 engine = make_engine(database_url=get_settings().database_url)
-# expire_on_commit=False: this app commits reads as transaction boundaries (the
+# With expire_on_commit=False this app commits reads as transaction boundaries (the
 # services' read-only closes), and expiring on those commits would turn the next
 # attribute read into a refresh SELECT that re-opens a transaction - pinning a
 # pooled connection across the LLM calls that follow. Sessions stay short and

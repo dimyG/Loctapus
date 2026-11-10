@@ -93,7 +93,7 @@ def _drain_one(*, broker_url: str, queue_name: str) -> tuple[str, dict[str, Any]
     """
 
     with Connection(broker_url) as connection:
-        # no_ack keeps a failed assertion from leaving an unacknowledged message behind.
+        # The no_ack flag keeps a failed assertion from leaving an unacknowledged message behind.
         queue = SimpleQueue(connection.default_channel, queue_name, no_ack=True)
         try:
             message = queue.get(block=True, timeout=_DRAIN_TIMEOUT_SECONDS)

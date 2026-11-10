@@ -67,7 +67,7 @@ def test_tasks_retry_transient_database_errors() -> None:
 
     celery_app.loader.import_default_modules()
     for task_name in (INGEST_SOURCE_ITEM_TASK, EMBED_DOCUMENT_TASK):
-        # autoretry_for and the retry knobs are runtime attributes the Celery
+        # The autoretry_for and retry knobs are runtime attributes the Celery
         # stubs do not declare.
         task: Any = celery_app.tasks[task_name]
         assert OperationalError in task.autoretry_for

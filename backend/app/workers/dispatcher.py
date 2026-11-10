@@ -112,7 +112,7 @@ def dispatch_batch(
             _bump(row=row, error=f"no route for event_type {row.event_type!r}", backoff=backoff)
             continue
         try:
-            # task_id tags the message with its outbox row id; the timeouts bound the
+            # The task_id tags the message with its outbox row id; the timeouts bound the
             # publish (and its broker confirmation) so a dead broker cannot hang a tick.
             app.send_task(
                 route.task_name,
@@ -182,7 +182,7 @@ def run_loop(
             sleep(settings.outbox_poll_interval_seconds)
             continue
         if not ready:
-            # stderr, flushed: the e2e webServer entry waits on this line, and piped
+            # Goes to stderr, flushed: the e2e webServer entry waits on this line, and piped
             # Python stdout is block-buffered, so an unflushed print may never arrive.
             print("dispatcher ready", file=sys.stderr, flush=True)
             ready = True

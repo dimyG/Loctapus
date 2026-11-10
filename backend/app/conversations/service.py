@@ -77,7 +77,7 @@ def resolve_conversation(
     :param conversation_id: Explicit id the caller asked to thread into, or null.
     """
 
-    # conversation_id arrives null only before hydration resolves: first entry into a
+    # The conversation_id body field arrives null only before hydration resolves: first entry into a
     # project's chat, or a submit racing the GET-latest fetch. Null always means
     # latest-or-create, never create-new, so the race resolves to the existing row.
     if conversation_id is None:
