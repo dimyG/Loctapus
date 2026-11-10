@@ -57,7 +57,7 @@ class SourceItem(Base):
         # A filename identifies one item inside its source (U1).
         UniqueConstraint("source_id", "external_id", name="uq_source_items_source_id_external_id"),
         CheckConstraint("size_bytes > 0"),
-        # project_id is repeated down sources -> source_items -> documents -> chunks so
+        # The project_id column is repeated down sources -> source_items -> documents -> chunks so
         # retrieval filters chunks by project without joins; the composite FK makes the
         # database reject any row whose project differs from its source's, so the tenant
         # boundary is enforced by Postgres rather than remembered by writers.

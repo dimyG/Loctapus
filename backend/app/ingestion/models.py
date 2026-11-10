@@ -36,7 +36,7 @@ class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
         UniqueConstraint("source_item_id", "content_hash", name="uq_documents_source_item_id_content_hash"),
-        # project_id is repeated down sources -> source_items -> documents -> chunks so
+        # The project_id column is repeated down sources -> source_items -> documents -> chunks so
         # retrieval filters chunks by project without joins; the composite FK makes the
         # database reject any row whose project differs from its item's, so the tenant
         # boundary is enforced by Postgres rather than remembered by writers.
@@ -112,7 +112,7 @@ class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
     __table_args__ = (
         CheckConstraint(_STATUS_CHECK),
-        # finished_at must exist exactly when the run reached a terminal status, so a
+        # The finished_at column must exist exactly when the run reached a terminal status, so a
         # finished run is never mistaken for one still in flight and vice versa.
         CheckConstraint(f"(status IN ({_TERMINAL_VALUES})) = (finished_at IS NOT NULL)"),
         Index("ix_ingestion_runs_document_id", "document_id"),

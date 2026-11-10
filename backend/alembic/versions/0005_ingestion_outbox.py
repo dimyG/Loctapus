@@ -48,7 +48,7 @@ def upgrade() -> None:
         "source_items",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("source_id", sa.Uuid(), nullable=False),
-        # project_id is repeated down the chain so retrieval filters by project without
+        # The project_id column is repeated down the chain so retrieval filters by project without
         # joins, and the composite FK below makes the database reject any row whose
         # project differs from its source's.
         sa.Column("project_id", sa.Uuid(), nullable=False),
@@ -75,7 +75,7 @@ def upgrade() -> None:
         "documents",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("source_item_id", sa.Uuid(), nullable=False),
-        # project_id is repeated down the chain so retrieval filters by project without
+        # The project_id column is repeated down the chain so retrieval filters by project without
         # joins, and the composite FK below makes the database reject any row whose
         # project differs from its item's.
         sa.Column("project_id", sa.Uuid(), nullable=False),
@@ -115,7 +115,7 @@ def upgrade() -> None:
             sa.Computed("to_tsvector('english', text)", persisted=True),
         ),
         sa.CheckConstraint("chunk_type IN ('text')"),
-        # project_id is repeated down the chain so retrieval filters chunks by project
+        # The project_id column is repeated down the chain so retrieval filters chunks by project
         # without joins, and the composite FK makes the database reject any row whose
         # project differs from its document's.
         sa.ForeignKeyConstraint(
@@ -142,7 +142,7 @@ def upgrade() -> None:
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
         sa.CheckConstraint("status IN ('queued', 'fetching', 'processing', 'indexing', 'ready', 'failed')"),
-        # finished_at must exist exactly when the run reached a terminal status, so a
+        # The finished_at column must exist exactly when the run reached a terminal status, so a
         # finished run is never mistaken for one still in flight and vice versa.
         sa.CheckConstraint("(status IN ('ready', 'failed')) = (finished_at IS NOT NULL)"),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="SET NULL"),
