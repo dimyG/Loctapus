@@ -1,21 +1,23 @@
 import react from "@vitejs/plugin-react";
 import { configDefaults, defineConfig } from "vitest/config";
 
-// e2e/ belongs to Playwright, so vitest must never pick it up as unit tests;
-// the default excludes still apply (node_modules, dist, config files, ...).
-// The dev server serves the SPA and forwards /api to the backend itself, so the
-// browser stays same-origin exactly as it is behind Caddy in production. Without it a
-// host-run dev server would need VITE_API_BASE_URL to point at the API's own origin,
-// which brings CORS into play.
-const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? "http://localhost:8000";
+// The dev server forwards /api/ to the backend itself, so the browser stays same-origin
+// exactly as it is behind Caddy in production; a host-run dev server needs no
+// VITE_API_BASE_URL either. Plain environment only: Vite does not load .env files into
+// process.env here, and the name deliberately lacks the VITE_ prefix that would expose
+// the value to client code.
+const apiProxyTarget = process.env.API_PROXY_TARGET || "http://localhost:8000";
 
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/api": {
+      // "/api/" matches Caddy's `handle /api/*` (a bare /api falls through to the SPA
+      // in both), and xfwd forwards the browser's Host like Caddy's reverse_proxy, so
+      // backend-generated absolute URLs stay reachable.
+      "/api/": {
         target: apiProxyTarget,
-        changeOrigin: true,
+        xfwd: true,
       },
     },
   },
@@ -23,6 +25,8 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // e2e/ belongs to Playwright, so vitest must never pick it up as unit tests;
+    // the default excludes still apply (node_modules, dist, config files, ...).
     exclude: [...configDefaults.exclude, "e2e/**"],
     // Generous per-test budget: under parallel load, 1s findBy polls flake.
     testTimeout: 10_000,

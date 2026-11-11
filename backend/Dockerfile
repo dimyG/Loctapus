@@ -9,6 +9,11 @@ RUN pip install --no-cache-dir .
 # Both later stages run as this unprivileged user, and the dev stage has to chown to it.
 RUN useradd --create-home appuser
 
+# Shared runtime metadata: the dev image stays runnable on its own, not only behind the
+# compose services' command overrides.
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--forwarded-allow-ips=*"]
+
 # Development stage, selected by deploy/docker-compose.dev.yml: the code is installed
 # editable, so the files Compose Watch syncs into /app are the ones the running process
 # imports - there is no second copy in site-packages to shadow them. The chown matters
@@ -30,6 +35,3 @@ COPY scripts/ scripts/
 RUN pip install --no-cache-dir --no-deps .
 
 USER appuser
-
-EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--forwarded-allow-ips=*"]

@@ -28,6 +28,13 @@ x-backend-watch: &backend-watch
     ignore:
       - tests/
       - pyproject.toml
+      # Editor and tool output the .dockerignore does not cover; a stray file here must
+      # not restart the three backend services.
+      - .idea/
+      - .vscode/
+      - .coverage
+      - htmlcov/
+      - .hypothesis/
   # Every backend service carries the rebuild rule because each builds its own image
   # tag; a pyproject.toml change (a new dependency) must reach all three images, and
   # the builds share every layer, so the second and third are nearly free.
@@ -67,7 +74,9 @@ services:
       target: dev
     image: rag-web-dev
     environment:
-      VITE_API_PROXY_TARGET: http://api:8000
+      # Deliberately no VITE_ prefix: the value is config for Vite's own process, not
+      # something client code should see through import.meta.env.
+      API_PROXY_TARGET: http://api:8000
     develop:
       watch:
         - action: sync

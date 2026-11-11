@@ -112,21 +112,21 @@ The overlay changes three things, and nothing else:
 
 - The backend services build the `dev` stage of `backend/Dockerfile`, which installs the
   package editable, so the files copied into the container are the ones the process
-  imports. A change under `backend/app/` restarts the api, worker, and dispatcher; a
-  change to `backend/pyproject.toml` (a new dependency) rebuilds all three instead.
+  imports. A change under `backend/` (anything but tests and `pyproject.toml`) restarts
+  the api, worker, and dispatcher; a change to `backend/pyproject.toml` (a new
+  dependency) rebuilds all three instead.
 - The web service runs the Vite dev server from the `dev` stage of `web/Dockerfile`
   rather than Caddy. Edits under `web/src/` hot-reload in the browser; a changed
   `web/package-lock.json` rebuilds it.
-- Vite proxies `/api` to the api service, so the URL stays `http://localhost:8080` and
-  API calls stay same-origin, exactly as they are behind Caddy in production. Caddy's
-  own behavior (the 26 MiB upload window, SPA fallback) is therefore not exercised in
-  this mode.
+- Vite proxies `/api/` to the api service, so the URL stays `http://localhost:8080` and
+  API calls stay same-origin, exactly as they are behind Caddy in production. Vite's own
+  SPA fallback keeps deep links working, but Caddy's 26 MiB upload window is not
+  exercised (the backend's own 25 MiB check still applies).
 
 `up --build --watch` keeps running and applies further edits; stop it with Ctrl-C. The
-overlay
-is development-only: neither the plain runbook command nor the Hetzner deployment loads
-it, and it rebuilds the images as `rag-backend-dev-*` and `rag-web-dev`, leaving
-`rag-backend` and `rag-web` for production.
+overlay is development-only: neither the plain runbook command nor the Hetzner
+deployment loads it, and it rebuilds the images as `rag-backend-dev-*` and
+`rag-web-dev`, leaving `rag-backend` and `rag-web` for production.
 
 Adding a new Alembic revision needs one extra step, because the overlay leaves
 `one-off-initialization` on the production image:
@@ -140,8 +140,8 @@ started it. Run `down` before starting it from another checkout or worktree, who
 bind-mounted configs would otherwise dangle.
 
 A Vite dev server (`npm run dev` in `web/`) also works against the compose API for
-ad-hoc UI work: it proxies `/api` to `http://localhost:8000` by default, or to wherever
-`VITE_API_PROXY_TARGET` points. It is not the runbook path.
+ad-hoc UI work: it proxies `/api/` to `http://localhost:8000` by default, or to wherever
+the `API_PROXY_TARGET` environment variable points. It is not the runbook path.
 
 Do not change `GARAGE_DEFAULT_SECRET_KEY` (in `deploy/.env`) after first start: Garage binds
 its stored layout to the secret it was created with, startup fails with a different one,

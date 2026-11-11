@@ -178,15 +178,15 @@ Notes:
 
 - The four app services (one-off-initialization, api, worker, dispatcher) share one
   backend image (`rag-backend`); the web UI is a separate Caddy image (`rag-web`).
-- A development overlay (`deploy/docker-compose.dev.yml`, loaded only with the dev
-  overlay file) rebuilds the same services from their Dockerfiles' `dev` stages: the
-  backend package is installed editable so Compose Watch can sync `backend/` into
-  `/app` and restart the api, worker, and dispatcher on a code change (a changed
-  `pyproject.toml` rebuilds all three), and the web tier runs the Vite dev server in
-  place of Caddy, hot-reloading `web/src/` and proxying `/api` to the api service.
-  Compose Watch copies rather than bind-mounts because Docker Desktop does not reliably
-  forward file-change events out of a Windows drive. The overlay builds `rag-backend-dev-*`
-  and `rag-web-dev`, so the production images are untouched.
+- A development overlay (`deploy/docker-compose.dev.yml`; production never loads it)
+  rebuilds the api, worker, dispatcher, and web services from their Dockerfiles' `dev`
+  stages: the backend package is installed editable so Compose Watch can sync `backend/`
+  into `/app` and restart the three backend services on a code change (a changed
+  `pyproject.toml` rebuilds them), and the web tier runs the Vite dev server in place of
+  Caddy, hot-reloading `web/src/` and proxying `/api/` to the api service. Compose Watch
+  copies rather than bind-mounts because Docker Desktop does not reliably forward
+  file-change events out of a Windows drive. The overlay builds `rag-backend-dev-*` and
+  `rag-web-dev`, so the production images are untouched.
 - The compose path is same-origin: Caddy proxies `/api` to the api service, and the dev
   overlay's Vite server proxies it the same way, so neither involves CORS. The CORS
   middleware in `app/main.py` matters only when the browser calls the API cross-origin
