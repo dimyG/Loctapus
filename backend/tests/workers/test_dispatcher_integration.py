@@ -23,8 +23,6 @@ from app.workers.celery_app import make_celery_app
 from app.workers.dispatcher import Backoff, BatchResult, dispatch_batch, run_loop
 from tests.helpers import SettingsForTests
 
-# The broker-driving tests carry the long marker; the pure backoff-delay test stays normal.
-
 _DRAIN_TIMEOUT_SECONDS = 10.0
 _BACKOFF = Backoff(base_seconds=1.0, max_seconds=300.0)
 _PUBLISH_TIMEOUT_SECONDS = 10.0
@@ -116,7 +114,6 @@ def test_backoff_delay_doubles_and_caps() -> None:
     assert backoff.delay_seconds(attempts=10) == 300.0
 
 
-@pytest.mark.long
 def test_dispatch_publishes_and_marks(*, db_session: Session, broker_url: str, purged_queues: None) -> None:
     """Check that a dispatched ingestion event is published to the ingestion queue and marked published.
 
@@ -136,7 +133,6 @@ def test_dispatch_publishes_and_marks(*, db_session: Session, broker_url: str, p
     assert kwargs == payload
 
 
-@pytest.mark.long
 def test_dispatch_routes_embed_events_to_embed_queue(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:
@@ -156,7 +152,6 @@ def test_dispatch_routes_embed_events_to_embed_queue(
     assert kwargs == payload
 
 
-@pytest.mark.long
 def test_publish_failure_backs_off_the_row(
     *, db_session: Session, broker_url: str, purged_queues: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -196,7 +191,6 @@ def test_publish_failure_backs_off_the_row(
     assert _dispatch(db=db_session, app=app) == BatchResult(selected=0, published=0)
 
 
-@pytest.mark.long
 def test_publish_failure_with_zero_backoff_retries_next_batch(
     *, db_session: Session, broker_url: str, purged_queues: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -238,7 +232,6 @@ def test_publish_failure_with_zero_backoff_retries_next_batch(
     _drain_one(broker_url=broker_url, queue_name=INGESTION_QUEUE)
 
 
-@pytest.mark.long
 def test_backed_off_row_does_not_block_rows_behind_it(
     *, db_session: Session, broker_url: str, purged_queues: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -290,7 +283,6 @@ def test_backed_off_row_does_not_block_rows_behind_it(
     assert kwargs == newer.payload
 
 
-@pytest.mark.long
 def test_unroutable_rows_cannot_starve_the_outbox(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:
@@ -331,7 +323,6 @@ def test_unroutable_rows_cannot_starve_the_outbox(
     assert kwargs == valid.payload
 
 
-@pytest.mark.long
 def test_missing_route_bumps_without_breaking(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:
@@ -358,7 +349,6 @@ def test_missing_route_bumps_without_breaking(
     assert kwargs == payload
 
 
-@pytest.mark.long
 def test_published_task_id_is_the_outbox_row_id(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:
@@ -383,7 +373,6 @@ def test_published_task_id_is_the_outbox_row_id(
             queue.close()
 
 
-@pytest.mark.long
 def test_loop_survives_a_failing_tick(
     *,
     db_session: Session,
@@ -445,7 +434,6 @@ def _no_sleep(*_seconds: float) -> None:
     return None
 
 
-@pytest.mark.long
 def test_loop_skips_sleep_after_a_full_batch(
     *, db_session: Session, broker_url: str, purged_queues: None
 ) -> None:

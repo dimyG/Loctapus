@@ -13,8 +13,6 @@ from app.storage import (
 )
 from tests.helpers import SettingsForTests
 
-# The Garage-backed tests carry the long marker; the pure key-format and service-caching tests stay normal.
-
 PROJECT_ID = UUID("11111111-1111-1111-1111-111111111111")
 SOURCE_ITEM_ID = UUID("22222222-2222-2222-2222-222222222222")
 CONTENT_HASH = "abc123"
@@ -38,7 +36,6 @@ def _service() -> StorageService:
     return StorageService(settings=SettingsForTests())
 
 
-@pytest.mark.long
 def test_put_get_roundtrip() -> None:
     """Check that bytes put under a UUID-carrying key come back unchanged."""
 
@@ -56,7 +53,6 @@ def test_put_get_roundtrip() -> None:
     assert service.get_object(key=key) == b"no content type"
 
 
-@pytest.mark.long
 def test_get_missing_key_raises_object_not_found() -> None:
     """Check that reading an absent key raises ObjectNotFoundError, not unavailable."""
 
@@ -71,7 +67,6 @@ def test_get_missing_key_raises_object_not_found() -> None:
         service.get_object(key=key)
 
 
-@pytest.mark.long
 def test_delete_object_removes_the_stored_bytes() -> None:
     """Check that a deleted object no longer reads back."""
 
@@ -88,7 +83,6 @@ def test_delete_object_removes_the_stored_bytes() -> None:
         service.get_object(key=key)
 
 
-@pytest.mark.long
 def test_delete_missing_key_is_a_noop() -> None:
     """Check that deleting an absent key does not raise, so partial state stays deletable."""
 
@@ -102,6 +96,7 @@ def test_delete_missing_key_is_a_noop() -> None:
     service.delete_object(key=key)
 
 
+# The unreachable endpoint pays a full connect timeout, so this test measures over 5 seconds.
 @pytest.mark.long
 def test_unreachable_endpoint_raises_unavailable() -> None:
     """Check that an unreachable storage endpoint raises StorageUnavailableError."""

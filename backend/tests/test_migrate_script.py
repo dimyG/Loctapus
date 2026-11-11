@@ -16,9 +16,6 @@ from tests.test_alembic import _terminate_and_drop
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
 
-# The tests run the migrate script as a subprocess, including a connect-timeout case, so they are long.
-pytestmark = pytest.mark.long
-
 
 def _head_revision() -> str:
     """Return the migration graph's single head revision."""
@@ -78,6 +75,8 @@ def test_migrate_applies_head_from_any_cwd(*, tmp_path: Path) -> None:
         admin.dispose()
 
 
+# The unreachable database pays a full connect timeout, so this test measures over 5 seconds.
+@pytest.mark.long
 def test_migrate_exits_nonzero_on_unreachable_database(*, tmp_path: Path) -> None:
     """Check that a failed migration exits non-zero - the status compose gates on.
 

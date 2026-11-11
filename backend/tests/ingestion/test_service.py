@@ -29,9 +29,6 @@ from app.storage.service import StorageService
 from tests.factories import SeededUpload, seed_project, seed_upload
 from tests.helpers import SettingsForTests
 
-# The ingest and embed tasks fetch their bytes from Garage, so the file belongs to the long bucket.
-pytestmark = pytest.mark.long
-
 
 class _CountingEmbeddingProvider:
     """Embedding provider wrapper that records the size of every embed_documents call."""

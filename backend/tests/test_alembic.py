@@ -200,7 +200,6 @@ def test_migration_chunk_fk_is_set_null(*, engine: Engine) -> None:
     assert chunk_fk["options"].get("ondelete") == "SET NULL"
 
 
-@pytest.mark.long
 def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
     """Check that downgrading to base drops every table and the citext and vector extensions.
 
@@ -238,7 +237,6 @@ def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
         admin.dispose()
 
 
-@pytest.mark.long
 def test_0002_downgrade_backfills_is_personal(*, engine: Engine) -> None:
     """Check that the 0002 downgrade restores pre-0002 personal flags on existing rows.
 
