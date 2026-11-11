@@ -182,15 +182,15 @@ Notes:
   overlay file) rebuilds the same services from their Dockerfiles' `dev` stages: the
   backend package is installed editable so Compose Watch can sync `backend/` into
   `/app` and restart the api, worker, and dispatcher on a code change (a changed
-  `pyproject.toml` rebuilds instead), and the web tier runs the Vite dev server in
+  `pyproject.toml` rebuilds all three), and the web tier runs the Vite dev server in
   place of Caddy, hot-reloading `web/src/` and proxying `/api` to the api service.
   Compose Watch copies rather than bind-mounts because Docker Desktop does not reliably
   forward file-change events out of a Windows drive. The overlay builds `rag-backend-dev-*`
   and `rag-web-dev`, so the production images are untouched.
-- The compose path is same-origin: Caddy proxies `/api` to the api service, so no CORS
-  is involved. The dev overlay's Vite server proxies `/api` the same way, and the CORS
-  middleware in `app/main.py` only matters for an ad-hoc Vite dev server run outside
-  Docker (`VITE_API_PROXY_TARGET`), which is not the runbook path.
+- The compose path is same-origin: Caddy proxies `/api` to the api service, and the dev
+  overlay's Vite server proxies it the same way, so neither involves CORS. The CORS
+  middleware in `app/main.py` matters only when the browser calls the API cross-origin
+  through `VITE_API_BASE_URL`, which the e2e suite does and the runbook paths never do.
 - The AI provider layer lives behind replaceable interfaces: `app/providers` ships a
   stub parser and a stub embedding provider, and `llm_provider` defaults to the stub
   LLM, so the whole stack (including grounded answers) runs offline. Setting

@@ -101,17 +101,19 @@ project itself is reinstalled.
 code edit reaches the running system without a manual rebuild:
 
 ```powershell
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up --watch
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up --build --watch
 ```
+
+The `--build` matters beyond the first run: watch starts from the images as they are,
+so edits made while the stack was stopped would only reach the containers on their next
+on-the-fly sync; the rebuild folds them in unconditionally.
 
 The overlay changes three things, and nothing else:
 
 - The backend services build the `dev` stage of `backend/Dockerfile`, which installs the
   package editable, so the files copied into the container are the ones the process
   imports. A change under `backend/app/` restarts the api, worker, and dispatcher; a
-  change to `backend/pyproject.toml` (a new dependency) rebuilds them instead, which the
-  worker and dispatcher pick up on their next restart - run `up -d` to apply it to them
-  at once.
+  change to `backend/pyproject.toml` (a new dependency) rebuilds all three instead.
 - The web service runs the Vite dev server from the `dev` stage of `web/Dockerfile`
   rather than Caddy. Edits under `web/src/` hot-reload in the browser; a changed
   `web/package-lock.json` rebuilds it.
@@ -120,7 +122,8 @@ The overlay changes three things, and nothing else:
   own behavior (the 26 MiB upload window, SPA fallback) is therefore not exercised in
   this mode.
 
-`up --watch` keeps running and applies further edits; stop it with Ctrl-C. The overlay
+`up --build --watch` keeps running and applies further edits; stop it with Ctrl-C. The
+overlay
 is development-only: neither the plain runbook command nor the Hetzner deployment loads
 it, and it rebuilds the images as `rag-backend-dev-*` and `rag-web-dev`, leaving
 `rag-backend` and `rag-web` for production.

@@ -1,7 +1,12 @@
 # Development overlay: live source reload on top of deploy/docker-compose.yml.
 # Production (and the Hetzner override) never load this file.
 #
-#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up --watch
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up --build --watch
+#
+# --build matters beyond the first run: watch starts from the images as they are, so
+# edits made while the stack was stopped would only reach the containers on their next
+# on-the-fly sync. A rebuild up front folds them in unconditionally (cached, cheap when
+# nothing changed).
 #
 # Compose Watch copies host edits into the running containers instead of bind-mounting
 # them, which is what makes this work from a Windows checkout: Docker Desktop does not
@@ -12,50 +17,47 @@
 # `sync+restart` needs no per-service command override, so the celery and dispatcher
 # commands stay defined once in the base file and cannot drift from it.
 
-# Shared source-sync rule for the three backend services. The .gitignore-derived
-# exclusions (caches, egg-info, backend/.env) already keep those out of the sync; only
-# the tests need an explicit entry because nothing gitignores them.
-x-backend-sync: &backend-sync
-  action: sync+restart
-  path: ../backend
-  target: /app
-  ignore:
-    - tests/
+# Shared watch rules for the three backend services. Compose Watch applies the build
+# context's .dockerignore on top of the explicit ignores, so caches, egg-info, and
+# backend/.env stay out of the sync already; tests/ and pyproject.toml are repeated
+# here to keep this file's contract self-contained.
+x-backend-watch: &backend-watch
+  - action: sync+restart
+    path: ../backend
+    target: /app
+    ignore:
+      - tests/
+      - pyproject.toml
+  # Every backend service carries the rebuild rule because each builds its own image
+  # tag; a pyproject.toml change (a new dependency) must reach all three images, and
+  # the builds share every layer, so the second and third are nearly free.
+  - action: rebuild
+    path: ../backend/pyproject.toml
 
 services:
   # The dev stage installs the package editable, so the synced /app/app is the code the
   # process imports. Separate tags per service keep a rebuild of one from racing the
   # others' container recreation.
-  #
-  # The rebuild rule is carried by the api service alone: the three services share one
-  # build, so one rule rebuilds it for all three, while a second and a third would only
-  # rebuild the same image again. A changed dependency therefore reaches the worker and
-  # dispatcher at their next restart rather than immediately; `up -d` picks it up.
   api:
     build:
       target: dev
     image: rag-backend-dev-api
     develop:
-      watch:
-        - *backend-sync
-        - action: rebuild
-          path: ../backend/pyproject.toml
+      watch: *backend-watch
 
   worker:
     build:
       target: dev
     image: rag-backend-dev-worker
     develop:
-      watch:
-        - *backend-sync
+      watch: *backend-watch
 
   dispatcher:
     build:
       target: dev
     image: rag-backend-dev-dispatcher
     develop:
-      watch:
-        - *backend-sync
+      watch: *backend-watch
 
   # The dev stage runs Vite instead of Caddy: instant hot reload, no image rebuild for a
   # source edit. Vite proxies /api to the api service, so the URL and the same-origin
@@ -77,6 +79,9 @@ services:
             - e2e/
             - test-results/
             - playwright-report/
+            # The lockfile is handled by the rebuild rule alone: a sync would let Vite
+            # see it before npm ci has installed the new dependency tree.
+            - package-lock.json
         # Vite resolves its dependencies at startup, so a changed lockfile needs a
         # rebuild rather than a sync.
         - action: rebuild
