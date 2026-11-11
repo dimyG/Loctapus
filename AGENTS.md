@@ -61,4 +61,8 @@ Before finishing a Python change, run:
     mypy app tests
     pytest
 
+Small changes may iterate with `pytest -m "not long"` (the normal suite, without
+the broker, storage, migration, and smoke tests); the full `pytest` above must
+still pass before a task is done.
+
 A task is not complete while any of these fail because of the change
