@@ -73,6 +73,11 @@ export default function UploadDropzone({
         }
         try {
           onUploadStart(file);
+          // Duplicates are deliberately not pre-checked against the table: the
+          // server owns the same-name rules (which failed uploads are retryable),
+          // and copying them here would duplicate that logic client-side. A
+          // duplicate therefore shows its "uploading" row for the whole POST
+          // before the server's 409 lands in the alert below.
           await uploadFile({ projectId, file }).unwrap();
         } catch (e) {
           setUploadError(getErrorMessage(e));
