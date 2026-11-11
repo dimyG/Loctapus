@@ -183,6 +183,16 @@ cd backend
 ..\.venv\Scripts\python -m pytest
 ```
 
+The suite splits into a normal and a long bucket via the `long` marker. A test is
+marked long when its call phase measures over 5 seconds; everything else runs in
+the normal suite. Plain `pytest` always runs everything and stays the gate before
+finishing; the filtered runs are for iteration:
+
+```powershell
+..\.venv\Scripts\python -m pytest -m "not long"   # Normal suite, the fast loop for small changes.
+..\.venv\Scripts\python -m pytest -m long         # Long suite alone.
+```
+
 Before finishing a change, `ruff check .` and `mypy app tests` must also pass
 (see `AGENTS.md`).
 

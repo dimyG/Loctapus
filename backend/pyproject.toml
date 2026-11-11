@@ -44,9 +44,13 @@ where = ["."]
 include = ["app*"]
 
 [tool.pytest.ini_options]
+addopts = "--strict-markers"
 filterwarnings = [
     # A SQLAlchemy warning means misuse; the suite must stay warning-free.
     "error::sqlalchemy.exc.SAWarning",
+]
+markers = [
+    "long: tests whose call phase measures over 5 seconds; select with -m long, deselect with -m 'not long'",
 ]
 
 [tool.ruff]

@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import text
@@ -74,6 +75,8 @@ def test_migrate_applies_head_from_any_cwd(*, tmp_path: Path) -> None:
         admin.dispose()
 
 
+# The unreachable database pays a full connect timeout, so this test measures over 5 seconds.
+@pytest.mark.long
 def test_migrate_exits_nonzero_on_unreachable_database(*, tmp_path: Path) -> None:
     """Check that a failed migration exits non-zero - the status compose gates on.
 

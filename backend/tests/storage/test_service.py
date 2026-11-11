@@ -96,6 +96,8 @@ def test_delete_missing_key_is_a_noop() -> None:
     service.delete_object(key=key)
 
 
+# The unreachable endpoint pays a full connect timeout, so this test measures over 5 seconds.
+@pytest.mark.long
 def test_unreachable_endpoint_raises_unavailable() -> None:
     """Check that an unreachable storage endpoint raises StorageUnavailableError."""
 
