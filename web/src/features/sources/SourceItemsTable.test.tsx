@@ -94,7 +94,7 @@ describe("SourceItemsTable", () => {
     expect(screen.getByText("No source items yet.")).toBeInTheDocument();
   });
 
-  it("renders an uploading row as inert: no open button and no delete action", () => {
+  it("renders an uploading row inert: no open button and a disabled delete action", () => {
     const uploadingRow: SourceRow = {
       ...queuedUpload,
       id: "pending-incoming.pdf",
@@ -105,7 +105,10 @@ describe("SourceItemsTable", () => {
     expect(screen.getByText("Uploading")).toBeInTheDocument();
     expect(screen.getByText("incoming.pdf")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "incoming.pdf" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete incoming.pdf" })).not.toBeInTheDocument();
+    // The delete button renders disabled so the uploading row keeps the
+    // regular row height: the client-side stand-in id cannot be deleted
+    // until the real row replaces it.
+    expect(screen.getByRole("button", { name: "Delete incoming.pdf" })).toBeDisabled();
   });
 
   it("opens the file in a new tab when the filename is clicked", async () => {

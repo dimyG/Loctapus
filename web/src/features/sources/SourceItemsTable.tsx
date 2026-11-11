@@ -111,8 +111,9 @@ export default function SourceItemsTable({ items }: { items: SourceRow[] }) {
               <TableRow key={item.id}>
                 <TableCell>
                   {item.status === "uploading" ? (
-                    // The stand-in row's id is client-side, so it can neither
-                    // be opened nor deleted until the real row replaces it.
+                    // The stand-in row's id is client-side, so it cannot be
+                    // opened until the real row replaces it; its delete button
+                    // below renders disabled for the same reason.
                     item.filename
                   ) : (
                     <Link component="button" type="button" onClick={() => void openUpload(item)}>
@@ -126,18 +127,20 @@ export default function SourceItemsTable({ items }: { items: SourceRow[] }) {
                 </TableCell>
                 <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
                 <TableCell align="right">
-                  {item.status !== "uploading" && (
-                    <IconButton
-                      aria-label={`Delete ${item.filename}`}
-                      disabled={deletingIds.has(item.id)}
-                      onClick={() => {
-                        setShownCandidate(item);
-                        setDeleteCandidate(item);
-                      }}
-                    >
-                      <DeleteOutlineRoundedIcon />
-                    </IconButton>
-                  )}
+                  <IconButton
+                    aria-label={`Delete ${item.filename}`}
+                    // The uploading stand-in's client-side id cannot be
+                    // deleted, so its button renders disabled rather than
+                    // absent: the row keeps the regular row height and the
+                    // control sits where the real row's delete will be.
+                    disabled={item.status === "uploading" || deletingIds.has(item.id)}
+                    onClick={() => {
+                      setShownCandidate(item);
+                      setDeleteCandidate(item);
+                    }}
+                  >
+                    <DeleteOutlineRoundedIcon />
+                  </IconButton>
                 </TableCell>
               </TableRow>
             ))}
