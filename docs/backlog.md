@@ -8,14 +8,14 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 
 ## 2026-11-11 - Long/normal bucket assignment is manual (`pytest-long-split`)
 
-The 055b182 + 46d11ed review flagged that bucket assignment depends on authors
-remembering the rule (long = infrastructure beyond the shared test database, or
-call phase over 5 seconds): the first pass missed the Garage-backed upload and
-ingestion suites, and `--strict-markers` only catches unknown marker names, not
-a missing `long` marker. Ideas if this bites: a collection hook that auto-marks
-tests requesting the `storage`/`broker_url` fixtures (indirect Garage access
-through the app's TestClient still needs explicit marks), and a CI duration
-report that flags unmarked tests whose call phase exceeds 5 seconds.
+The 055b182 review flagged that bucket assignment depends on authors
+remembering the rule: `--strict-markers` catches unknown marker names but not a
+missing `long` marker. The rule itself was revised the same day (commit
+`46d11ed` follow-up) from "infrastructure beyond the shared test database or
+over 5 seconds" to duration-only ("call phase over 5 seconds"), so the risk is
+now a test whose call phase creeps past 5 seconds without being marked. Ideas
+if this bites: a CI duration report that flags unmarked tests measuring over 5
+seconds, or auto-marking from `--durations` output.
 
 
 ## 2026-10-29 - Light-scheme contained buttons keep MUI's default state shadows (`mobile-navbar-dark-buttons`)

@@ -144,11 +144,9 @@ cd backend
 ```
 
 The suite splits into a normal and a long bucket via the `long` marker. A test is
-marked long when it drives infrastructure beyond the shared test database (the
-RabbitMQ dispatcher integration, the Garage-backed storage, upload, and
-ingestion tests, the scratch-database migration runs, the smoke e2e) or when
-its call phase measures over 5 seconds. Plain `pytest` always runs everything
-and stays the gate before finishing; the filtered runs are for iteration:
+marked long when its call phase measures over 5 seconds; everything else runs in
+the normal suite. Plain `pytest` always runs everything and stays the gate before
+finishing; the filtered runs are for iteration:
 
 ```powershell
 ..\.venv\Scripts\python -m pytest -m "not long"   # Normal suite, the fast loop for small changes.
