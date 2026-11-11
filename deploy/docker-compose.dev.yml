@@ -1,0 +1,83 @@
+# Development overlay: live source reload on top of deploy/docker-compose.yml.
+# Production (and the Hetzner override) never load this file.
+#
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up --watch
+#
+# Compose Watch copies host edits into the running containers instead of bind-mounting
+# them, which is what makes this work from a Windows checkout: Docker Desktop does not
+# reliably forward file-change events out of a Windows drive into the Linux VM, so a
+# reloader would otherwise never see an edit.
+#
+# Backend services reload by container restart rather than by an in-process watcher:
+# `sync+restart` needs no per-service command override, so the celery and dispatcher
+# commands stay defined once in the base file and cannot drift from it.
+
+# Shared source-sync rule for the three backend services. The .gitignore-derived
+# exclusions (caches, egg-info, backend/.env) already keep those out of the sync; only
+# the tests need an explicit entry because nothing gitignores them.
+x-backend-sync: &backend-sync
+  action: sync+restart
+  path: ../backend
+  target: /app
+  ignore:
+    - tests/
+
+services:
+  # The dev stage installs the package editable, so the synced /app/app is the code the
+  # process imports. Separate tags per service keep a rebuild of one from racing the
+  # others' container recreation.
+  #
+  # The rebuild rule is carried by the api service alone: the three services share one
+  # build, so one rule rebuilds it for all three, while a second and a third would only
+  # rebuild the same image again. A changed dependency therefore reaches the worker and
+  # dispatcher at their next restart rather than immediately; `up -d` picks it up.
+  api:
+    build:
+      target: dev
+    image: rag-backend-dev-api
+    develop:
+      watch:
+        - *backend-sync
+        - action: rebuild
+          path: ../backend/pyproject.toml
+
+  worker:
+    build:
+      target: dev
+    image: rag-backend-dev-worker
+    develop:
+      watch:
+        - *backend-sync
+
+  dispatcher:
+    build:
+      target: dev
+    image: rag-backend-dev-dispatcher
+    develop:
+      watch:
+        - *backend-sync
+
+  # The dev stage runs Vite instead of Caddy: instant hot reload, no image rebuild for a
+  # source edit. Vite proxies /api to the api service, so the URL and the same-origin
+  # behavior match the production Caddy setup. Port stays 8080 for that reason.
+  web:
+    build:
+      target: dev
+    image: rag-web-dev
+    environment:
+      VITE_API_PROXY_TARGET: http://api:8000
+    develop:
+      watch:
+        - action: sync
+          path: ../web
+          target: /app
+          ignore:
+            - node_modules/
+            - dist/
+            - e2e/
+            - test-results/
+            - playwright-report/
+        # Vite resolves its dependencies at startup, so a changed lockfile needs a
+        # rebuild rather than a sync.
+        - action: rebuild
+          path: ../web/package-lock.json
