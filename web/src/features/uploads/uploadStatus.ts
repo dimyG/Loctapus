@@ -1,7 +1,9 @@
 import type { RowStatus } from "./uploadsApi";
 
 /**
- * The status is terminal once the pipeline decided an outcome for it.
+ * Whether the status has a decided outcome: only the server's ready and
+ * failed have; the pipeline's in-flight stages and the client-side uploading
+ * and deleting states do not.
  *
  * @param {RowStatus} status - Status a sources-table row currently shows.
  */

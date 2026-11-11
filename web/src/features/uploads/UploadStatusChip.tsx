@@ -4,7 +4,8 @@ import { isTerminal, statusChip } from "./uploadStatus";
 import type { RowStatus } from "./uploadsApi";
 
 /**
- * The upload's status chip; spins while the ingestion pipeline can still move it.
+ * The row's status chip; spins while the status can still move, whether a
+ * pipeline stage or the client-side uploading and deleting states.
  *
  * @param {RowStatus} status - Status a sources-table row currently shows.
  */

@@ -115,14 +115,15 @@ export default function SourceItemsTable({ items }: { items: SourceRow[] }) {
               // the row stays inert until the row leaves the cache or the
               // failure offers a retry.
               const status: RowStatus = deletingIds.has(item.id) ? "deleting" : item.status;
+              // An uploading or deleting row is inert: the uploading stand-in's
+              // id is client-side, and a deleting row's bytes may already be
+              // gone, so its filename does not open and its delete button is
+              // disabled.
+              const inert = status === "uploading" || status === "deleting";
               return (
                 <TableRow key={item.id}>
                   <TableCell>
-                    {status === "uploading" || status === "deleting" ? (
-                      // The uploading stand-in's id is client-side, and a
-                      // deleting row's bytes may already be gone, so neither
-                      // opens the file; both keep the delete button below
-                      // disabled.
+                    {inert ? (
                       item.filename
                     ) : (
                       <Link component="button" type="button" onClick={() => void openUpload(item)}>
@@ -138,12 +139,11 @@ export default function SourceItemsTable({ items }: { items: SourceRow[] }) {
                   <TableCell align="right">
                     <IconButton
                       aria-label={`Delete ${item.filename}`}
-                      // The uploading stand-in's client-side id cannot be
-                      // deleted, and a delete already running must not fire
-                      // twice, so both render the button disabled rather than
-                      // absent: the row keeps the regular row height and the
-                      // control sits where the real row's delete will be.
-                      disabled={status === "uploading" || status === "deleting"}
+                      // Disabled rather than absent: the row keeps the regular
+                      // row height and the control sits where the real row's
+                      // delete will be, and a running delete must not fire
+                      // twice.
+                      disabled={inert}
                       onClick={() => {
                         setShownCandidate(item);
                         setDeleteCandidate(item);
