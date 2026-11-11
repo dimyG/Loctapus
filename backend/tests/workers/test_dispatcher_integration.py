@@ -23,6 +23,9 @@ from app.workers.celery_app import make_celery_app
 from app.workers.dispatcher import Backoff, BatchResult, dispatch_batch, run_loop
 from tests.helpers import SettingsForTests
 
+# The tests drive a real RabbitMQ vhost and wait out message drains, so the file belongs to the long bucket.
+pytestmark = pytest.mark.long
+
 _DRAIN_TIMEOUT_SECONDS = 10.0
 _BACKOFF = Backoff(base_seconds=1.0, max_seconds=300.0)
 _PUBLISH_TIMEOUT_SECONDS = 10.0

@@ -13,6 +13,9 @@ from app.storage import (
 )
 from tests.helpers import SettingsForTests
 
+# Every test drives the real compose Garage over the network, so the file belongs to the long bucket.
+pytestmark = pytest.mark.long
+
 PROJECT_ID = UUID("11111111-1111-1111-1111-111111111111")
 SOURCE_ITEM_ID = UUID("22222222-2222-2222-2222-222222222222")
 CONTENT_HASH = "abc123"

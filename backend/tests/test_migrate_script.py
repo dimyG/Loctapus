@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import text
@@ -14,6 +15,9 @@ from tests.test_alembic import _terminate_and_drop
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
+
+# The tests run the migrate script as a subprocess, including a connect-timeout case, so they are long.
+pytestmark = pytest.mark.long
 
 
 def _head_revision() -> str:

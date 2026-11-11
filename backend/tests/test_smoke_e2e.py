@@ -1,6 +1,10 @@
 """End-to-end smoke test for the full happy path."""
 
+import pytest
 from fastapi.testclient import TestClient
+
+# The test drives the full API happy path through the assembled app, so it belongs to the long bucket.
+pytestmark = pytest.mark.long
 
 
 def test_register_login_project_lifecycle(*, client: TestClient) -> None:

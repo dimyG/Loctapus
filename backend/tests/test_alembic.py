@@ -21,6 +21,9 @@ from app.core.models import Base
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
 
+# The tests drive real migration runs against scratch databases, so the file belongs to the long bucket.
+pytestmark = pytest.mark.long
+
 
 def test_identity_tables_exist(*, engine: Engine) -> None:
     """Check that migrations created every expected table.
