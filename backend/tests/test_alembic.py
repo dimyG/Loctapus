@@ -21,9 +21,6 @@ from app.core.models import Base
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TEST_URL = "postgresql+psycopg://rag:rag@localhost:5432/rag_test"
 
-# The tests drive real migration runs against scratch databases, so the file belongs to the long bucket.
-pytestmark = pytest.mark.long
-
 
 def test_identity_tables_exist(*, engine: Engine) -> None:
     """Check that migrations created every expected table.
@@ -203,6 +200,7 @@ def test_migration_chunk_fk_is_set_null(*, engine: Engine) -> None:
     assert chunk_fk["options"].get("ondelete") == "SET NULL"
 
 
+@pytest.mark.long
 def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
     """Check that downgrading to base drops every table and the citext and vector extensions.
 
@@ -240,6 +238,7 @@ def test_migrations_downgrade_to_base(*, engine: Engine) -> None:
         admin.dispose()
 
 
+@pytest.mark.long
 def test_0002_downgrade_backfills_is_personal(*, engine: Engine) -> None:
     """Check that the 0002 downgrade restores pre-0002 personal flags on existing rows.
 

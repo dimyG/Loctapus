@@ -31,6 +31,9 @@ from app.storage.service import (
 from tests.factories import seed_upload
 from tests.helpers import _auth, _default_team_id
 
+# The upload endpoints store real bytes in Garage, so the file belongs to the long bucket.
+pytestmark = pytest.mark.long
+
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 PDF_CONTENT_TYPE = "application/pdf"
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
