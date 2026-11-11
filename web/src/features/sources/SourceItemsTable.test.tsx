@@ -215,17 +215,22 @@ describe("SourceItemsTable", () => {
   it("runs a second row's delete while the first is still in flight", async () => {
     const deletes: string[] = [];
     let releaseFirst!: () => void;
-    const gate = new Promise<void>((resolve) => {
+    let releaseSecond!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
       releaseFirst = resolve;
+    });
+    const secondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
     });
     server.use(
       http.delete("*/api/projects/p-1/uploads/s-1", async () => {
         deletes.push("s-1");
-        await gate;
+        await firstGate;
         return new HttpResponse(null, { status: 204 });
       }),
-      http.delete("*/api/projects/p-1/uploads/s-2", () => {
+      http.delete("*/api/projects/p-1/uploads/s-2", async () => {
         deletes.push("s-2");
+        await secondGate;
         return new HttpResponse(null, { status: 204 });
       }),
     );
@@ -240,10 +245,15 @@ describe("SourceItemsTable", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     // The first delete is still in flight; the second row's delete must fire too.
     await user.click(screen.getByRole("button", { name: "Delete report.docx" }));
-    const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete" }),
+    );
     await waitFor(() => expect(deletes).toEqual(["s-1", "s-2"]));
+    // Both held deletes read as Deleting at once, independently.
+    expect(screen.getAllByText("Deleting")).toHaveLength(2);
     releaseFirst();
+    releaseSecond();
+    await waitFor(() => expect(screen.queryByText("Deleting")).not.toBeInTheDocument());
   });
 
   it("shows a Deleting status and an inert row while the delete is in flight", async () => {
@@ -274,9 +284,12 @@ describe("SourceItemsTable", () => {
     expect(screen.getByText("brief.pdf")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete brief.pdf" })).toBeDisabled();
     release();
-    // The gated DELETE completes once released; the row's disappearance from
-    // the parent's cache is the api test's and the page tests' concern.
-    await waitFor(() => expect(deletes).toBe(1));
+    // Releasing lets the DELETE settle: the row hands its server status back
+    // while the row itself stays (its disappearance from the parent's cache
+    // is the api test's and the page tests' concern).
+    await waitFor(() => expect(screen.queryByText("Deleting")).not.toBeInTheDocument());
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    expect(deletes).toBe(1);
   });
 
   it("restores the row's real status when the delete fails", async () => {
