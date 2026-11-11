@@ -1,10 +1,10 @@
 # System overview
 
-Snapshot as of 2026-11-09, covering the service topology, the HTTP API, the
+Snapshot as of 2026-11-11, covering the service topology, the HTTP API, the
 web UI shell, and the database schema. Sources: `deploy/docker-compose.yml`,
-`backend/app/main.py` and the six routers it mounts, `web/Caddyfile`,
-`web/src/app/api.ts`, the RTK Query feature APIs plus
-`web/src/features/uploads/useProjectUploads.ts`, the app shell and its
+`deploy/docker-compose.dev.yml`, `backend/app/main.py` and the six routers it mounts,
+`web/Caddyfile`, `web/vite.config.ts`, `web/src/app/api.ts`, the RTK Query feature
+APIs plus `web/src/features/uploads/useProjectUploads.ts`, the app shell and its
 project-scoped pages (`web/src/layouts/AppShell.tsx`,
 `web/src/app/sectionPaths.ts`, `web/src/features/chat/ChatLanding.tsx`), and
 the ORM models in `backend/app`.
@@ -178,9 +178,19 @@ Notes:
 
 - The four app services (one-off-initialization, api, worker, dispatcher) share one
   backend image (`rag-backend`); the web UI is a separate Caddy image (`rag-web`).
+- A development overlay (`deploy/docker-compose.dev.yml`, loaded only with the dev
+  overlay file) rebuilds the same services from their Dockerfiles' `dev` stages: the
+  backend package is installed editable so Compose Watch can sync `backend/` into
+  `/app` and restart the api, worker, and dispatcher on a code change (a changed
+  `pyproject.toml` rebuilds instead), and the web tier runs the Vite dev server in
+  place of Caddy, hot-reloading `web/src/` and proxying `/api` to the api service.
+  Compose Watch copies rather than bind-mounts because Docker Desktop does not reliably
+  forward file-change events out of a Windows drive. The overlay builds `rag-backend-dev-*`
+  and `rag-web-dev`, so the production images are untouched.
 - The compose path is same-origin: Caddy proxies `/api` to the api service, so no CORS
-  is involved. The CORS middleware in `app/main.py` only matters for the ad-hoc Vite
-  dev server (`VITE_API_BASE_URL`), which is not the runbook path.
+  is involved. The dev overlay's Vite server proxies `/api` the same way, and the CORS
+  middleware in `app/main.py` only matters for an ad-hoc Vite dev server run outside
+  Docker (`VITE_API_PROXY_TARGET`), which is not the runbook path.
 - The AI provider layer lives behind replaceable interfaces: `app/providers` ships a
   stub parser and a stub embedding provider, and `llm_provider` defaults to the stub
   LLM, so the whole stack (including grounded answers) runs offline. Setting

@@ -95,13 +95,50 @@ docker compose -f deploy/docker-compose.yml up -d --build
 This recreates the affected services. The dependency layer is cached, so only the
 project itself is reinstalled.
 
+### Live reload
+
+`deploy/docker-compose.dev.yml` overlays the runbook stack with live source reload, so a
+code edit reaches the running system without a manual rebuild:
+
+```powershell
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up --watch
+```
+
+The overlay changes three things, and nothing else:
+
+- The backend services build the `dev` stage of `backend/Dockerfile`, which installs the
+  package editable, so the files copied into the container are the ones the process
+  imports. A change under `backend/app/` restarts the api, worker, and dispatcher; a
+  change to `backend/pyproject.toml` (a new dependency) rebuilds them instead, which the
+  worker and dispatcher pick up on their next restart - run `up -d` to apply it to them
+  at once.
+- The web service runs the Vite dev server from the `dev` stage of `web/Dockerfile`
+  rather than Caddy. Edits under `web/src/` hot-reload in the browser; a changed
+  `web/package-lock.json` rebuilds it.
+- Vite proxies `/api` to the api service, so the URL stays `http://localhost:8080` and
+  API calls stay same-origin, exactly as they are behind Caddy in production. Caddy's
+  own behavior (the 26 MiB upload window, SPA fallback) is therefore not exercised in
+  this mode.
+
+`up --watch` keeps running and applies further edits; stop it with Ctrl-C. The overlay
+is development-only: neither the plain runbook command nor the Hetzner deployment loads
+it, and it rebuilds the images as `rag-backend-dev-*` and `rag-web-dev`, leaving
+`rag-backend` and `rag-web` for production.
+
+Adding a new Alembic revision needs one extra step, because the overlay leaves
+`one-off-initialization` on the production image:
+
+```powershell
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up -d --build one-off-initialization
+```
+
 The system is machine-global: one running system at a time, owned by the checkout that
 started it. Run `down` before starting it from another checkout or worktree, whose
 bind-mounted configs would otherwise dangle.
 
-A Vite dev server (`npm run dev` in `web/` with
-`VITE_API_BASE_URL=http://localhost:8000/api`) still works against the compose API for
-ad-hoc UI work, but it is not the runbook path.
+A Vite dev server (`npm run dev` in `web/`) also works against the compose API for
+ad-hoc UI work: it proxies `/api` to `http://localhost:8000` by default, or to wherever
+`VITE_API_PROXY_TARGET` points. It is not the runbook path.
 
 Do not change `GARAGE_DEFAULT_SECRET_KEY` (in `deploy/.env`) after first start: Garage binds
 its stored layout to the secret it was created with, startup fails with a different one,
