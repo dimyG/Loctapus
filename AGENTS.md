@@ -12,18 +12,19 @@
 - Prefer precise return types and parameter annotations
 
 ## Model selection
-This is the list of allowed models: 
+This is the list of allowed models weaker to stronger: 
   1. GLM 5.3 flash 
   2. GLM 5.3
   3. Kimi K3 
   4. Kimi K3.1 Pro
   5. Claude Opus 5.5
-Use Kimi K3.1 Pro for fresh context reviews. Use Kimi K3 as an alternative to GLM 5.3 when the second one is stuck
+Use the strongest model for fresh context reviews. Use it for specification writing.  
 
 ## Generic 
 - In every detailed plan you create, add a DAG of the tasks so that unrelated tasks could be done in parallel if necessary
 - When a specification has been implemented it should freeze. The source of truth is the roadmap specification
 - After a task is completed, update the docs/system-overview.md file to reflect the new state  
+- Any test longer than 5 seconds should be marked as long
 
 ## Asynchronous Background tasks
 
@@ -42,6 +43,7 @@ are durable. Document any external calls that may repeat.
 - Do not write comments that merely restate the code
 - Comments should be simple and clear, explaining why, constraints, invariants, or non-obvious behavior
 - Keep docstrings focused on public API behavior and use clear and simple explanations. Docstrings are for users, comments for developers
+- Docstrings should have :param, :return and :raises explanations. Use the Sphinx style for these directives.
 
 ## Git workflow
 
