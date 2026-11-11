@@ -14,10 +14,11 @@ export type UploadStatus = "queued" | "fetching" | "processing" | "indexing" | "
 
 /**
  * A sources-table row's status: the server's vocabulary plus the client-side
- * "uploading", for a file whose bytes are still being posted - the server only
- * learns of the upload when the POST completes.
+ * "uploading" for a file whose bytes are still being posted, and "deleting"
+ * for a row whose DELETE is still in flight - the server only learns of the
+ * request when it completes, so both states exist only in the table.
  */
-export type RowStatus = UploadStatus | "uploading";
+export type RowStatus = UploadStatus | "uploading" | "deleting";
 
 /** One uploaded file as the uploads endpoints return it. */
 export type Upload = {

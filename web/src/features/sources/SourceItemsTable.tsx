@@ -17,15 +17,17 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import UploadStatusChip from "../uploads/UploadStatusChip";
-import type { SourceRow } from "../uploads/uploadsApi";
+import type { RowStatus, SourceRow } from "../uploads/uploadsApi";
 import { useDeleteUploadMutation, useLazyGetUploadRawQuery } from "../uploads/uploadsApi";
 
 /**
  * The project's source items in the CRUD template's table-in-card look. Every
  * item today is a file upload, so the Type column is a constant and clicking
  * a filename opens the file itself in a new tab; both grow per type once a
- * second source type exists. Rows delete through a confirm dialog; a failed
- * delete surfaces in a snackbar whose action retries it.
+ * second source type exists. Rows delete through a confirm dialog; while the
+ * delete request runs, the row reads as the client-side "deleting" status and
+ * stays inert, and a failed delete surfaces in a snackbar whose action
+ * retries it.
  *
  * @param {SourceRow[]} items - Rows to render, including optimistic stand-ins.
  */
@@ -107,43 +109,52 @@ export default function SourceItemsTable({ items }: { items: SourceRow[] }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {items.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell>
-                  {item.status === "uploading" ? (
-                    // The stand-in row's id is client-side, so it cannot be
-                    // opened until the real row replaces it; its delete button
-                    // below renders disabled for the same reason.
-                    item.filename
-                  ) : (
-                    <Link component="button" type="button" onClick={() => void openUpload(item)}>
-                      {item.filename}
-                    </Link>
-                  )}
-                </TableCell>
-                <TableCell>File upload</TableCell>
-                <TableCell>
-                  <UploadStatusChip status={item.status} />
-                </TableCell>
-                <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
-                <TableCell align="right">
-                  <IconButton
-                    aria-label={`Delete ${item.filename}`}
-                    // The uploading stand-in's client-side id cannot be
-                    // deleted, so its button renders disabled rather than
-                    // absent: the row keeps the regular row height and the
-                    // control sits where the real row's delete will be.
-                    disabled={item.status === "uploading" || deletingIds.has(item.id)}
-                    onClick={() => {
-                      setShownCandidate(item);
-                      setDeleteCandidate(item);
-                    }}
-                  >
-                    <DeleteOutlineRoundedIcon />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
+            {items.map((item) => {
+              // A row whose delete request is in flight reads as the
+              // client-side "deleting" status: the chip shows Deleting and
+              // the row stays inert until the row leaves the cache or the
+              // failure offers a retry.
+              const status: RowStatus = deletingIds.has(item.id) ? "deleting" : item.status;
+              return (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    {status === "uploading" || status === "deleting" ? (
+                      // The uploading stand-in's id is client-side, and a
+                      // deleting row's bytes may already be gone, so neither
+                      // opens the file; both keep the delete button below
+                      // disabled.
+                      item.filename
+                    ) : (
+                      <Link component="button" type="button" onClick={() => void openUpload(item)}>
+                        {item.filename}
+                      </Link>
+                    )}
+                  </TableCell>
+                  <TableCell>File upload</TableCell>
+                  <TableCell>
+                    <UploadStatusChip status={status} />
+                  </TableCell>
+                  <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell align="right">
+                    <IconButton
+                      aria-label={`Delete ${item.filename}`}
+                      // The uploading stand-in's client-side id cannot be
+                      // deleted, and a delete already running must not fire
+                      // twice, so both render the button disabled rather than
+                      // absent: the row keeps the regular row height and the
+                      // control sits where the real row's delete will be.
+                      disabled={status === "uploading" || status === "deleting"}
+                      onClick={() => {
+                        setShownCandidate(item);
+                        setDeleteCandidate(item);
+                      }}
+                    >
+                      <DeleteOutlineRoundedIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
         {items.length === 0 && (

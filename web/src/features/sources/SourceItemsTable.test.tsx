@@ -246,6 +246,61 @@ describe("SourceItemsTable", () => {
     releaseFirst();
   });
 
+  it("shows a Deleting status and an inert row while the delete is in flight", async () => {
+    let deletes = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.delete("*/api/projects/p-1/uploads/s-1", async () => {
+        deletes += 1;
+        await gate;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithProviders(<SourceItemsTable items={uploadRows} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete brief.pdf" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete" }),
+    );
+    // The dialog closes at once while the gated DELETE keeps running.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    // The in-flight row reads Deleting and is inert: a plain-text filename
+    // with no open button, and a disabled delete.
+    expect(screen.getByText("Deleting")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "brief.pdf" })).not.toBeInTheDocument();
+    expect(screen.getByText("brief.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete brief.pdf" })).toBeDisabled();
+    release();
+    // The gated DELETE completes once released; the row's disappearance from
+    // the parent's cache is the api test's and the page tests' concern.
+    await waitFor(() => expect(deletes).toBe(1));
+  });
+
+  it("restores the row's real status when the delete fails", async () => {
+    server.use(
+      http.delete("*/api/projects/p-1/uploads/s-1", () =>
+        HttpResponse.json({ detail: "backend down" }, { status: 503 }),
+      ),
+    );
+    renderWithProviders(<SourceItemsTable items={uploadRows} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete brief.pdf" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete" }),
+    );
+    expect(await screen.findByText("Could not delete the file.")).toBeInTheDocument();
+    // The failed delete hands the row its server status back, so the retry
+    // snackbar's action starts from a truthful chip and an enabled button.
+    expect(screen.queryByText("Deleting")).not.toBeInTheDocument();
+    expect(screen.getByText("Queued")).toBeInTheDocument();
+    // The closing dialog keeps the page aria-hidden until its exit transition ends.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Delete brief.pdf" })).toBeEnabled();
+  });
+
   it("shows a retryable snackbar when the delete fails", async () => {
     let deletes = 0;
     server.use(

@@ -263,11 +263,12 @@ describe("FileUploadPage", () => {
     expect(await screen.findByText("report.docx")).toBeInTheDocument();
     await userEvent.setup().upload(screen.getByLabelText("Upload"), pdfFile("report.pdf"));
     // While the POST streams the bytes, the row is already there, marked
-    // Uploading, and inert: no open button and no delete action yet.
+    // Uploading, and inert: no open button, and its delete button renders
+    // disabled so the row keeps the regular row height.
     expect(await screen.findByText("Uploading")).toBeInTheDocument();
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "report.pdf" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete report.pdf" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete report.pdf" })).toBeDisabled();
     release();
     // The handoff is seamless: one report.pdf row throughout, chip swapped to Queued.
     expect(await screen.findByText("Queued")).toBeInTheDocument();
@@ -334,7 +335,7 @@ describe("FileUploadPage", () => {
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
     expect(screen.getAllByText("broken.pdf")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "broken.pdf" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete broken.pdf" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete broken.pdf" })).toBeDisabled();
     release();
     expect(await screen.findByText("Queued")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Uploading")).not.toBeInTheDocument());
