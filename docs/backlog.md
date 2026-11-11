@@ -13,11 +13,20 @@ pre-checked in the client: the server owns the same-name rules (which failed
 uploads are retryable), and copying them into `uploadRules.ts` would duplicate
 that rejection logic. A duplicate therefore shows the full uploading window
 before the server's 409 lands in the dropzone's alert. Human decision in the
-`sources-table-feedback` session, keeping backlog item 28 open: document only,
-no behavior change. The documenting comment landed in
-`UploadDropzone.tsx` (commit `ec273f2`); revisit only if the upload window
-grows long enough for real files to make the dead window painful (an OPTIONS
-or HEAD pre-check could short-circuit it without copying the rules).
+`sources-table-feedback` session: accepted and documented only, no behavior
+change - it resolves the "Re-uploading the name of an already-ready row"
+bullet under the 2026-10-29 - Minor review findings section below. The
+documenting comment landed in `UploadDropzone.tsx` (commit `ec273f2`); revisit
+only if the upload window grows long enough for real files to make the dead
+window painful (an OPTIONS or HEAD pre-check could short-circuit it without
+copying the rules).
+
+- 2026-11-11 fresh-context review residual (pre-existing): the delete-failure
+  snackbar's "Try again" acts on the row object captured at failure time, so
+  if that row has since flipped to the client-side "uploading" state (its file
+  is being re-uploaded), the retry still fires a DELETE although the row's own
+  delete button is now disabled. Narrow race; fix by looking the row up in the
+  current items before retrying, or skip the retry when it is uploading.
 
 
 ## 2026-10-29 - Light-scheme contained buttons keep MUI's default state shadows (`mobile-navbar-dark-buttons`)
