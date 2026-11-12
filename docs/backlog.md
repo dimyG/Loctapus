@@ -10,14 +10,14 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 
 The trace of "delete before the status becomes ready" found every interleaving
 ends consistent (claim guard, guarded transitions, FK violations caught, and
-the embed's missing-document ack absorb a vanished run), but the comment at
-`_load_item_context`'s `context is None` branch in
-`backend/app/ingestion/service.py` says "Unreachable once the claim succeeded".
-A `delete_upload` landing between the claim's commit and the context load
-makes that branch reachable: the run is claimed FETCHING, then the item and
-run cascade away, so the lookup returns None and the graceful no-op runs. The
-handling is correct; only the comment is wrong. Comment-only fix when touched;
-no behavior change needed.
+the embed's missing-document ack absorb a vanished run), but two comments in
+`backend/app/ingestion/service.py` claimed "unreachable" paths that a
+`delete_upload` landing mid-pipeline genuinely reaches: the `_load_item_context`
+`context is None` branch, and the identical-version reconciliation's
+`existing_id is None` branch. Both were already handled correctly (guarded
+transitions match zero rows, so the delivery no-ops); only the comments were
+wrong. Resolved on 2026-11-12 in `e6e6090` (comment-only, verified with ruff,
+mypy, and the full pytest suite); no behavior change needed.
 
 ## 2026-11-11 - Long/normal bucket assignment is manual (`pytest-long-split`)
 
