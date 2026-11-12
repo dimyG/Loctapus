@@ -257,7 +257,7 @@ All routes are served under the `/api` prefix (`app.include_router(..., prefix="
 | --- | --- | --- | --- |
 | POST | `/api/projects/{project_id}/uploads` | Store one uploaded file (PDF/DOCX, size-gated), queues an ingestion run | UploadDropzone (file-upload page) |
 | GET | `/api/projects/{project_id}/uploads` (polled by the UI: every 2s while any upload row is non-terminal; stops when all rows are terminal or an uncached fetch fails) | List a project's uploads newest first, status derived from the latest run | The sources and file-upload pages' tables and the chat page's readiness (`useProjectUploads`); the `/app` resolver's chattable walk (direct `uploadsApi.endpoints.getUploads.initiate` dispatches, not the hook) |
-| DELETE | `/api/projects/{project_id}/uploads/{upload_id}` | Delete one upload item (editor role): documents, chunks, and runs cascade with the row, conversation citations settle to NULL, and every stored version of the bytes (the item's current key plus each run's pinned key) is removed from Garage first, so a storage failure leaves every row untouched | SourceItemsTable's per-row delete action |
+| DELETE | `/api/projects/{project_id}/uploads/{upload_id}` | Delete one upload item (editor role): documents, chunks, and runs cascade with the row, conversation citations settle to NULL, and every stored version of the bytes (the item's current key plus each run's pinned key) is removed from Garage first, so a storage failure leaves every row untouched | SourceItemsTable's per-row delete action behind a confirm dialog; the in-flight row shows a Deleting chip |
 | GET | `/api/projects/{project_id}/uploads/{upload_id}/raw` | Return an upload's stored bytes for in-browser viewing | SourceItemsTable's filename links |
 
 The polling lives in `web/src/features/uploads/useProjectUploads.ts`: the
@@ -272,19 +272,26 @@ uploads cache without ever starting a poll. No other endpoint is polled - the
 other list endpoints are fetched on mount and on RTK cache invalidation only,
 and no refetch-on-focus or refetch-on-reconnect is configured.
 
-One table status is client-side only: `uploading`. While a file's POST is
+Two table statuses are client-side only. `uploading`: while a file's POST is
 still streaming, the file-upload page (`web/src/features/sources/FileUploadPage.tsx`)
-lists it as an optimistic, inert row (no open, no delete) ahead of the server
-rows - a filename the server already has (a retry) instead flips its existing
-row to that status - so the transfer window between the upload gesture and the
-queued row is visible. The `uploadFile` mutation upserts the server's row into
+lists it as an optimistic, inert row (no open; its delete button renders
+disabled so the row keeps the regular row height) ahead of the server rows -
+a filename the server already has (a retry) instead flips its existing row to
+that status - so the transfer window between the upload gesture and the queued
+row is visible. Duplicate names are deliberately not pre-checked in the client:
+the server owns the same-name rules, so a duplicate shows the uploading window
+before its 409 lands in the dropzone's alert. `deleting`: while a delete
+request runs, the row's chip reads Deleting, its filename stops opening, and
+its delete button stays disabled; rows delete independently, so several can
+show it at once, and a failed delete hands the row its server status back with
+the retry snackbar. The `uploadFile` mutation upserts the server's row into
 the `getUploads` cache the moment the POST completes (`onQueryStarted`), and
 the page suspends polling while any POST is in flight, so no stale pre-commit
 poll response can overwrite the inserted row; the handoff has no gap and
 survives the invalidation refetch failing. A failed POST drops the stand-in
 and surfaces the dropzone's error alert. The row statuses therefore compose
-`RowStatus` (the server vocabulary plus `uploading`); the API's `Upload` type
-keeps the server's vocabulary only.
+`RowStatus` (the server vocabulary plus `uploading` and `deleting`); the API's
+`Upload` type keeps the server's vocabulary only.
 
 ### Retrieval (backend/app/retrieval/router.py)
 

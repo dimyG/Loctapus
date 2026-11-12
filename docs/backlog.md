@@ -18,6 +18,29 @@ if this bites: a CI duration report that flags unmarked tests measuring over 5
 seconds, or auto-marking from `--durations` output.
 
 
+## 2026-11-11 - duplicate uploads are rejected server-side after the full POST (`sources-table-feedback`)
+
+Uploading a file whose name the project already holds is deliberately not
+pre-checked in the client: the server owns the same-name rules (which failed
+uploads are retryable), and copying them into `uploadRules.ts` would duplicate
+that rejection logic. A duplicate therefore shows the full uploading window
+before the server's 409 lands in the dropzone's alert. Human decision in the
+`sources-table-feedback` session: accepted and documented only, no behavior
+change - it resolves the "Re-uploading the name of an already-ready row"
+bullet under the 2026-10-29 - Minor review findings section below. The
+documenting comment landed in `UploadDropzone.tsx` (commit `ec273f2`); revisit
+only if the upload window grows long enough for real files to make the dead
+window painful (an OPTIONS or HEAD pre-check could short-circuit it without
+copying the rules).
+
+- 2026-11-11 fresh-context review residual (pre-existing): the delete-failure
+  snackbar's "Try again" acts on the row object captured at failure time, so
+  if that row has since flipped to the client-side "uploading" state (its file
+  is being re-uploaded), the retry still fires a DELETE although the row's own
+  delete button is now disabled. Narrow race; fix by looking the row up in the
+  current items before retrying, or skip the retry when it is uploading.
+
+
 ## 2026-10-29 - Light-scheme contained buttons keep MUI's default state shadows (`mobile-navbar-dark-buttons`)
 
 The 5e30230 review noticed the light scheme's primary-contained variant never
@@ -52,7 +75,10 @@ Left over from the branch's code reviews, all narrow or cosmetic:
   get a lock or storage gets a sweeper.
 - Re-uploading the name of an already-ready row flips that row to the inert
   "uploading" status until the server's 409 comes back; the overlay matches
-  by filename, not by retryability. Cosmetic and self-correcting.
+  by filename, not by retryability. Cosmetic and self-correcting. Accepted on
+  2026-11-11 in `sources-table-feedback`: the server owns the same-name rules,
+  so the client documents the behavior instead of pre-checking it (commit
+  `ec273f2`, and the 2026-11-11 backlog entry above).
 - A poll response requested just before a delete (or upload) commits can
   still land after it and briefly resurrect the row; the delayed invalidation
   refetch corrects it one round-trip later. Pausing polling covers the POST

@@ -17,15 +17,17 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import UploadStatusChip from "../uploads/UploadStatusChip";
-import type { SourceRow } from "../uploads/uploadsApi";
+import type { RowStatus, SourceRow } from "../uploads/uploadsApi";
 import { useDeleteUploadMutation, useLazyGetUploadRawQuery } from "../uploads/uploadsApi";
 
 /**
  * The project's source items in the CRUD template's table-in-card look. Every
  * item today is a file upload, so the Type column is a constant and clicking
  * a filename opens the file itself in a new tab; both grow per type once a
- * second source type exists. Rows delete through a confirm dialog; a failed
- * delete surfaces in a snackbar whose action retries it.
+ * second source type exists. Rows delete through a confirm dialog; while the
+ * delete request runs, the row reads as the client-side "deleting" status and
+ * stays inert, and a failed delete surfaces in a snackbar whose action
+ * retries it.
  *
  * @param {SourceRow[]} items - Rows to render, including optimistic stand-ins.
  */
@@ -107,29 +109,41 @@ export default function SourceItemsTable({ items }: { items: SourceRow[] }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {items.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell>
-                  {item.status === "uploading" ? (
-                    // The stand-in row's id is client-side, so it can neither
-                    // be opened nor deleted until the real row replaces it.
-                    item.filename
-                  ) : (
-                    <Link component="button" type="button" onClick={() => void openUpload(item)}>
-                      {item.filename}
-                    </Link>
-                  )}
-                </TableCell>
-                <TableCell>File upload</TableCell>
-                <TableCell>
-                  <UploadStatusChip status={item.status} />
-                </TableCell>
-                <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
-                <TableCell align="right">
-                  {item.status !== "uploading" && (
+            {items.map((item) => {
+              // A row whose delete request is in flight reads as the
+              // client-side "deleting" status: the chip shows Deleting and
+              // the row stays inert until the row leaves the cache or the
+              // failure offers a retry.
+              const status: RowStatus = deletingIds.has(item.id) ? "deleting" : item.status;
+              // An uploading or deleting row is inert: the uploading stand-in's
+              // id is client-side, and a deleting row's bytes may already be
+              // gone, so its filename does not open and its delete button is
+              // disabled.
+              const inert = status === "uploading" || status === "deleting";
+              return (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    {inert ? (
+                      item.filename
+                    ) : (
+                      <Link component="button" type="button" onClick={() => void openUpload(item)}>
+                        {item.filename}
+                      </Link>
+                    )}
+                  </TableCell>
+                  <TableCell>File upload</TableCell>
+                  <TableCell>
+                    <UploadStatusChip status={status} />
+                  </TableCell>
+                  <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell align="right">
                     <IconButton
                       aria-label={`Delete ${item.filename}`}
-                      disabled={deletingIds.has(item.id)}
+                      // Disabled rather than absent: the row keeps the regular
+                      // row height and the control sits where the real row's
+                      // delete will be, and a running delete must not fire
+                      // twice.
+                      disabled={inert}
                       onClick={() => {
                         setShownCandidate(item);
                         setDeleteCandidate(item);
@@ -137,10 +151,10 @@ export default function SourceItemsTable({ items }: { items: SourceRow[] }) {
                     >
                       <DeleteOutlineRoundedIcon />
                     </IconButton>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
         {items.length === 0 && (

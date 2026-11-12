@@ -4,10 +4,12 @@ import { renderWithProviders } from "../../test/test-utils";
 import UploadStatusChip from "./UploadStatusChip";
 
 // Every status a row can show, split by whether it can still move; the
-// spinner must track that distinction exactly. "uploading" is client-side:
-// the file's bytes are still on their way to the server.
+// spinner must track that distinction exactly. "uploading" and "deleting"
+// are client-side: the bytes are still on their way up, or the DELETE is
+// still on its way to the server.
 const IN_FLIGHT = [
   { status: "uploading", label: "Uploading" },
+  { status: "deleting", label: "Deleting" },
   { status: "queued", label: "Queued" },
   { status: "fetching", label: "Fetching" },
   { status: "processing", label: "Processing" },

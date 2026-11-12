@@ -205,23 +205,29 @@ describe("FileUploadPage", () => {
   });
 
   it("drops the deleted row from the table before the refetch lands", async () => {
-    // The refetch after the delete is held open: the optimistic removal must
-    // make the row vanish right after the 204, not when the GET completes.
+    // The DELETE is held so the row visibly reads Deleting in flight, and the
+    // refetch after it is held separately: the optimistic removal must make
+    // the row vanish right after the 204, not when the GET completes.
+    let releaseDelete!: () => void;
     let releaseRefetch!: () => void;
-    const gate = new Promise<void>((resolve) => {
+    const deleteGate = new Promise<void>((resolve) => {
+      releaseDelete = resolve;
+    });
+    const refetchGate = new Promise<void>((resolve) => {
       releaseRefetch = resolve;
     });
     let deletes = 0;
     server.use(
       http.get("*/projects/p-1/uploads", async () => {
         if (deletes > 0) {
-          await gate;
+          await refetchGate;
           return HttpResponse.json([readyUpload, failedUpload]);
         }
         return HttpResponse.json([queuedUpload, readyUpload, failedUpload]);
       }),
-      http.delete("*/projects/p-1/uploads/s-1", () => {
+      http.delete("*/projects/p-1/uploads/s-1", async () => {
         deletes += 1;
+        await deleteGate;
         return new HttpResponse(null, { status: 204 });
       }),
     );
@@ -230,6 +236,9 @@ describe("FileUploadPage", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Delete brief.pdf" }));
     await user.click(await screen.findByRole("button", { name: "Delete" }));
+    // The in-flight row reads Deleting until the delete settles.
+    expect(await screen.findByText("Deleting")).toBeInTheDocument();
+    releaseDelete();
     await waitFor(() => expect(screen.queryByText("brief.pdf")).not.toBeInTheDocument());
     expect(screen.getByText("report.docx")).toBeInTheDocument();
     releaseRefetch();
@@ -263,11 +272,12 @@ describe("FileUploadPage", () => {
     expect(await screen.findByText("report.docx")).toBeInTheDocument();
     await userEvent.setup().upload(screen.getByLabelText("Upload"), pdfFile("report.pdf"));
     // While the POST streams the bytes, the row is already there, marked
-    // Uploading, and inert: no open button and no delete action yet.
+    // Uploading, and inert: no open button, and its delete button renders
+    // disabled so the row keeps the regular row height.
     expect(await screen.findByText("Uploading")).toBeInTheDocument();
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "report.pdf" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete report.pdf" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete report.pdf" })).toBeDisabled();
     release();
     // The handoff is seamless: one report.pdf row throughout, chip swapped to Queued.
     expect(await screen.findByText("Queued")).toBeInTheDocument();
@@ -334,7 +344,7 @@ describe("FileUploadPage", () => {
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
     expect(screen.getAllByText("broken.pdf")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "broken.pdf" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete broken.pdf" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete broken.pdf" })).toBeDisabled();
     release();
     expect(await screen.findByText("Queued")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Uploading")).not.toBeInTheDocument());
