@@ -281,10 +281,10 @@ that status - so the transfer window between the upload gesture and the queued
 row is visible. Duplicate names are deliberately not pre-checked in the client:
 the server owns the same-name rules, so a duplicate shows the uploading window
 before its 409 lands in the dropzone's alert. `deleting`: while a delete
-request runs, the row's chip reads Deleting, its filename stops opening, and
-its delete button stays disabled; rows delete independently, so several can
-show it at once, and a failed delete hands the row its server status back with
-the retry snackbar. The `uploadFile` mutation upserts the server's row into
+request runs, the row's chip reads Deleting in the error color, its filename
+stops opening, and its delete button stays disabled; rows delete independently,
+so several can show it at once, and a failed delete hands the row its server
+status back with the retry snackbar. The `uploadFile` mutation upserts the server's row into
 the `getUploads` cache the moment the POST completes (`onQueryStarted`), and
 the page suspends polling while any POST is in flight, so no stale pre-commit
 poll response can overwrite the inserted row; the handoff has no gap and

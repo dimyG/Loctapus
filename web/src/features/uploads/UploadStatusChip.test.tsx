@@ -32,4 +32,10 @@ describe("UploadStatusChip", () => {
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     expect(screen.getByText(label)).toBeInTheDocument();
   });
+
+  it("renders the deleting chip in the error color", () => {
+    renderWithProviders(<UploadStatusChip status="deleting" />);
+    expect(screen.getByText("Deleting")).toBeInTheDocument();
+    expect(screen.getByText("Deleting").closest(".MuiChip-root")).toHaveClass("MuiChip-colorError");
+  });
 });

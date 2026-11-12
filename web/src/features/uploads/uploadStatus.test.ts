@@ -50,16 +50,15 @@ describe("statusChip", () => {
   });
 
   it("colors every in-flight stage primary", () => {
-    const inFlight: RowStatus[] = [
-      "uploading",
-      "deleting",
-      "queued",
-      "fetching",
-      "processing",
-      "indexing",
-    ];
+    const inFlight: RowStatus[] = ["uploading", "queued", "fetching", "processing", "indexing"];
     for (const status of inFlight) {
       expect(statusChip(status).color).toBe("primary");
     }
+  });
+
+  it("colors deleting error like failed", () => {
+    // The red chip flags the destructive action in flight; the spinner tells
+    // it apart from a decided failure.
+    expect(statusChip("deleting").color).toBe("error");
   });
 });
