@@ -6,6 +6,19 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-11-12 - a mid-pipeline delete makes the post-claim item lookup reachable (`56046ef` session)
+
+The trace of "delete before the status becomes ready" found every interleaving
+ends consistent (claim guard, guarded transitions, FK violations caught, and
+the embed's missing-document ack absorb a vanished run), but the comment at
+`_load_item_context`'s `context is None` branch in
+`backend/app/ingestion/service.py` says "Unreachable once the claim succeeded".
+A `delete_upload` landing between the claim's commit and the context load
+makes that branch reachable: the run is claimed FETCHING, then the item and
+run cascade away, so the lookup returns None and the graceful no-op runs. The
+handling is correct; only the comment is wrong. Comment-only fix when touched;
+no behavior change needed.
+
 ## 2026-11-11 - Long/normal bucket assignment is manual (`pytest-long-split`)
 
 The 055b182 review flagged that bucket assignment depends on authors
