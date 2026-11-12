@@ -289,7 +289,9 @@ def _mark_run_ready_against_existing(
         )
     )
     if existing_id is None:
-        # Unreachable in S3 (the conflict proves the row exists); recorded for completeness.
+        # Reachable when a mid-pipeline delete cascades the conflicting document away
+        # between the flush's constraint error and this lookup; the guarded failure
+        # below then matches zero rows, so the run still ends as a no-op.
         _fail_run(
             db=db,
             run_id=run_id,
@@ -449,7 +451,9 @@ def ingest_source_item(
         return
     context = _load_item_context(db=db, ingestion_run_id=ingestion_run_id)
     if context is None:
-        # Unreachable once the claim succeeded (the run's FK guarantees the item exists).
+        # Reachable when a mid-pipeline delete cascades the item and run away between
+        # the claim and this lookup; the guarded failure below then matches zero rows,
+        # so the delivery still ends as a no-op.
         _fail_run(
             db=db,
             run_id=ingestion_run_id,
