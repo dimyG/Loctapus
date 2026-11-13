@@ -6,6 +6,19 @@ The deferred minors from the 2026-10-07 review-feedback session were all resolve
 2026-10-09 in the `fix-deferred-minors-2` branch.
 
 
+## 2026-11-13 - TODO: implement the ingestion run leases spec
+
+Plan and implement `docs/superpowers/specs/2026-11-13-ingestion-run-leases-design.md`:
+stuck and orphaned ingestion runs recover through an `attempt` fencing token, a
+heartbeat-renewed `lease_expires_at`, and a sweeper inside the dispatcher loop.
+Triggered on 2026-11-12 by `django_1.pdf` (run `426a0dd8`), stuck in `processing`
+after a Compose Watch restart killed the worker mid-parse and the claim guard
+dropped the re-delivered message. The spec was written and committed on `master`
+(`04ac7b2`) without a plan; next step is the writing-plans skill. Implementing it resolves the
+2026-10-12 "S7 needs stuck-run recovery" entry below. Until then, a stuck upload
+is unblocked by deleting it and uploading it again.
+
+
 ## 2026-11-12 - a mid-pipeline delete makes the post-claim item lookup reachable (`56046ef` session)
 
 The trace of "delete before the status becomes ready" found every interleaving
