@@ -37,6 +37,21 @@ in a consistent state. If a worker claims a task, explain how another worker
 can recover it after a crash. Mark the task complete only after its results
 are durable. Document any external calls that may repeat.
 
+Every asynchronous task that claims work beyond a single database transaction
+must implement the lease pattern, so orphaned or stuck jobs recover on their own:
+- An `attempt` counter that the claim increments and every later write checks
+  (a fencing token), so a stale worker's writes match nothing
+- A `lease_expires_at` deadline that the worker renews by heartbeat while it
+  runs, capped so a hung worker cannot renew forever, and that is also set while
+  the job waits to be picked up
+- A sweeper that finds expired leases and re-drives the job, or fails it with a
+  user-safe error after a maximum number of attempts
+
+Work that runs entirely inside one transaction under row locks (like the outbox
+dispatcher's `SKIP LOCKED` batch) needs no lease: a crash rolls it back and
+releases the locks. Reference design:
+`docs/superpowers/specs/2026-11-13-ingestion-run-leases-design.md`.
+
 ## Comments
 
 - Comments start with a capital letter and end with a dot
