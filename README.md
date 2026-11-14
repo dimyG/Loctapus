@@ -1,24 +1,127 @@
-# RAG MVP
+# Loctapus
 
-RAG MVP is a self-hosted "chat with your documents" system. Teams upload PDF and
-DOCX files into shared projects, where they are parsed and indexed automatically;
-users then ask questions in a per-project chat and get answers grounded in - and
-citing - the uploaded documents. Everything runs on one machine (or a single
-server) via Docker Compose, with no external service required beyond an optional
-LLM provider key.
+Loctapus is a platform that brings together knowledge from multiple sources into a unified, 
+searchable knowledge base and makes it accessible to applications, AI agents, and users 
+through various interfaces, including web chat, APIs, and MCP. 
 
-FastAPI + SQLAlchemy 2.0 + pgvector backend for a RAG MVP, sliced into incremental
-deliverables. Identity (users, workspaces, teams), projects, the upload+ingestion
-pipeline (upload -> parse -> chunk -> embed), retrieval (vector + full-text search
-fused with RRF), and grounded question answering (the chat UI) are done.
+The project is still under development. Currently, it supports PDF and DOCX uploads as knowledge sources, 
+with web chat as the only available interface. Support for additional sources and interfaces is coming soon.
 
-## Prerequisites
+## How the project is developed
 
-- Python 3.14
-- Node.js (for the web toolchain and e2e)
-- Docker (runs the whole system: Postgres/pgvector, RabbitMQ, Garage, and the app tier)
+- An initial MVP specification
+  ([docs/2026-10-06-initial_rag_mvp_agent_project_context.md](docs/2026-10-06-initial_rag_mvp_agent_project_context.md))
+  was distilled from a long conversation with GPT-6 Sol. It describes, at a high level, what
+  a first working version must do.
+- A roadmap ([docs/superpowers/specs/2026-10-06-roadmap.md](docs/superpowers/specs/2026-10-06-roadmap.md))
+  breaks that specification into small vertical slices. Each slice spans the whole stack
+  (database, API and front end), so it can be tested end to end as soon as it is done.
+- All work is done by AI agents in [OpenCode](https://opencode.ai) with models from
+  [OpenRouter](https://openrouter.ai), following the
+  [obra/superpowers](https://github.com/obra/superpowers) methodology.
 
-## Setup
+## Architecture
+
+### Services
+
+The system runs as 8 Docker Compose services:
+
+| Service                  | Role                                                                 |
+| ------------------------ | -------------------------------------------------------------------- |
+| `db`                     | PostgreSQL with pgvector: all data, including chunk embeddings       |
+| `rabbitmq`               | Message broker for background tasks                                  |
+| `garage`                 | S3-compatible storage for the uploaded files                         |
+| `one-off-initialization` | Applies database migrations before the API starts, then exits        |
+| `api`                    | FastAPI application                                                  |
+| `worker`                 | Celery worker that runs the background tasks                         |
+| `dispatcher`             | Reads pending tasks from the outbox table and sends them to RabbitMQ |
+| `web`                    | Caddy: serves the React app and forwards `/api/` to the API          |
+
+### Ingesting a file (background)
+
+Background tasks use the **transactional outbox pattern**: a task is first saved in an
+`outbox` database table in the same transaction as the data it refers to, and the dispatcher
+later publishes it to RabbitMQ. This way a task is never lost, and never sent for data that
+was not saved.
+
+1. The user uploads a file. The API stores it in Garage and adds an ingestion task to the
+   outbox.
+2. The dispatcher publishes the task to the ingestion queue.
+3. A worker fetches the file, parses it, splits it into chunks and adds an embedding task to
+   the outbox.
+4. The dispatcher publishes it to the embedding queue.
+5. A worker embeds the chunks in batches, stores the embeddings, and marks the file as ready
+   once all its chunks are done.
+
+### Asking a question (synchronous)
+
+1. An LLM router decides how to answer:
+   - **direct** - use only the chat history,
+   - **reuse** - use the history plus previously retrieved chunks,
+   - **retrieve** - run a new search.
+2. Retrieval embeds the question and searches in two ways: vector search (cosine similarity
+   over the chunk embeddings) and full-text search. The two result lists are merged with
+   reciprocal rank fusion, and a diverse subset of chunks is selected.
+3. The LLM writes the answer from those chunks and cites them.
+4. The question and the answer are saved, in order, in the user's conversation.
+
+### Tech stack
+
+- **Backend:** Python, FastAPI, SQLAlchemy, Celery
+- **Front end:** React with Vite
+- **Database:** PostgreSQL with pgvector
+- **Extensibility:** the parser, reranker and LLM providers sit behind generic interfaces, so
+  a provider can be swapped without touching the rest of the code. Chunking is a basic
+  structure-aware algorithm that can be replaced with a more advanced one.
+
+### Run it locally
+
+You need Docker with Compose 2.24 or newer.
+
+```powershell
+copy deploy\.env.example deploy\.env
+copy backend\.env.example backend\.env
+docker compose -f deploy/docker-compose.yml up -d
+docker compose -f deploy/docker-compose.yml down            # Data is kept in volumes and persists across runs.
+```
+
+- Web UI: http://localhost:8080
+- API docs: http://localhost:8000/api/docs
+
+`deploy/.env` holds the service credentials and `backend/.env` the app settings. The template
+values are public development credentials: generate fresh ones (for example
+`openssl rand -hex 32`) for any public deployment. Do not change `GARAGE_DEFAULT_SECRET_KEY`
+after the first start, or Garage will fail to start until its volume is wiped.
+
+
+### Using a real LLM
+
+By default the system works offline with a stub LLM that returns a fixed sentence. To use
+Groq, set `RAG_LLM_PROVIDER=groq` and `RAG_GROQ_API_KEY` in `backend/.env`, then run `up -d`
+again. All settings are listed in `backend/app/core/config.py`.
+
+### Live reload
+
+For development, the dev overlay syncs code edits into the running containers and restarts
+or hot-reloads them automatically:
+
+```powershell
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up --build --watch
+```
+
+After adding a new database migration, apply it with:
+
+```powershell
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up -d --build one-off-initialization
+```
+
+Only one stack can run at a time on a machine. Run `down` before starting it from another
+checkout or worktree.
+
+## Tests
+
+Tests need Python 3.14, Node.js, and the compose stack running (they use the real Postgres,
+RabbitMQ and Garage).
 
 ```powershell
 python -m venv .venv
@@ -26,189 +129,29 @@ python -m venv .venv
 npm install --prefix web
 ```
 
-The venv serves the test suites and migrations authoring, not the running system.
-`npm install` serves the web toolchain (tests, lint, format) and the e2e suite.
-
-Configuration comes from `RAG_`-prefixed environment variables (see
-`backend/app/core/config.py`), with a `.env` file supported in `backend/`
-(`backend/.env.example` lists the commonly set ones; the copy is gitignored).
-The defaults target the compose services below, as seen from the host (the test
-suites); the containers get their own addresses from the compose file. The
-stack credentials (Postgres, RabbitMQ, Garage) interpolate into the compose file
-from `deploy/.env` (`deploy/.env.example` is the template; the copy is
-gitignored).
-
-## Run the whole system
-
-Two gitignored copies seed the stack, and both abort `up` when missing:
+Backend, from `backend/`:
 
 ```powershell
-copy deploy\.env.example deploy\.env
-copy backend\.env.example backend\.env
-docker compose -f deploy/docker-compose.yml up -d
+..\.venv\Scripts\python -m pytest                   # Full suite.
+..\.venv\Scripts\python -m pytest -m "not long"     # Skips tests slower than 5 seconds.
 ```
 
-`deploy/.env` carries every stack credential (Postgres, RabbitMQ, Garage);
-`docker-compose.yml` interpolates each one as `${VAR:?...}`, so a missing file
-or value stops `up` with an error naming the variable before any container
-starts - no deployment can silently boot with the development credentials that
-are public in this repository. `backend/.env` carries the app settings:
-`RAG_JWT_SECRET` (token signing) and the Groq opt-in below; the api service
-loads it as a required env file (the long `env_file` syntax needs Docker
-Compose 2.24+), though only its existence is enforced: a `backend/.env` from
-before this branch (or any copy missing `RAG_JWT_SECRET`) silently signs
-tokens with the public development secret, so add the line from the template.
-Both templates' values reproduce the historical development credentials, so
-existing named volumes keep working unchanged; a public deployment must
-generate fresh values instead (`openssl rand -hex 32`).
+Front end, from `web/`: `npm test` (unit), `npm run e2e` (end to end), `npm run lint`.
 
-This builds and starts all eight services: Postgres (pgvector, `localhost:5432`,
-`rag`/`rag`), RabbitMQ (management UI on `localhost:15672`), Garage (S3 API on
-`localhost:3900`, admin on `localhost:3903`, `rag-dev-key`/`rag-dev-secret-local`,
-bucket `rag-dev`), the one-off initialization step that migrates the schema, and the
-API, the Celery worker, the outbox dispatcher, and the web UI. No manual steps are
-needed: the migration runs before the app services start, and Garage provisions its
-default key and bucket on first start.
+Before finishing a change, `ruff check .`, `ruff format --check .` and `mypy app tests` must
+also pass (see [AGENTS.md](AGENTS.md)).
 
-The UI is at `http://localhost:8080` and the API docs at
-`http://localhost:8000/api/docs`. Uploads POST to `/api/projects/{project_id}/uploads`
-and land as a queued ingestion run; the `GET` listing on the same path derives each
-row's status from its latest run, and `DELETE` on
-`/api/projects/{project_id}/uploads/{upload_id}` removes an upload with its indexed
-content and stored bytes. Retrieval POSTs to
-`/api/projects/{project_id}/retrieve` with `{"query": "...", "top_k": 10}` and answers
-with fused, diversity-selected chunks from the project's indexed documents. The chat
-(Ask tab on a project page) POSTs to `/api/projects/{project_id}/answer` with
-`{"query": "..."}` and returns the grounded answer plus its cited chunks - the
-question -> answer path runs fully from the browser.
+## Deployment
 
-```powershell
-docker compose -f deploy/docker-compose.yml down
-```
-
-stops the system; the named volumes survive it. After changing code, rebuild with:
-
-```powershell
-docker compose -f deploy/docker-compose.yml up -d --build
-```
-
-This recreates the affected services. The dependency layer is cached, so only the
-project itself is reinstalled.
-
-### Live reload
-
-`deploy/docker-compose.dev.yml` overlays the runbook stack with live source reload, so a
-code edit reaches the running system without a manual rebuild:
-
-```powershell
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up --build --watch
-```
-
-The `--build` matters beyond the first run: watch starts from the images as they are,
-so edits made while the stack was stopped would only reach the containers on their next
-on-the-fly sync; the rebuild folds them in unconditionally.
-
-The overlay changes three things, and nothing else:
-
-- The backend services build the `dev` stage of `backend/Dockerfile`, which installs the
-  package editable, so the files copied into the container are the ones the process
-  imports. A change under `backend/` (anything but tests and `pyproject.toml`) restarts
-  the api, worker, and dispatcher; a change to `backend/pyproject.toml` (a new
-  dependency) rebuilds all three instead.
-- The web service runs the Vite dev server from the `dev` stage of `web/Dockerfile`
-  rather than Caddy. Edits under `web/src/` hot-reload in the browser; a changed
-  `web/package-lock.json` rebuilds it.
-- Vite proxies `/api/` to the api service, so the URL stays `http://localhost:8080` and
-  API calls stay same-origin, exactly as they are behind Caddy in production. Vite's own
-  SPA fallback keeps deep links working, but Caddy's 26 MiB upload window is not
-  exercised (the backend's own 25 MiB check still applies).
-
-`up --build --watch` keeps running and applies further edits; stop it with Ctrl-C. The
-overlay is development-only: neither the plain runbook command nor the Hetzner
-deployment loads it, and it rebuilds the images as `rag-backend-dev-*` and
-`rag-web-dev`, leaving `rag-backend` and `rag-web` for production.
-
-Adding a new Alembic revision needs one extra step, because the overlay leaves
-`one-off-initialization` on the production image:
-
-```powershell
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up -d --build one-off-initialization
-```
-
-The system is machine-global: one running system at a time, owned by the checkout that
-started it. Run `down` before starting it from another checkout or worktree, whose
-bind-mounted configs would otherwise dangle.
-
-A Vite dev server (`npm run dev` in `web/`) also works against the compose API for
-ad-hoc UI work: it proxies `/api/` to `http://localhost:8000` by default, or to wherever
-the `API_PROXY_TARGET` environment variable points. It is not the runbook path.
-
-Do not change `GARAGE_DEFAULT_SECRET_KEY` (in `deploy/.env`) after first start: Garage binds
-its stored layout to the secret it was created with, startup fails with a different one,
-and the metadata volume must be wiped to recover.
-
-RabbitMQ state lives on the named `rabbitmqdata` volume, so queues and vhosts survive a
-`docker compose up -d --force-recreate rabbitmq`. This volume was introduced after the
-broker had run without one: recreating the container discards that old anonymous volume
-once, and the `rag_test` and `rag_e2e` vhosts are recreated by their suites' bootstraps.
-
-### Opting in to Groq
-
-The default stack stays offline: `llm_provider` defaults to `stub`, so `/answer` returns
-a fixed stub sentence grounded in the retrieved chunks. Copy `backend/.env.example` to
-`backend/.env`, uncomment `RAG_LLM_PROVIDER=groq`, and paste your key into
-`RAG_GROQ_API_KEY`. The compose `api` service reads that file when it starts (recreate
-it with `docker compose up -d` to pick up changes; the long env-file syntax needs
-Docker Compose 2.24+), as do local runs started from `backend/`; the compose-fixed
-service addresses are unaffected. Answers then route through `openai/gpt-oss-20b` on
-Groq; a provider failure answers 502. The pytest and e2e suites pin the stub provider,
-so this file never makes them call Groq.
-
-## Test
-
-Tests need the compose services up: the real Postgres for every suite (never SQLite),
-plus RabbitMQ for the outbox/worker integration tests and Garage for the storage,
-uploads, and ingestion suites (the upload and ingest paths read and write real bytes).
-The suites target the template's development credentials - pytest's defaults, the
-Playwright config, and `backend/scripts/e2e_db.py` all pin `rag:rag` Postgres and
-`guest:guest` RabbitMQ on localhost - so on a checkout that generated fresh
-credentials (a public demo) run them with the documented overrides
-(`RAG_TEST_DATABASE_URL`, the Playwright env) or from a dev machine instead.
-The `engine` fixture creates a disposable `rag_test` database, applies all migrations,
-and drops it after the session; the `rag_test` broker vhost is created by the suite
-itself, so no manual broker setup is needed.
-
-```powershell
-cd backend
-..\.venv\Scripts\python -m pytest
-```
-
-The suite splits into a normal and a long bucket via the `long` marker. A test is
-marked long when its call phase measures over 5 seconds; everything else runs in
-the normal suite. Plain `pytest` always runs everything and stays the gate before
-finishing; the filtered runs are for iteration:
-
-```powershell
-..\.venv\Scripts\python -m pytest -m "not long"   # Normal suite, the fast loop for small changes.
-..\.venv\Scripts\python -m pytest -m long         # Long suite alone.
-```
-
-Before finishing a change, `ruff check .` and `mypy app tests` must also pass
-(see `AGENTS.md`).
-
-## Line endings
-
-`.gitattributes` pins every text file to LF (the web toolchain's prettier
-enforces LF). Clones made before that file exist need a one-time refresh -
-`git add --renormalize .` - or `prettier --check .` fails on identical
-committed content with CRLF working copies.
-
-## Hetzner deployment
-
-Every push to `master` auto-deploys the demo server via GitHub Actions. Bootstrap,
-secrets, rotation, and teardown live in the runbook: `deploy/hetzner/README.md`.
+The demo runs on a single Hetzner VPS. Development and production share the same base compose
+file, and production adds a server-specific override
+(`deploy/hetzner/docker-compose.server.yml`). Every push to `master` triggers a GitHub Actions
+workflow that updates the live app. Keeping all services on one server keeps costs low and the
+setup easy to maintain. Setup, secrets and teardown are described in
+[deploy/hetzner/README.md](deploy/hetzner/README.md).
 
 ## Further reading
 
-- Slice design: `docs/superpowers/specs/2026-10-06-roadmap.md`
-- Follow-ups and deferred findings: `docs/backlog.md`
+- [System overview](docs/2026-10-19-system-overview.md) - detailed description of the current system
+- [Roadmap](docs/superpowers/specs/2026-10-06-roadmap.md) - planned slices
+- [Backlog](docs/backlog.md) - follow-ups and deferred findings
