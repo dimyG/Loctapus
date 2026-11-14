@@ -13,7 +13,6 @@ test.describe("marketing navbar", () => {
     // CTA; the navigation links and color mode toggle move into the menu.
     await expect(navbar.getByRole("link", { name: "Loctapus" })).toBeVisible();
     await expect(navbar.getByRole("link", { name: "Get started" })).toBeVisible();
-    await expect(navbar.getByRole("link", { name: "About" })).toBeHidden();
     await expect(navbar.getByRole("link", { name: "Sign in" })).toBeHidden();
     await expect(navbar.getByRole("button", { name: "color mode" })).toBeHidden();
     await expect(navbar.getByRole("button", { name: "menu" })).toBeVisible();
@@ -26,11 +25,10 @@ test.describe("marketing navbar", () => {
     const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(scrollWidth).toBeLessThanOrEqual(MOBILE.width);
 
-    // The menu restores what the collapsed bar dropped: the hidden navigation
-    // links and the color mode toggle.
+    // The menu restores what the collapsed bar dropped: Sign in and the color
+    // mode toggle.
     await navbar.getByRole("button", { name: "menu" }).click();
     const menu = page.getByRole("navigation", { name: "Mobile menu" });
-    await expect(menu.getByRole("link", { name: "About" })).toBeVisible();
     await expect(menu.getByRole("link", { name: "Sign in" })).toBeVisible();
     await expect(menu.getByRole("button", { name: "color mode" })).toBeVisible();
   });
@@ -41,7 +39,6 @@ test.describe("marketing navbar", () => {
     const navbar = page.getByRole("banner");
     // At md and up nothing collapses: every link and the color mode toggle
     // render inline, and the menu button exists only below the breakpoint.
-    await expect(navbar.getByRole("link", { name: "About" })).toBeVisible();
     await expect(navbar.getByRole("link", { name: "Sign in" })).toBeVisible();
     await expect(navbar.getByRole("link", { name: "Get started" })).toBeVisible();
     await expect(navbar.getByRole("button", { name: "color mode" })).toBeVisible();

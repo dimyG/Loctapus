@@ -16,7 +16,9 @@ describe("MarketingFrame", () => {
     // The decorative logo rides inside the wordmark link; the empty alt keeps
     // the link's accessible name as "Loctapus".
     expect(brandLink.querySelector('img[src="/logo.png"]')).toHaveAttribute("alt", "");
-    expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
+    // About lives in the footer only.
+    const navbar = screen.getByRole("banner");
+    expect(within(navbar).queryByRole("link", { name: "About" })).not.toBeInTheDocument();
     // The switcher's trigger answers once useColorScheme settles its mount effect.
     expect(await screen.findByRole("button", { name: "color mode" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
@@ -27,14 +29,18 @@ describe("MarketingFrame", () => {
     const footer = screen.getByRole("contentinfo");
     expect(within(footer).getByText("Loctapus")).toBeInTheDocument();
     expect(
-      within(footer).getByText(/retrieval-augmented generation workspace/),
+      within(footer).getByText("Loctapus is a platform that brings your knowledge base to life."),
     ).toBeInTheDocument();
     expect(
       within(footer).getByText(/© \d{4} Loctapus\. All rights reserved\./),
     ).toBeInTheDocument();
+    expect(within(footer).getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
+    const github = within(footer).getByRole("link", { name: "GitHub" });
+    expect(github).toHaveAttribute("href", "https://github.com/dimyG/Loctapus");
+    expect(github).toHaveAttribute("target", "_blank");
   });
 
-  it("opens a mobile menu with About, Sign in, and the mode switcher", async () => {
+  it("opens a mobile menu with Sign in and the mode switcher", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <MarketingFrame>
@@ -47,7 +53,6 @@ describe("MarketingFrame", () => {
     const menu = await screen.findByRole("navigation", { name: "Mobile menu" });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(trigger).toHaveAttribute("aria-controls", "mobile-menu");
-    expect(within(menu).getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
     expect(within(menu).getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
     expect(await within(menu).findByRole("button", { name: "color mode" })).toBeInTheDocument();
   });
@@ -61,7 +66,7 @@ describe("MarketingFrame", () => {
     );
     await user.click(screen.getByRole("button", { name: "menu" }));
     const menu = await screen.findByRole("navigation", { name: "Mobile menu" });
-    await user.click(within(menu).getByRole("link", { name: "About" }));
+    await user.click(within(menu).getByRole("link", { name: "Sign in" }));
     await waitForElementToBeRemoved(() =>
       screen.queryByRole("navigation", { name: "Mobile menu" }),
     );

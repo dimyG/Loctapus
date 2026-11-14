@@ -1,3 +1,4 @@
+import GitHubIcon from "@mui/icons-material/GitHub";
 import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
@@ -15,6 +16,7 @@ import { alpha, styled } from "@mui/material/styles";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { Link as RouterLink } from "react-router";
+import { repositoryUrl } from "../app/repository";
 import ColorModeIconDropdown from "../theme/ColorModeIconDropdown";
 import BrandMark from "./BrandMark";
 
@@ -36,7 +38,8 @@ const StyledToolbar = styled(Toolbar)(({ theme }) => ({
 }));
 
 /**
- * The marketing frame: the template's floating navbar above the children, the
+ * The marketing frame: the template's navbar above the children (it scrolls
+ * away with the page rather than staying docked), the
  * wordmark-and-copyright footer pinned to the viewport bottom below. Pages
  * bring their own sections and containers.
  *
@@ -57,7 +60,7 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
   return (
     <Box sx={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
       <AppBar
-        position="fixed"
+        position="absolute"
         enableColorOnDark
         sx={{
           boxShadow: 0,
@@ -69,25 +72,16 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
         <Container maxWidth="lg">
           <StyledToolbar variant="dense" disableGutters>
             <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center", gap: 1 }}>
+              {/* The theme's link underline is dropped: under a logo lockup it
+              reads as a stray rule rather than a link affordance. */}
               <Link
                 component={RouterLink}
                 to="/"
-                underline="none"
                 color="text.primary"
-                sx={{ fontWeight: 600 }}
+                sx={{ display: "inline-flex", "&::before": { display: "none" } }}
               >
                 <BrandMark />
               </Link>
-              <Button
-                variant="text"
-                color="info"
-                size="small"
-                component={RouterLink}
-                to="/about"
-                sx={desktopOnly}
-              >
-                About
-              </Button>
             </Box>
             <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
               <Button
@@ -135,16 +129,6 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
         >
           <Button
             variant="text"
-            color="info"
-            component={RouterLink}
-            to="/about"
-            onClick={closeMenu}
-            sx={{ justifyContent: "flex-start" }}
-          >
-            About
-          </Button>
-          <Button
-            variant="text"
             color="primary"
             component={RouterLink}
             to="/login"
@@ -168,8 +152,23 @@ export default function MarketingFrame({ children }: { children: ReactNode }) {
           <Stack spacing={1}>
             <BrandMark />
             <Typography variant="body2" color="text.secondary">
-              Loctapus is a retrieval-augmented generation workspace.
+              Loctapus is a platform that brings your knowledge base to life.
             </Typography>
+            <Stack component="nav" aria-label="Footer" direction="row" spacing={3} sx={{ pt: 1 }}>
+              <Link component={RouterLink} to="/about" variant="body2">
+                About
+              </Link>
+              <Link
+                href={repositoryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="body2"
+                sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}
+              >
+                <GitHubIcon sx={{ fontSize: 16 }} />
+                GitHub
+              </Link>
+            </Stack>
             <Typography variant="body2" color="text.secondary" sx={{ pt: 2 }}>
               © {new Date().getFullYear()} Loctapus. All rights reserved.
             </Typography>
