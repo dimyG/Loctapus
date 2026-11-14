@@ -5,13 +5,14 @@ import { renderWithProviders } from "../../test/test-utils";
 import AboutPage from "./AboutPage";
 
 describe("AboutPage", () => {
-  it("renders the heading and the release copy", () => {
+  it("renders the heading, the copy, and the repository link", () => {
     renderWithProviders(<AboutPage />);
     expect(screen.getByRole("heading", { name: "About Loctapus" })).toBeInTheDocument();
-    // The frame's footer repeats the opening one-liner, so the body paragraph
-    // is matched on the continuation only it carries.
-    expect(screen.getByText(/workspace\. Group your documents/)).toBeInTheDocument();
-    expect(screen.getByText(/accounts, sessions, teams, and projects/)).toBeInTheDocument();
+    expect(screen.getByText(/unified, searchable knowledge base/)).toBeInTheDocument();
+    expect(screen.getByText(/still under development\. It is open source/)).toBeInTheDocument();
+    const repository = screen.getByRole("link", { name: "View on GitHub" });
+    expect(repository).toHaveAttribute("href", "https://github.com/dimyG/Loctapus");
+    expect(repository).toHaveAttribute("target", "_blank");
   });
 
   it("renders for signed-in visitors without redirecting", () => {
