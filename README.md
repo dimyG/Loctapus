@@ -1,10 +1,10 @@
 # Loctapus
 
-Loctapus is a platform that brings together knowledge from multiple sources into a unified, 
+[Loctapus](https://loctapus.com/) is a platform that brings together knowledge from multiple sources into a unified, 
 searchable knowledge base and makes it accessible to applications, AI agents, and users 
 through various interfaces, including web chat, APIs, and MCP. 
 
-The project is still under development. Currently, it supports PDF and DOCX uploads as knowledge sources, 
+**The project is still under development**. Currently, it supports PDF and DOCX uploads as knowledge sources, 
 with web chat as the only available interface. Support for additional sources and interfaces is coming soon.
 
 ## How the project is developed
@@ -82,7 +82,7 @@ You need Docker with Compose 2.24 or newer.
 copy deploy\.env.example deploy\.env
 copy backend\.env.example backend\.env
 docker compose -f deploy/docker-compose.yml up -d
-docker compose -f deploy/docker-compose.yml down            # Data is kept in volumes and persists across runs.
+docker compose -f deploy/docker-compose.yml down  # To shut it down. Data is kept in volumes and persists across runs.
 ```
 
 - Web UI: http://localhost:8080
