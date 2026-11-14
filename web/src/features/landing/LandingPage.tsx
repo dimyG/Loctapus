@@ -1,16 +1,20 @@
 import AccountTreeRoundedIcon from "@mui/icons-material/AccountTreeRounded";
 import AddToDriveRoundedIcon from "@mui/icons-material/AddToDriveRounded";
+import ApiRoundedIcon from "@mui/icons-material/ApiRounded";
 import ArrowDownwardRoundedIcon from "@mui/icons-material/ArrowDownwardRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
+import BuildRoundedIcon from "@mui/icons-material/BuildRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import CloudDoneRoundedIcon from "@mui/icons-material/CloudDoneRounded";
 import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
 import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
 import GavelRoundedIcon from "@mui/icons-material/GavelRounded";
+import GroupsRoundedIcon from "@mui/icons-material/GroupsRounded";
 import HubRoundedIcon from "@mui/icons-material/HubRounded";
 import LanguageRoundedIcon from "@mui/icons-material/LanguageRounded";
 import LockPersonRoundedIcon from "@mui/icons-material/LockPersonRounded";
+import LockRoundedIcon from "@mui/icons-material/LockRounded";
 import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
@@ -23,7 +27,7 @@ import Container from "@mui/material/Container";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { keyframes } from "@mui/material/styles";
+import { keyframes, type Theme } from "@mui/material/styles";
 import type { ReactNode } from "react";
 import { Link as RouterLink, Navigate } from "react-router";
 import { useAppSelector } from "../../app/hooks";
@@ -126,6 +130,32 @@ const useCases = [
     ],
     tags: ["Source: PDF uploads", "Interface: MCP"],
     illustration: <PdfAgentsIllustration />,
+  },
+  {
+    eyebrow: "In-app answers",
+    title: "Put the knowledge base inside your app",
+    description:
+      "A field-service company uploads its equipment manuals and publishes service bulletins on its website, both as sources of one project. Its technicians' mobile app calls the Loctapus API, so a technician on site types an error code and gets the fix, with a link to the right manual page, without leaving the app.",
+    benefits: [
+      "AI answers in your product without building a retrieval pipeline",
+      "New service bulletins reach the app as soon as they are published",
+      "Every answer carries its source for your app to show",
+    ],
+    tags: ["Sources: PDF uploads, Website", "Interface: API"],
+    illustration: <InAppIllustration />,
+  },
+  {
+    eyebrow: "Team-scoped projects",
+    title: "A private knowledge base for every team",
+    description:
+      "A growing company keeps its HR policies, engineering runbooks, and sales playbooks in one workspace, each in its own project. Every team is granted access only to its own project, so an engineer asking about on-call gets answers from the runbooks and never from HR files. Employees ask in the web chat, Slack, or Microsoft Teams, and the same access rules apply everywhere.",
+    benefits: [
+      "Each team's knowledge stays with the team that owns it",
+      "Answers never draw on documents a member cannot access",
+      "Focused projects keep every team's answers on topic",
+    ],
+    tags: ["Sources: Google Drive, uploads", "Interface: Web chat, Slack, Teams"],
+    illustration: <TeamProjectsIllustration />,
   },
 ];
 
@@ -372,7 +402,7 @@ function UseCases() {
     <Box component="section" sx={{ pb: { xs: 8, sm: 16 } }}>
       <SectionHeading
         title="Use cases"
-        subtitle="Two examples of how teams can put their knowledge to work with Loctapus."
+        subtitle="Examples of how teams can put their knowledge to work with Loctapus."
       />
       <Stack spacing={{ xs: 8, md: 10 }}>
         {useCases.map((useCase, index) => (
@@ -380,13 +410,22 @@ function UseCases() {
             key={useCase.title}
             sx={{
               display: "grid",
-              gap: { xs: 4, md: 8 },
+              gap: { xs: 4, lg: 8 },
               alignItems: "center",
-              gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" },
+              // The illustrations need about 650px, so rows sit side by side only
+              // from lg, with a wider illustration column; minmax(0, ...) stops the
+              // content from stretching its column past the 3:2 split.
+              gridTemplateColumns: {
+                xs: "1fr",
+                lg:
+                  index % 2 === 0
+                    ? "minmax(0, 3fr) minmax(0, 2fr)"
+                    : "minmax(0, 2fr) minmax(0, 3fr)",
+              },
             }}
           >
-            {/* On mobile the illustration always leads; on desktop the rows alternate. */}
-            <Box sx={{ order: { xs: 0, md: index % 2 === 0 ? 0 : 1 } }}>{useCase.illustration}</Box>
+            {/* Stacked, the illustration always leads; side by side, the rows alternate. */}
+            <Box sx={{ order: { xs: 0, lg: index % 2 === 0 ? 0 : 1 } }}>{useCase.illustration}</Box>
             <Box>
               <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 0.5 }}>
                 <Typography variant="overline" color="primary" sx={{ fontWeight: 600 }}>
@@ -442,13 +481,13 @@ function IllustrationCanvas({ children }: { children: ReactNode }) {
         borderRadius: 3,
         border: "1px solid",
         borderColor: "divider",
-        p: { xs: 2.5, sm: 4 },
-        minHeight: { md: 340 },
+        p: { xs: 2.5, md: 3 },
+        minHeight: { lg: 340 },
         display: "flex",
-        flexDirection: { xs: "column", sm: "row" },
+        flexDirection: { xs: "column", md: "row" },
         alignItems: "center",
         justifyContent: "center",
-        gap: { xs: 1.5, sm: 2 },
+        gap: 1.5,
         backgroundImage:
           "radial-gradient(ellipse 90% 70% at 50% 0%, hsl(210, 100%, 95%), hsl(220, 30%, 98%))",
         ...theme.applyStyles("dark", {
@@ -462,12 +501,12 @@ function IllustrationCanvas({ children }: { children: ReactNode }) {
   );
 }
 
-/** An arrow between illustration stages: right on wide screens, down on phones. */
+/** An arrow between illustration stages: right on wide screens, down on narrow ones. */
 function FlowArrow() {
   return (
     <Box sx={{ color: "primary.main", display: "flex", opacity: 0.7 }}>
-      <ArrowForwardRoundedIcon sx={{ display: { xs: "none", sm: "block" } }} />
-      <ArrowDownwardRoundedIcon sx={{ display: { xs: "block", sm: "none" } }} />
+      <ArrowForwardRoundedIcon sx={{ display: { xs: "none", md: "block" } }} />
+      <ArrowDownwardRoundedIcon sx={{ display: { xs: "block", md: "none" } }} />
     </Box>
   );
 }
@@ -501,7 +540,7 @@ function Tile({ icon, label }: { icon: ReactNode; label: string }) {
 }
 
 /**
- * The Loctapus hub every illustration flows through.
+ * The Loctapus hub the source-to-interface illustrations flow through.
  *
  * @param {ReactNode} footer - An optional element under the logo, such as the MCP tag.
  */
@@ -529,13 +568,55 @@ function Hub({ footer }: { footer?: ReactNode }) {
   );
 }
 
+/** The PDF red, lifted in dark mode where the main error red reads too dim. */
+function pdfIconSx(theme: Theme) {
+  return { color: "error.main", ...theme.applyStyles("dark", { color: "error.light" }) };
+}
+
 /** A grey placeholder bar standing in for a line of page text. */
 function TextLine({ width }: { width: string }) {
   return <Box sx={{ height: 6, width, borderRadius: 3, bgcolor: "action.hover" }} />;
 }
 
 /**
- * A chat bubble inside the docs-page widget.
+ * The filled title strip of an illustration's chat window.
+ *
+ * @param {ReactNode} children - The title content.
+ */
+function ChatHeader({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      sx={{
+        px: 1,
+        py: 0.5,
+        display: "flex",
+        alignItems: "center",
+        gap: 0.5,
+        bgcolor: "primary.main",
+        color: "primary.contrastText",
+        fontSize: "0.65rem",
+        fontWeight: 600,
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+/** The highlighted source line closing an assistant bubble. */
+function SourceLine({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      component="span"
+      sx={{ display: "block", mt: 0.5, color: "primary.main", fontWeight: 600 }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+/**
+ * A chat bubble inside an illustration's chat window.
  *
  * @param {boolean} fromUser - Whether the user (right, filled) or the assistant (left) speaks.
  * @param {ReactNode} children - The bubble content.
@@ -615,28 +696,12 @@ function DocsChatIllustration() {
             overflow: "hidden",
           }}
         >
-          <Box
-            sx={{
-              px: 1,
-              py: 0.5,
-              bgcolor: "primary.main",
-              color: "primary.contrastText",
-              fontSize: "0.65rem",
-              fontWeight: 600,
-            }}
-          >
-            Ask Elven Magic docs
-          </Box>
+          <ChatHeader>Ask Elven Magic docs</ChatHeader>
           <Stack spacing={0.75} sx={{ p: 1 }}>
             <Bubble fromUser>How do I reset my device?</Bubble>
             <Bubble fromUser={false}>
               Hold the power button for 10 seconds until the light blinks.
-              <Box
-                component="span"
-                sx={{ display: "block", mt: 0.5, color: "primary.main", fontWeight: 600 }}
-              >
-                Source: Setup guide
-              </Box>
+              <SourceLine>Source: Setup guide</SourceLine>
             </Bubble>
           </Stack>
         </Paper>
@@ -670,15 +735,7 @@ function PdfAgentsIllustration() {
               placeItems: "center",
             }}
           >
-            {offset === 0 ? (
-              <PictureAsPdfRoundedIcon
-                sx={(theme) => ({
-                  fontSize: 34,
-                  color: "error.main",
-                  ...theme.applyStyles("dark", { color: "error.light" }),
-                })}
-              />
-            ) : null}
+            {offset === 0 ? <PictureAsPdfRoundedIcon sx={[pdfIconSx, { fontSize: 34 }]} /> : null}
           </Paper>
         ))}
         <Chip
@@ -707,6 +764,163 @@ function PdfAgentsIllustration() {
           <Tile key={agent.label} icon={agent.icon} label={agent.label} />
         ))}
       </Stack>
+    </IllustrationCanvas>
+  );
+}
+
+/** A technician's phone app showing an answer fetched from the Loctapus API. */
+function PhoneMock() {
+  return (
+    <Paper variant="outlined" sx={{ width: 150, flexShrink: 0, borderRadius: 4, p: 0.75 }}>
+      <Box
+        sx={{ mx: "auto", mb: 0.75, width: 36, height: 4, borderRadius: 2, bgcolor: "divider" }}
+      />
+      <Box
+        sx={{
+          minHeight: 220,
+          borderRadius: 3,
+          overflow: "hidden",
+          border: 1,
+          borderColor: "divider",
+        }}
+      >
+        <ChatHeader>
+          <BuildRoundedIcon sx={{ fontSize: 12 }} />
+          FieldFix
+        </ChatHeader>
+        <Stack spacing={0.75} sx={{ p: 1 }}>
+          <Box
+            sx={{
+              px: 0.75,
+              py: 0.5,
+              display: "flex",
+              alignItems: "center",
+              gap: 0.5,
+              border: 1,
+              borderColor: "divider",
+              borderRadius: 1.5,
+              fontSize: "0.6rem",
+              color: "text.secondary",
+            }}
+          >
+            <SearchRoundedIcon sx={{ fontSize: 12 }} />
+            Error E42 on X200 pump
+          </Box>
+          <Bubble fromUser={false}>
+            Reset the pressure sensor, then bleed the inlet valve.
+            <SourceLine>Source: X200 manual, p. 34</SourceLine>
+          </Bubble>
+          <TextLine width="85%" />
+          <TextLine width="60%" />
+        </Stack>
+      </Box>
+    </Paper>
+  );
+}
+
+/** Manuals and service bulletins flow into Loctapus, which answers a technician's app over the API. */
+function InAppIllustration() {
+  return (
+    <IllustrationCanvas>
+      <Stack spacing={1.5}>
+        <Tile icon={<PictureAsPdfRoundedIcon sx={pdfIconSx} />} label="Equipment manuals" />
+        <Tile icon={<LanguageRoundedIcon color="primary" />} label="Service bulletins" />
+      </Stack>
+      <FlowArrow />
+      <Hub
+        footer={
+          <Chip
+            size="small"
+            variant="outlined"
+            color="primary"
+            icon={<ApiRoundedIcon />}
+            label="API"
+            sx={{ fontWeight: 600 }}
+          />
+        }
+      />
+      <FlowArrow />
+      <PhoneMock />
+    </IllustrationCanvas>
+  );
+}
+
+/**
+ * One workspace whose projects are each granted to a single team. The
+ * Engineering row is lit to match the chat, which searches only its project.
+ */
+function TeamProjectsIllustration() {
+  const grants = [
+    { team: "HR", project: "HR policies", active: false },
+    { team: "Engineering", project: "Runbooks", active: true },
+    { team: "Sales", project: "Playbooks", active: false },
+  ];
+  return (
+    <IllustrationCanvas>
+      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", mb: 1.5 }}>
+          <img src="/logo.png" alt="" width={20} height={20} />
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            Company workspace
+          </Typography>
+        </Stack>
+        <Stack spacing={1}>
+          {grants.map((grant) => (
+            <Stack
+              key={grant.team}
+              direction="row"
+              spacing={0.75}
+              sx={{ alignItems: "center", opacity: grant.active ? 1 : 0.5 }}
+            >
+              <Chip
+                size="small"
+                icon={<GroupsRoundedIcon />}
+                label={grant.team}
+                color={grant.active ? "primary" : "default"}
+                sx={{ width: 104, justifyContent: "flex-start", fontWeight: 600 }}
+              />
+              <ArrowForwardRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+              <Tile
+                icon={
+                  <LockRoundedIcon
+                    sx={{ fontSize: 16, color: grant.active ? "primary.main" : "text.secondary" }}
+                  />
+                }
+                label={grant.project}
+              />
+            </Stack>
+          ))}
+        </Stack>
+      </Paper>
+      <FlowArrow />
+      <Paper
+        variant="outlined"
+        sx={{ width: 160, flexShrink: 0, borderRadius: 2, overflow: "hidden" }}
+      >
+        <ChatHeader>
+          <GroupsRoundedIcon sx={{ fontSize: 12 }} />
+          Engineering chat
+        </ChatHeader>
+        <Stack spacing={0.75} sx={{ p: 1 }}>
+          <Bubble fromUser>What is the on-call escalation path?</Bubble>
+          <Bubble fromUser={false}>
+            Page the secondary on-call after 15 minutes.
+            <SourceLine>Source: Runbooks</SourceLine>
+          </Bubble>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.5,
+              fontSize: "0.58rem",
+              color: "text.secondary",
+            }}
+          >
+            <LockRoundedIcon sx={{ fontSize: 10 }} />
+            Searched Runbooks only
+          </Box>
+        </Stack>
+      </Paper>
     </IllustrationCanvas>
   );
 }

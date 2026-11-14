@@ -128,8 +128,9 @@ Get started CTA always visible. The same round switched the dark scheme's
 primary contained buttons (Get started, Create project, the auth submits, Add
 source) from near-white to the logo's brand blue. A 2026-11-14 round rewrote the
 landing page around the multi-source, multi-interface goal: an "Under development"
-hero label, three how-it-works steps, a "Built for teams" grid, and two use cases
-with illustrations composed from MUI components, with "Coming soon" chips on every
+hero label, three how-it-works steps, a "Built for teams" grid, and four use cases
+(docs-site chat, PDFs for agents over MCP, in-app answers over the API, and
+team-scoped projects) with illustrations composed from MUI components, with "Coming soon" chips on every
 feature not built yet. The marketing navbar now scrolls away with the page and
 drops About, which moved to the footer beside a GitHub link, and the about page
 links the open-source GitHub repository.

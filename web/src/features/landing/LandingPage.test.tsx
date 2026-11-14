@@ -91,17 +91,22 @@ describe("LandingPage", () => {
     }
   });
 
-  it("renders both use cases", () => {
+  it("renders the four use cases in order", () => {
     renderLanding();
     expect(screen.getByRole("heading", { name: "Use cases" })).toBeVisible();
-    for (const title of [
+    // The use cases close the page, so their titles are the last four h3s.
+    const titles = screen
+      .getAllByRole("heading", { level: 3 })
+      .slice(-4)
+      .map((heading) => heading.textContent);
+    expect(titles).toEqual([
       "Self-service support on your docs site",
       "Hundreds of PDFs, ready for your agents",
-    ]) {
-      expect(screen.getByRole("heading", { name: title })).toBeVisible();
-    }
-    // Two team cards and both use cases are upcoming, one chip each.
-    expect(screen.getAllByText("Coming soon")).toHaveLength(4);
+      "Put the knowledge base inside your app",
+      "A private knowledge base for every team",
+    ]);
+    // Two team cards and all four use cases are upcoming, one chip each.
+    expect(screen.getAllByText("Coming soon")).toHaveLength(6);
   });
 
   it("redirects authenticated visitors", async () => {
