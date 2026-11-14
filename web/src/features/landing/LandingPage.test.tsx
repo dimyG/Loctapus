@@ -46,13 +46,14 @@ describe("LandingPage", () => {
   it("renders the hero copy with one centered CTA", () => {
     renderLanding();
     expect(
-      screen.getByRole("heading", { name: "Chat with your company's knowledge base" }),
+      screen.getByRole("heading", { name: "Loctapus Bring your knowledge base to life" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Deploy AI teammates that understand your data, product, knowledge, and tools. A private workspace where your team stores its documents and asks questions in everyday language.",
+        "Combine knowledge from multiple sources into a unified, searchable knowledge base and make it accessible to applications, AI agents, and users through web chat, APIs, and MCP.",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("Under development")).toBeVisible();
     // The navbar and the hero both render "Get started", but "Sign in" leaves
     // the hero and survives only in the navbar (spec decision 7).
     const started = screen.getAllByRole("link", { name: "Get started" });
@@ -65,30 +66,42 @@ describe("LandingPage", () => {
     expect(signIn[0]).toHaveAttribute("href", "/login");
   });
 
-  it("renders the four how-it-works steps", () => {
+  it("renders the three how-it-works steps with their upcoming tags", () => {
     renderLanding();
-    for (const step of [
-      "Connect your knowledge base",
-      "Chat in our interface",
-      "Deploy an agent",
-      "Analyze",
-    ]) {
-      expect(screen.getByText(step)).toBeVisible();
+    for (const step of ["Connect your sources", "Loctapus organizes it", "Make it available"]) {
+      expect(screen.getByRole("heading", { name: step })).toBeVisible();
     }
-    // Steps 3 and 4 are teased as upcoming, one "Coming" chip each.
-    expect(screen.getAllByText("Coming")).toHaveLength(2);
+    expect(screen.getByText("PDF & DOCX")).toBeVisible();
+    expect(screen.getByText("Web chat")).toBeVisible();
+    for (const tag of ["Google Drive", "Websites", "API", "MCP"]) {
+      expect(screen.getByText(`${tag} · Coming soon`)).toBeVisible();
+    }
   });
 
-  it("renders the four value cards", () => {
+  it("renders the four team cards", () => {
     renderLanding();
+    expect(screen.getByRole("heading", { name: "Built for teams" })).toBeVisible();
     for (const title of [
-      "Answer complex customer questions",
-      "Give your teams a personal assistant",
-      "Keep your knowledge base always up to date",
-      "AI agents custom to your enterprise",
+      "Organized the way you work",
+      "Access only where it's granted",
+      "Meet your customers where they are",
+      "Always in sync, fully managed",
     ]) {
-      expect(screen.getByText(title)).toBeVisible();
+      expect(screen.getByRole("heading", { name: title })).toBeVisible();
     }
+  });
+
+  it("renders both use cases", () => {
+    renderLanding();
+    expect(screen.getByRole("heading", { name: "Use cases" })).toBeVisible();
+    for (const title of [
+      "Self-service support on your docs site",
+      "Hundreds of PDFs, ready for your agents",
+    ]) {
+      expect(screen.getByRole("heading", { name: title })).toBeVisible();
+    }
+    // Two team cards and both use cases are upcoming, one chip each.
+    expect(screen.getAllByText("Coming soon")).toHaveLength(4);
   });
 
   it("redirects authenticated visitors", async () => {
@@ -105,7 +118,7 @@ describe("LandingPage", () => {
     // once the session clears - the race RequireAuth's splash prevents.
     renderLanding(authedState("busy"));
     expect(
-      screen.getByRole("heading", { name: "Chat with your company's knowledge base" }),
+      screen.getByRole("heading", { name: "Loctapus Bring your knowledge base to life" }),
     ).toBeInTheDocument();
     expect(window.location.pathname).toBe("/");
   });
